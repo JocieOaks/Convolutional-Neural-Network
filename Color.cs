@@ -1,5 +1,9 @@
 ﻿// See https://aka.ms/new-console-template for more information
-public struct Color : IDot<Color>
+
+using Newtonsoft.Json;
+
+[Serializable]
+public readonly struct Color : IDot<Color>
 {
     public float R { get; }
     public float G { get; }
@@ -13,7 +17,7 @@ public struct Color : IDot<Color>
 
     public Color Random()
     {
-        return new Color((float)new Random().NextDouble(), (float)new Random().NextDouble(), (float)new Random().NextDouble());
+        return new Color((float)CLIP.Random.NextDouble(), (float)CLIP.Random.NextDouble(), (float)CLIP.Random.NextDouble());
     }
 
     public Color Add(Color other)
@@ -41,6 +45,17 @@ public struct Color : IDot<Color>
         return new Color(R - other.R, G - other.G, B - other.B);
     }
 
+    public Color Pow(float power)
+    {
+        return new Color(MathF.Pow(R, power), MathF.Pow(G, power), MathF.Pow(B, power));
+    }
+
+    public Color Add(float value)
+    {
+        return new Color(R + value, G + value, B + value);
+    }
+
+    [JsonConstructor]
     public Color(float r, float g, float b)
     {
         R = r;

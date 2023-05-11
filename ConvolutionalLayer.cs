@@ -1,31 +1,39 @@
 ﻿// See https://aka.ms/new-console-template for more information
 #nullable disable
 
+using Newtonsoft.Json;
+
+[Serializable]
 public class ConvolutionalLayer<T> : Layer<T> where T : IDot<T>, new()
 {
+    [JsonProperty]
     protected int _kernalNum;
 
-    protected T[,,] _kernals;
-    T[,] _currentFeatures;
+    [JsonProperty]
+    protected T[][,] _kernals;
 
     public ConvolutionalLayer(int kernalsNum, int kernalSize, int stride) : base(kernalSize, stride)
     {
         _kernalNum = kernalsNum;
-        _kernals = new T[kernalsNum, kernalSize, kernalSize];
+        _kernals = new T[kernalsNum][,];
 
         for (int i = 0; i < kernalsNum; i++)
         {
+            _kernals[i] = new T[_kernalSize, _kernalSize];
             for (int j = 0; j < kernalSize; j++)
             {
                 for (int k = 0; k < kernalSize; k++)
                 {
-                    _kernals[i, j, k] = new T().Random();
+                    _kernals[i][j, k] = new T().Random();
                 }
             }
         }
     }
 
-    protected T[,] Forward(T[,] input, int kernalIndex)
+    [JsonConstructor]
+    public ConvolutionalLayer(int kernalSize, int stride) : base(kernalSize, stride) { }
+
+    protected T[,] Forward(T[,] input, T[,] kernal)
     {
         int widthSubdivisions = (input.GetLength(0) - _kernalSize) / _stride;
         int lengthSubdivisions = (input.GetLength(1) - _kernalSize) / _stride;
@@ -38,7 +46,7 @@ public class ConvolutionalLayer<T> : Layer<T> where T : IDot<T>, new()
                 {
                     for (int kernalY = 0; kernalY < _kernalSize; kernalY++)
                     {
-                        convoluted[shiftX, shiftY] = convoluted[shiftX, shiftY].Add(input[shiftX * _stride + kernalX, shiftY * _stride + kernalY].Multiply(_kernals[kernalIndex, kernalX, kernalY]));
+                        convoluted[shiftX, shiftY] = convoluted[shiftX, shiftY].Add(input[shiftX * _stride + kernalX, shiftY * _stride + kernalY].Multiply(kernal[kernalX, kernalY]));
                     }
                 }
                 convoluted[shiftX, shiftY] = convoluted[shiftX, shiftY].Multiply(1f / (_kernalSize * _kernalSize));
@@ -54,37 +62,57 @@ public class ConvolutionalLayer<T> : Layer<T> where T : IDot<T>, new()
         T[][,] convoluted = new T[_kernalNum][,];
         for (int i = 0; i < _kernalNum; i++)
         {
-            convoluted[i] = Forward(input[i], i);
+            convoluted[i] = Forward(input[i], _kernals[i]);
         }
         return convoluted;
     }
 
-    public override T[][,] Backwards(T[][,] error, float alpha)
+    public override T[][,] Backwards(T[][,] dL_dP, T[][,] input, float alpha)
     {
-        T[][,] corrections = new T[_kernalNum][,];
-        int widthSubdivisions = error.GetLength(1);
-        int lengthSubdivisions = error.GetLength(2);
-        for (int kernalIndex = 0; kernalIndex < _kernalNum; kernalIndex++)
+        T[][,] dL_dPNext = new T[_kernalNum][,];
+        
+        for (int i = 0; i < _kernalNum; i++)
         {
-            corrections[kernalIndex] = new T[_currentFeatures.GetLength(0), _currentFeatures.GetLength(1)];
-            for(int strideX = 0; strideX < widthSubdivisions; strideX++)
+            dL_dPNext[i] = Backwards(dL_dP[i], input[i], _kernals[i], alpha);
+        }
+
+        return dL_dPNext;
+    }
+
+    protected T[,] Backwards(T[,] dL_dP, T[,] input, T[,] kernal, float alpha)
+    {
+        int widthSubdivisions = dL_dP.GetLength(0);
+        int lengthSubdivisions = dL_dP.GetLength(1);
+        T[,] dL_dPNext = new T[input.GetLength(0), input.GetLength(1)];
+        T[,] dL_dK = new T[_kernalSize, _kernalSize];
+        for (int strideX = 0; strideX < widthSubdivisions; strideX++)
+        {
+            for (int strideY = 0; strideY < lengthSubdivisions; strideY++)
             {
-                for(int strideY = 0; strideY < lengthSubdivisions; strideY++)
+                dL_dPNext[strideX, strideY] = new();
+                for (int kernalX = 0; kernalX < _kernalSize; kernalX++)
                 {
-                    corrections[kernalIndex][strideX, strideY] = new();
-                    for(int kernalX = 0;  kernalX < _kernalSize;  kernalX++)
+                    for (int kernalY = 0; kernalY < _kernalSize; kernalY++)
                     {
-                        for(int kernalY = 0; kernalY < _kernalSize; kernalY++)
-                        {
-                            T pointError = error[kernalIndex][strideX, strideY].Multiply(_currentFeatures[strideX * _stride + kernalX, strideY * _stride + kernalY]);
-                            corrections[kernalIndex][strideX * _stride + kernalX, strideY * _stride + kernalY] = pointError;
-                            _kernals[kernalIndex, kernalX, kernalY] = _kernals[kernalIndex, kernalX, kernalY].Subtract(pointError.Multiply(alpha));
-                        }
+                        int x = strideX * _stride + kernalX;
+                        int y = strideY * _stride + kernalY;
+                        T dK = dL_dP[strideX, strideY].Multiply(input[x,y]);
+                        T dP = dL_dP[strideX, strideX].Multiply(kernal[kernalX, kernalY]);
+                        dL_dK[kernalX, kernalY] = dK;
+                        dL_dPNext[x, y] = dL_dPNext[x, y].Add(dP);
                     }
                 }
             }
         }
 
-        return corrections;
+        for(int i = 0; i < _kernalSize; i++)
+        {
+            for(int j = 0; j < _kernalSize; j++)
+            {
+                kernal[i, j] = kernal[i, j].Subtract(dL_dK[i, j].Multiply(alpha));
+            }
+        }
+
+        return dL_dPNext;
     }
 }

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -7,7 +8,9 @@ using System.Threading.Tasks;
 
 public abstract class Layer<T> where T : IDot<T>, new()
 {
+    [JsonProperty]
     protected int _kernalSize;
+    [JsonProperty]
     protected int _stride;
 
     public Layer(int kernalSize, int stride)
@@ -42,6 +45,6 @@ public abstract class Layer<T> where T : IDot<T>, new()
 
     public abstract T[][,] Forward(T[][,] input);
 
-    public abstract T[][,] Backwards(T[][,] error, float alpha);
+    public abstract T[][,] Backwards(T[][,] dL_dP, T[][,] input, float alpha);
 }
 
