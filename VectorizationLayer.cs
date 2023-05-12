@@ -7,82 +7,55 @@ using System.Xml;
 public class VectorizationLayer
 {
     [JsonProperty]
-    readonly Color[,] _matrix;
+    readonly FeatureMap _matrix;
 
     public VectorizationLayer(int vectorDimensions, int kernalNum)
     {
-        _matrix = new Color[vectorDimensions, kernalNum];
+        _matrix = new FeatureMap(vectorDimensions, kernalNum);
         for(int i = 0; i < vectorDimensions; i++)
         {
             for(int j = 0; j < kernalNum; j++)
             {
-                _matrix[i, j] = new Color().Random();
+                _matrix[i, j] = Color.Random(1);
             }
         }
     }
 
-    public Vector Forward(Color[][,] input) 
+    public Vector Forward(FeatureMap[] input) 
     { 
-        Color[] vector = new Color[input.Length];
+        ColorVector vector = new ColorVector(input.Length);
 
         for(int i = 0; i < input.Length; i++)
         {
-            for(int j = 0; j < input[i].GetLength(0); j++)
-            {
-                for(int k = 0; k < input[i].GetLength(1); k++)
-                {
-                    vector[i] = vector[i].Add(input[i][j, k]);
-                }
-            }
-            vector[i] = vector[i].Multiply(1f / (input[i].GetLength(0) * input[i].GetLength(1)));
+            vector[i] = input[i].Average();
         }
 
-        Vector output = new(_matrix.GetLength(0));
-        for (int i = 0; i < _matrix.GetLength(0); i++)
-        {
-            for (int j = 0; j < _matrix.GetLength(1); j++)
-            {
-                output[i] += _matrix[i, j].Multiply(vector[j]).Magnitude;
-            }
-        }
+        Vector output = _matrix * vector;
 
-        return output;
+        return output.Normalized();
     }
 
-    public Color[][,] Backwards(Vector dL_dI, Vector output, Color[][,] input, float alpha)
+    public FeatureMap[] Backwards(Vector dL_dI, Vector output, FeatureMap[] input, float alpha)
     {
-        Color[][,] dL_dP = new Color[input.Length][,];
-        int x = input[0].GetLength(0);
-        int y = input[0].GetLength(1);
-        float _xy = 1f / (x * y);
+        FeatureMap[] dL_dP = new FeatureMap[input.Length];
+        int x = input[0].Width;
+        int y = input[0].Length;
+        float _xy = 1f / input[0].Area;
 
-        Color[] dL_dPV = new Color[_matrix.GetLength(1)];
-        for (int i = 0; i < _matrix.GetLength(0); i++)
-        {
-            for (int j = 0; j < _matrix.GetLength(1); j++)
-            {
-                dL_dPV[j] = dL_dPV[j].Add(_matrix[i, j].Multiply(dL_dI[i] * _xy));
-            }
-        }
+        ColorVector dL_dPV = _xy * dL_dI * _matrix;
 
         for(int i = 0; i < input.Length; i++)
         {
-            dL_dP[i] = new Color[x, y];
-            for(int j = 0; j < x; j++)
-            {
-                for(int k = 0; k < y; k++)
-                {
-                    dL_dP[i][j, k] = dL_dPV[i];
-                }
-            }
+            dL_dP[i] = new FeatureMap(x, y, dL_dPV[i]);
         }
 
 
-        for (int i = 0; i < _matrix.GetLength(0); i++)
+        for (int i = 0; i < _matrix.Width; i++)
         {
-            for (int j = 0; j < _matrix.GetLength(1); j++)
+            for (int j = 0; j < _matrix.Length; j++)
             {
-                _matrix[i, j] = _matrix[i,j].Subtract(dL_dPV[j].Multiply(alpha * dL_dI[i]));
+                Color val = dL_dI[i] * input[j].Average();
+                _matrix[i, j] -= alpha * val;
             }
         }
 

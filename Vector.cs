@@ -6,14 +6,14 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
-public readonly struct Vector
+public class Vector
 {
     readonly float[] _values;
 
     public float this[int index]
     {
         get { return _values[index]; }
-        set { _values[index] = value;}
+        set { _values[index] = value; }
     }
 
     public Vector(float[] values)
@@ -24,7 +24,7 @@ public readonly struct Vector
     public Vector(int[] values)
     {
         _values = new float[values.Length];
-        for(int i = 0; i < values.Length; i++)
+        for (int i = 0; i < values.Length; i++)
             _values[i] = values[i];
     }
 
@@ -34,16 +34,6 @@ public readonly struct Vector
     }
 
     public int Length => _values.Length;
-
-    public static float Cos(Vector v1, Vector v2)
-    {
-        if (v1.Length != v2.Length)
-        {
-            throw new ArgumentException("Vector's not the same length.");
-        }
-
-        return Dot(v1, v2) / (Magnitude(v1) * Magnitude(v2));
-    }
 
     public static float Dot(Vector v1, Vector v2)
     {
@@ -99,14 +89,35 @@ public readonly struct Vector
         return new Vector(values);
     }
 
+    public void Add(Vector v2)
+    {
+        if (Length != v2.Length)
+        {
+            throw new ArgumentException("Vector's not the same length.");
+        }
+
+        for (int i = 0; i < Length; i++)
+        {
+            _values[i] += v2[i];
+        }
+    }
+
     public static Vector operator *(Vector vector, float mult)
     {
         float[] values = new float[vector.Length];
-        for(int i = 0; i < vector.Length; i++)
+        for (int i = 0; i < vector.Length; i++)
         {
             values[i] = vector[i] * mult;
         }
         return new Vector(values);
+    }
+
+    public void Mult(float mult)
+    {
+        for (int i = 0; i < Length; i++)
+        {
+            _values[i] *= mult;
+        }
     }
 
     public static Vector operator *(float[,] matrix, Vector vector)
@@ -131,9 +142,9 @@ public readonly struct Vector
         if (matrix.GetLength(0) != vector.Length)
             throw new ArgumentException("Matrix and vector are not compatible.");
         Vector output = new(matrix.GetLength(1));
-        for(int i = 0; i < matrix.GetLength(0); i++)
+        for (int i = 0; i < matrix.GetLength(0); i++)
         {
-            for(int j = 0; j < matrix.GetLength(1); j++)
+            for (int j = 0; j < matrix.GetLength(1); j++)
             {
                 output[j] += matrix[i, j] * vector[i];
             }
@@ -142,7 +153,23 @@ public readonly struct Vector
         return output;
     }
 
-    public static Vector operator*(Vector v1,  Vector v2)
+    public static ColorVector operator *(Vector vector, FeatureMap matrix)
+    {
+        if (matrix.Width != vector.Length)
+            throw new ArgumentException("Matrix and vector are not compatible.");
+        ColorVector output = new(matrix.Length);
+        for (int i = 0; i < matrix.Width; i++)
+        {
+            for (int j = 0; j < matrix.Length; j++)
+            {
+                output[j] += matrix[i, j] * vector[i];
+            }
+        }
+
+        return output;
+    }
+
+    public static Vector operator *(Vector v1, Vector v2)
     {
         if (v1.Length != v2.Length)
         {
@@ -151,7 +178,7 @@ public readonly struct Vector
 
         Vector vector = new(v1.Length);
 
-        for(int i = 0; i < v1.Length; i++)
+        for (int i = 0; i < v1.Length; i++)
         {
             vector[i] = v1[i] * v2[i];
         }
@@ -183,6 +210,19 @@ public readonly struct Vector
             values[i] = v1[i] - v2[i];
         }
         return values;
+    }
+
+    public void Subtract(Vector v2)
+    {
+        if (Length != v2.Length)
+        {
+            throw new ArgumentException("Vector's not the same length.");
+        }
+
+        for (int i = 0; i < Length; i++)
+        {
+            _values[i] -= v2[i];
+        }
     }
 
     public static Vector operator -(Vector vector)

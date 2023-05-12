@@ -1,16 +1,16 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
 [Serializable]
-public class InitialConvolutionLayer<T> : ConvolutionalLayer<T> where T : IDot<T>, new()
+public class InitialConvolutionLayer : ConvolutionalLayer
 {
     public InitialConvolutionLayer(int kernalsNum, int kernalSize, int stride) : base(kernalsNum, kernalSize, stride)
     {
     }
 
-    public T[][,] Forward(T[,] input)
+    public FeatureMap[][] Forward(FeatureMap[] input)
     {
-        T[][,] convoluted = new T[_kernalNum][,];
-        for (int i = 0; i < _kernalNum; i++)
+        FeatureMap[][] convoluted = new FeatureMap[_dimensions][];
+        for (int i = 0; i < _dimensions; i++)
         {
             convoluted[i] = Forward(input, _kernals[i]);
         }
@@ -18,11 +18,11 @@ public class InitialConvolutionLayer<T> : ConvolutionalLayer<T> where T : IDot<T
         return convoluted;
     }
 
-    public T[][,] Backwards(T[][,] error, T[,] input, float alpha)
+    public FeatureMap[][] Backwards(FeatureMap[][] error, FeatureMap[] input, float alpha)
     {
-        T[][,] corrections = new T[_kernalNum][,];
+        FeatureMap[][] corrections = new FeatureMap[_dimensions][];
 
-        for (int i = 0; i < _kernalNum; i++)
+        for (int i = 0; i < _dimensions; i++)
         {
             corrections[i] = Backwards(error[i], input, _kernals[i], alpha);
         }

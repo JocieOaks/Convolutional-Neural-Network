@@ -13,12 +13,13 @@ public class CLIP
     [JsonProperty]
     readonly private Transformer _transformer;
     [JsonProperty]
-    readonly private InitialConvolutionLayer<Color> _initialConvolutionLayer;
+    readonly private InitialConvolutionLayer _initialConvolutionLayer;
     [JsonProperty]
-    readonly private List<Layer<Color>> _layers = new();
+    readonly private List<Layer> _layers = new();
 
-    private Color[][][,] _initialFeatureMaps;
-    private Color[,][][,] _featureMaps;
+    private FeatureMap[][] _initialFeatureMaps;
+    private FeatureMap[][][] _featureMaps;
+    private FeatureMap[][] _transposedFinalFeatureMap;
     private Vector[] _imageVectors;
     private Vector[] _descriptionVectors;
 
@@ -26,11 +27,11 @@ public class CLIP
     [JsonProperty]
     readonly private int _batchSize;
 
-    public CLIP(int depth, int kernals, int vectorDimensions, int batchSize, int descriptionLength)
+    public CLIP(int depth, int dimensions, int vectorDimensions, int batchSize, int descriptionLength)
     {
-        _initialConvolutionLayer = new InitialConvolutionLayer<Color>(kernals, 3, 2);
-        AveragePoolLayer<Color> sumPoolLayer = new(2);
-        _vectorizationLayer = new VectorizationLayer(vectorDimensions, kernals);
+        _initialConvolutionLayer = new InitialConvolutionLayer(dimensions, 3, 2);
+        AveragePoolLayer sumPoolLayer = new(dimensions, 2);
+        _vectorizationLayer = new VectorizationLayer(vectorDimensions, dimensions);
         _transformer = new Transformer(descriptionLength, vectorDimensions);
         _batchSize = batchSize;
 
@@ -39,13 +40,12 @@ public class CLIP
 
         for (int i = 0; i < depth; i++)
         {
-            _layers.Add(new ConvolutionalLayer<Color>(kernals, 3, 1));
-            _layers.Add(new NormalizationLayer<Color>(kernals));
-            if (i < 9 && i % 3 == 0)
+            _layers.Add(new ConvolutionalLayer(dimensions, 3, 1));
+            _layers.Add(new NormalizationLayer(dimensions));
+            if (i < 6 && i % 2 == 0)
                 _layers.Add(sumPoolLayer);
         }
-        _initialFeatureMaps = new Color[batchSize][][,];
-        _featureMaps = new Color[batchSize, Depth][][,];
+        _featureMaps = new FeatureMap[Depth][][];
     }
 
     public CLIP() { }
@@ -55,26 +55,52 @@ public class CLIP
     {
         _imageVectors = new Vector[_batchSize];
         _descriptionVectors = new Vector[_batchSize];
-        _initialFeatureMaps = new Color[_batchSize][][,];
-        _featureMaps = new Color[_batchSize, Depth][][,];
+        _featureMaps = new FeatureMap[Depth][][];
     }
 
-    public void Forward((Color[,] image, int[] vector)[] _input)
+    public void Forward((FeatureMap image, int[] vector)[] input)
     {
-        Color[][,] current;
+        FeatureMap[][] current;
+        FeatureMap[] images = new FeatureMap[_batchSize];
         for(int i = 0; i < _batchSize; i++)
         {
-            current = _initialConvolutionLayer.Forward(_input[i].image);
-            _initialFeatureMaps[i] = current;
-            for(int j = 0; j < Depth; j++)
-            {
-                current = _layers[j].Forward(current);
-                _featureMaps[i, j] = current;
-            }
-
-            _imageVectors[i] = _vectorizationLayer.Forward(_featureMaps[i, Depth - 1]).Normalized();
-            _descriptionVectors[i] = _transformer.Forward(_input[i].vector).Normalized();
+            images[i] = input[i].image; 
+            _descriptionVectors[i] = _transformer.Forward(input[i].vector).Normalized();
         }
+
+        current = _initialConvolutionLayer.Forward(images);
+        _initialFeatureMaps = current;
+
+        for(int j = 0; j < Depth; j++)
+        {
+            current = _layers[j].Forward(current);
+            _featureMaps[j] = current;
+        }
+
+        //Normalization preferes featuremaps grouped by dimension first, while Vectorization prefers them to be grouped by batch member first.
+        //This transposes the featuremaps to perform Vectorization.
+
+        _transposedFinalFeatureMap = TransposeArray(current);
+
+        for (int i = 0; i < _batchSize; i++)
+        {
+            _imageVectors[i] = _vectorizationLayer.Forward(_transposedFinalFeatureMap[i]);
+        }
+    }
+
+
+    private static T[][] TransposeArray<T>(T[][] array)
+    {
+        T[][] transposed = new T[array[0].Length][];
+        for(int i = 0; i < transposed.Length; i++)
+        {
+            transposed[i] = new T[array.Length];
+            for (int j = 0; j < transposed[i].Length; j++)
+            {
+                transposed[i][j] = array[j][i];
+            }
+        }
+        return transposed;
     }
 
     public float[,] Score()
@@ -117,34 +143,44 @@ public class CLIP
         return loss;
     }
 
-    public void Backwards((Vector dL_dI, Vector dL_dD)[] gradients, (Color[,] image, int[] vector)[] input, float alpha)
+    public void Backwards((Vector[] dL_dI, Vector[] dL_dD) gradients, (FeatureMap image, int[] vector)[] input, float alpha)
     {
-        for(int i = 0; i < _batchSize; i++)
+        FeatureMap[] images = new FeatureMap[_batchSize];
+        for (int i = 0; i < _batchSize; i++)
         {
-            _transformer.Backwards(gradients[i].dL_dD, input[i].vector, alpha);
-            Color[][,] current = _vectorizationLayer.Backwards(gradients[i].dL_dI, _imageVectors[i], _featureMaps[i, Depth - 1], alpha);
-            for (int j = Depth - 1; j > 0; j--)
-            {
-                current = _layers[j].Backwards(current, _featureMaps[i, j - 1], alpha);
-            }
-            current = _layers[0].Backwards(current, _initialFeatureMaps[i], alpha);
-            _initialConvolutionLayer.Backwards(current, input[i].image, alpha);
+            images[i] = input[i].image;
+            _transformer.Backwards(gradients.dL_dD[i], input[i].vector, alpha);
         }
+
+        FeatureMap[][] transposed = new FeatureMap[_batchSize][];
+        for (int i = 0; i < _batchSize; i++)
+        {
+            transposed[i] = _vectorizationLayer.Backwards(gradients.dL_dI[i], _imageVectors[i], _transposedFinalFeatureMap[i], alpha);
+        }
+
+        FeatureMap[][] current = TransposeArray(transposed);
+
+        for (int j = Depth - 1; j > 0; j--)
+        {
+            current = _layers[j].Backwards(current, _featureMaps[j - 1], alpha);
+        }
+        current = _layers[0].Backwards(current, _initialFeatureMaps, alpha);
+        _initialConvolutionLayer.Backwards(current, images, alpha);
     }
 
-    public float Train((Color[,] image, int[] vector)[] input, float alpha)
+    public float Train((FeatureMap image, int[] vector)[] input, float alpha)
     {
         Forward(input);
         float[,] matrix = Score();
         float loss = Loss(matrix);
-        (Vector, Vector)[] gradients = CalculateGradient(matrix, loss);
+        (Vector[], Vector[]) gradients = CalculateGradient(matrix, loss);
         Backwards(gradients, input, alpha);
         return loss;
     }
 
-    (Vector, Vector)[] CalculateGradient(float[,] matrix, float loss)
+    (Vector[], Vector[]) CalculateGradient(float[,] matrix, float loss)
     {
-        (Vector, Vector)[] gradients = new (Vector, Vector)[_batchSize];
+        (Vector[], Vector[]) gradients = (new Vector[_batchSize], new Vector[_batchSize]);
         for (int i = 0; i < _batchSize; i++)
         {
             float totalI = 0;
@@ -160,27 +196,30 @@ public class CLIP
                 {
                     if (matrix[i, j] > 0)
                     {
-                        dI_dV -= _descriptionVectors[j];
+                        dI_dV.Subtract(_descriptionVectors[j]);
                     }
                     if (matrix[j, i] > 0)
                     {
-                        dD_dV -= _imageVectors[j];
+                        dD_dV.Subtract(_imageVectors[j]);
                     }
                 }
             }
 
-            dI_dV *= 1 / totalI;
-            dD_dV *= 1 / totalD;
+            dI_dV.Mult(1 / totalI);
+            dD_dV.Mult(1 / totalD);
 
             float inv = 1 / matrix[i, i];
 
-            dI_dV += _descriptionVectors[i]* inv;
-            dD_dV += _imageVectors[i] * inv;
+            dI_dV.Add(_descriptionVectors[i]* inv);
+            dD_dV.Add(_imageVectors[i] * inv);
 
-            dI_dV *= -loss / _batchSize;
-            dD_dV *= -loss / _batchSize;
+            float batchInv = loss / _batchSize;
 
-            gradients[i] = (dI_dV, dD_dV);
+            dI_dV.Mult(-batchInv);
+            dD_dV.Mult(-batchInv);
+
+            gradients.Item1[i] = dI_dV;
+            gradients.Item2[i] = dD_dV;
         }
         return gradients;
     }

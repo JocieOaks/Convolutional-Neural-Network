@@ -11,7 +11,7 @@ if (OperatingSystem.IsWindows())
 
     Bitmap[] images = new Bitmap[] {
     new Bitmap("C:\\Users\\joaks\\Documents\\Projects\\CLIP C#\\Images\\Athemar.png"),
-    //new Bitmap("C:\\Users\\joaks\\Documents\\Projects\\CLIP C#\\Images\\Incubus.png"),
+    new Bitmap("C:\\Users\\joaks\\Documents\\Projects\\CLIP C#\\Images\\Incubus.png"),
     new Bitmap("C:\\Users\\joaks\\Documents\\Projects\\CLIP C#\\Images\\Queltocn.png"),
     new Bitmap("C:\\Users\\joaks\\Documents\\Projects\\CLIP C#\\Images\\Soren.png")
     };
@@ -19,12 +19,12 @@ if (OperatingSystem.IsWindows())
     int[][] vectors = new int[][]
     {
         new int[]{1, 1, 1, 1, 0, 1, 1, 1, 0, 0},
-        //new int[]{2, 2, 2, 2, 0, 1, 0, 2, 0, 0},
+        new int[]{2, 2, 2, 2, 0, 1, 0, 2, 0, 0},
         new int[]{3, 3, 1, 4, 0, 1, 1, 1, 1, 1},
         new int[]{4, 2, 1, 3, 1, 0, 1, 2, 0, 0}
     };
 
-    (Color[,], int[])[] input = new (Color[,], int[])[images.Length];
+    (FeatureMap, int[])[] input = new (FeatureMap, int[])[images.Length];
 
     int width = images.Max(x => x.Width);
     int height = images.Max(y => y.Height);
@@ -33,7 +33,7 @@ if (OperatingSystem.IsWindows())
     for (int k = 0; k < images.Length; k++)
     {
         Bitmap image = images[k];
-        Color[,] imageArray = new Color[width, height];
+        FeatureMap imageArray = new FeatureMap(width, height);
         int paddingX = (width - image.Width) / 2;
         int paddingY = (height - image.Height) / 2;
 
@@ -74,14 +74,14 @@ if (OperatingSystem.IsWindows())
         }
     }
     
-    clip ??= new(16, 8, 10, input.Length, input[0].Item2.Length);
+    clip ??= new(12, 8, 10, input.Length, input[0].Item2.Length);
 
-    float loss = clip.Train(input, 0.05f);
+    float loss = clip.Train(input, 0.01f);
     float initialLoss = loss;
     Print(clip.Score());
     for(int i = 0; i < 100; i++)
     {
-        loss = clip.Train(input, 0.5f);
+        loss = clip.Train(input, 0.05f);
         Console.WriteLine(MathF.Round(loss,5));
         Print(clip.Score());
         Console.WriteLine();
@@ -114,6 +114,15 @@ if (OperatingSystem.IsWindows())
     catch (System.Exception e)
     {
         Console.WriteLine("Error occured when trying to save data to file: " + filepath + "\n" + e.ToString());
+    }
+}
+else
+{
+    BackPropogationTest test = new BackPropogationTest();
+    for (int i = 0; i < 10; i++)
+    {
+        float loss = test.Test(0.05f, 0.05f);
+        Console.WriteLine($"{i} {MathF.Round(loss,4)}");
     }
 }
 

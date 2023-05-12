@@ -2,25 +2,75 @@
 using System.Runtime.Serialization;
 
 [Serializable]
-public class AveragePoolLayer<T> : Layer<T> where T : IDot<T>, new()
+public class AveragePoolLayer : Layer
 {
-    float _inverseKernal2;
+    float _invK2;
 
-    public AveragePoolLayer(int kernalSize) : base(kernalSize,kernalSize)
+    public AveragePoolLayer(int dimensions,int kernalSize) : base(dimensions, kernalSize, kernalSize)
     {
-        _inverseKernal2 = 1f / (kernalSize * kernalSize);
+        _invK2 = 1f / (kernalSize * kernalSize);
+    }
+
+    public AveragePoolLayer() : base(0, 0, 0) { }
+
+    public override FeatureMap[][] Backwards(FeatureMap[][] dL_dP, FeatureMap[][] input, float alpha)
+    {
+        FeatureMap[][] dL_dPNext = new FeatureMap[_dimensions][];
+        for(int i = 0; i < _dimensions; i++)
+        {
+            dL_dPNext[i] = Backwards(dL_dP[i]);
+        }
+
+        return dL_dPNext;
+    }
+
+    public override FeatureMap[][] Forward(FeatureMap[][] input)
+    {
+        FeatureMap[][] pooled = new FeatureMap[_dimensions][];
+        for(int i = 0; i < _dimensions; i++)
+        {
+            pooled[i] = Forward(input[i]);
+        }
+        return pooled;
     }
 
     [OnDeserialized]
     public void OnDeserialized(StreamingContext context)
     {
-        _inverseKernal2 = 1f / (_kernalSize * _kernalSize);
+        _invK2 = 1f / (_kernalSize * _kernalSize);
     }
 
-    public override T[][,] Forward(T[][,] input)
+    FeatureMap[] Backwards(FeatureMap[] dL_dP)
+    {
+        FeatureMap[] dL_dPNext = new FeatureMap[dL_dP.Length];
+        for (int i = 0; i < dL_dP.Length; i++)
+        {
+            dL_dPNext[i] = Backwards(dL_dP[i]);
+        }
+        return dL_dPNext;
+    }
+
+    FeatureMap Backwards(FeatureMap dL_dP)
+    {
+        int width = dL_dP.Width * _kernalSize;
+        int length = dL_dP.Length * _kernalSize;
+        FeatureMap dL_dPNext = new FeatureMap(width, length);
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < length; y++)
+            {
+                dL_dPNext[x, y] = dL_dP[x / _kernalSize, y / _kernalSize] * _invK2;
+            }
+        }
+
+        return dL_dPNext;
+    }
+
+    private FeatureMap[] Forward(FeatureMap[] input)
     {
         Pad(input);
-        T[][,] pooled = new T[input.Length][,];
+        FeatureMap[] pooled = new FeatureMap[input.Length];
         for(int i = 0; i < input.Length; i++)
         {
             pooled[i] = Forward(input[i]);
@@ -29,11 +79,11 @@ public class AveragePoolLayer<T> : Layer<T> where T : IDot<T>, new()
         return pooled;
     }
 
-    T[,] Forward(T[,] input)
+    FeatureMap Forward(FeatureMap input)
     {
-        int widthSubdivisions = input.GetLength(0) / _kernalSize;
-        int lengthSubdivisions = input.GetLength(1) / _kernalSize;
-        T[,] pooled = new T[widthSubdivisions, lengthSubdivisions];
+        int widthSubdivisions = input.Width / _kernalSize;
+        int lengthSubdivisions = input.Length / _kernalSize;
+        FeatureMap pooled = new FeatureMap(widthSubdivisions, lengthSubdivisions);
         for(int i =  0; i < widthSubdivisions; i++)
         {
             for(int j = 0; j < lengthSubdivisions; j++)
@@ -42,39 +92,12 @@ public class AveragePoolLayer<T> : Layer<T> where T : IDot<T>, new()
                 {
                     for(int l = 0; l < _kernalSize; l++)
                     {
-                        pooled[i, j] = pooled[i, j].Add(input[i * _kernalSize + k, j * _kernalSize + l]);
+                        pooled[i, j] += input[i * _kernalSize + k, j * _kernalSize + l];
                     }
                 }
-                pooled[i, j] = pooled[i, j].Multiply(0.25f);
+                pooled[i, j] *= 0.25f;
             }
         }
         return pooled;
-    }
-
-    public override T[][,] Backwards(T[][,] dL_dP, T[][,] input, float _)
-    {
-        T[][,] dL_dPNext = new T[dL_dP.Length][,];
-        for(int i = 0; i < dL_dP.Length; i++)
-        {
-            dL_dPNext[i] = Backwards(dL_dP[i]);
-        }
-        return dL_dPNext;
-    }
-
-    T[,] Backwards(T[,] dL_dP)
-    {
-        int width = dL_dP.GetLength(0) * _kernalSize;
-        int length = dL_dP.GetLength(1) * _kernalSize;
-        T[,] dL_dPNext = new T[width, length];
-
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < length; y++)
-            {
-                dL_dPNext[x, y] = dL_dP[x / _kernalSize, y / _kernalSize].Multiply(_inverseKernal2);
-            }
-        }
-
-        return dL_dPNext;
     }
 }

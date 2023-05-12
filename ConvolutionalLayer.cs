@@ -2,76 +2,46 @@
 #nullable disable
 
 using Newtonsoft.Json;
+using System.Runtime.Serialization;
 
 [Serializable]
-public class ConvolutionalLayer<T> : Layer<T> where T : IDot<T>, new()
+public class ConvolutionalLayer : Layer
 {
     [JsonProperty]
-    protected int _kernalNum;
+    protected Color[][,] _kernals;
 
-    [JsonProperty]
-    protected T[][,] _kernals;
+    float _invK2;
 
-    public ConvolutionalLayer(int kernalsNum, int kernalSize, int stride) : base(kernalSize, stride)
+    public ConvolutionalLayer(int kernalsNum, int kernalSize, int stride) : base(kernalsNum, kernalSize, stride)
     {
-        _kernalNum = kernalsNum;
-        _kernals = new T[kernalsNum][,];
+        _kernals = new Color[kernalsNum][,];
 
         for (int i = 0; i < kernalsNum; i++)
         {
-            _kernals[i] = new T[_kernalSize, _kernalSize];
+            _kernals[i] = new Color[_kernalSize, _kernalSize];
             for (int j = 0; j < kernalSize; j++)
             {
                 for (int k = 0; k < kernalSize; k++)
                 {
-                    _kernals[i][j, k] = new T().Random();
+                    _kernals[i][j, k] = Color.Random(0.5f);
                 }
             }
         }
+        _invK2 = 1f / (kernalSize * kernalSize);
     }
 
-    [JsonConstructor]
-    public ConvolutionalLayer(int kernalSize, int stride) : base(kernalSize, stride) { }
+    public ConvolutionalLayer() : base(0, 0, 0) { }
 
-    protected T[,] Forward(T[,] input, T[,] kernal)
+    [OnDeserialized]
+    public void OnDeserialized(StreamingContext context)
     {
-        int widthSubdivisions = (input.GetLength(0) - _kernalSize) / _stride;
-        int lengthSubdivisions = (input.GetLength(1) - _kernalSize) / _stride;
-        T[,] convoluted = new T[widthSubdivisions, lengthSubdivisions];
-        for (int shiftX = 0; shiftX < widthSubdivisions; shiftX++)
-        {
-            for (int shiftY = 0; shiftY < lengthSubdivisions; shiftY++)
-            {
-                for (int kernalX = 0; kernalX < _kernalSize; kernalX++)
-                {
-                    for (int kernalY = 0; kernalY < _kernalSize; kernalY++)
-                    {
-                        convoluted[shiftX, shiftY] = convoluted[shiftX, shiftY].Add(input[shiftX * _stride + kernalX, shiftY * _stride + kernalY].Multiply(kernal[kernalX, kernalY]));
-                    }
-                }
-                convoluted[shiftX, shiftY] = convoluted[shiftX, shiftY].Multiply(1f / (_kernalSize * _kernalSize));
-            }
-        }
-        
-        return convoluted;
+        _invK2 = 1f / (_kernalSize * _kernalSize);
     }
 
-    public override T[][,] Forward(T[][,] input)
+    public override FeatureMap[][] Backwards(FeatureMap[][] dL_dP, FeatureMap[][] input, float alpha)
     {
-        Pad(input);
-        T[][,] convoluted = new T[_kernalNum][,];
-        for (int i = 0; i < _kernalNum; i++)
-        {
-            convoluted[i] = Forward(input[i], _kernals[i]);
-        }
-        return convoluted;
-    }
-
-    public override T[][,] Backwards(T[][,] dL_dP, T[][,] input, float alpha)
-    {
-        T[][,] dL_dPNext = new T[_kernalNum][,];
-        
-        for (int i = 0; i < _kernalNum; i++)
+        FeatureMap[][] dL_dPNext = new FeatureMap[_dimensions][];
+        for (int i = 0; i < _dimensions; i++)
         {
             dL_dPNext[i] = Backwards(dL_dP[i], input[i], _kernals[i], alpha);
         }
@@ -79,12 +49,35 @@ public class ConvolutionalLayer<T> : Layer<T> where T : IDot<T>, new()
         return dL_dPNext;
     }
 
-    protected T[,] Backwards(T[,] dL_dP, T[,] input, T[,] kernal, float alpha)
+    public override FeatureMap[][] Forward(FeatureMap[][] input)
     {
-        int widthSubdivisions = dL_dP.GetLength(0);
-        int lengthSubdivisions = dL_dP.GetLength(1);
-        T[,] dL_dPNext = new T[input.GetLength(0), input.GetLength(1)];
-        T[,] dL_dK = new T[_kernalSize, _kernalSize];
+        FeatureMap[][] convoluted = new FeatureMap[_dimensions][];
+        for (int i = 0; i < _dimensions; i++)
+        {
+            convoluted[i] = Forward(input[i], _kernals[i]);
+        }
+        return convoluted;
+    }
+
+    protected FeatureMap[] Backwards(FeatureMap[] dL_dP, FeatureMap[] input, Color[,] kernal, float alpha)
+    {
+        int batchLength = input.Length;
+        FeatureMap[] dL_dPNext = new FeatureMap[batchLength];
+
+        for (int i = 0; i < batchLength; i++)
+        {
+            dL_dPNext[i] = Backwards(dL_dP[i], input[i], kernal, alpha);
+        }
+
+        return dL_dPNext;
+    }
+
+    protected FeatureMap Backwards(FeatureMap dL_dP, FeatureMap input, Color[,] kernal, float alpha)
+    {
+        int widthSubdivisions = dL_dP.Width;
+        int lengthSubdivisions = dL_dP.Length;
+        FeatureMap dL_dPNext = new FeatureMap(input.Width, input.Length);
+        Color[,] dL_dK = new Color[_kernalSize, _kernalSize];
         for (int strideX = 0; strideX < widthSubdivisions; strideX++)
         {
             for (int strideY = 0; strideY < lengthSubdivisions; strideY++)
@@ -96,23 +89,67 @@ public class ConvolutionalLayer<T> : Layer<T> where T : IDot<T>, new()
                     {
                         int x = strideX * _stride + kernalX;
                         int y = strideY * _stride + kernalY;
-                        T dK = dL_dP[strideX, strideY].Multiply(input[x,y]);
-                        T dP = dL_dP[strideX, strideX].Multiply(kernal[kernalX, kernalY]);
-                        dL_dK[kernalX, kernalY] = dK;
-                        dL_dPNext[x, y] = dL_dPNext[x, y].Add(dP);
+                        Color dK = dL_dP[strideX, strideY]* input[x, y] * _invK2;
+                        Color dP = dL_dP[strideX, strideX] * kernal[kernalX, kernalY] * _invK2;
+                        dL_dK[kernalX, kernalY] += dK;
+                        dL_dK[kernalX, kernalY].Clamp(1);
+                        dL_dPNext[x, y] += dP;
                     }
                 }
             }
         }
 
-        for(int i = 0; i < _kernalSize; i++)
+        for(int i = 0; i < dL_dPNext.Width; i++)
         {
-            for(int j = 0; j < _kernalSize; j++)
+            for(int j = 0; j < dL_dPNext.Length; j++)
             {
-                kernal[i, j] = kernal[i, j].Subtract(dL_dK[i, j].Multiply(alpha));
+                dL_dPNext[i, j] = dL_dPNext[i, j].Clamp(0.5f);
+            }
+        }
+
+        for (int i = 0; i < _kernalSize; i++)
+        {
+            for (int j = 0; j < _kernalSize; j++)
+            {
+                kernal[i, j] -= alpha * dL_dK[i, j];
             }
         }
 
         return dL_dPNext;
+    }
+
+    protected FeatureMap[] Forward(FeatureMap[] input, Color[,] kernal)
+    {
+        Pad(input);
+        FeatureMap[] convoluted = new FeatureMap[input.Length];
+        for (int i = 0; i < input.Length; i++)
+        {
+            convoluted[i] = Forward(input[i], kernal);
+        }
+        
+        return convoluted;
+    }
+
+    protected FeatureMap Forward(FeatureMap input, Color[,] kernal)
+    {
+        int widthSubdivisions = (input.Width - _kernalSize) / _stride;
+        int lengthSubdivisions = (input.Length - _kernalSize) / _stride;
+        FeatureMap convoluted = new FeatureMap(widthSubdivisions, lengthSubdivisions);
+        for (int shiftX = 0; shiftX < widthSubdivisions; shiftX++)
+        {
+            for (int shiftY = 0; shiftY < lengthSubdivisions; shiftY++)
+            {
+                for (int kernalX = 0; kernalX < _kernalSize; kernalX++)
+                {
+                    for (int kernalY = 0; kernalY < _kernalSize; kernalY++)
+                    {
+                        convoluted[shiftX, shiftY] += input[shiftX * _stride + kernalX, shiftY * _stride + kernalY] * kernal[kernalX, kernalY];
+                    }
+                }
+                convoluted[shiftX, shiftY] *= _invK2;
+            }
+        }
+
+        return convoluted;
     }
 }

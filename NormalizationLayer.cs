@@ -1,150 +1,150 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
 
-public class NormalizationLayer<T> : Layer<T> where T : IDot<T>, new()
+public class NormalizationLayer : Layer
 {
-    T[] _weight;
-    T[] _bias;
-    public NormalizationLayer(int dimensions) : base(0,0)
+    ColorVector _bias;
+    ColorVector _weight;
+    readonly FeatureMap[][] normalized;
+    readonly ColorVector mean;
+    readonly ColorVector sigma;
+    public NormalizationLayer(int dimensions) : base(dimensions, 0,0)
     {
-        _weight = new T[dimensions];
-        for(int i = 0; i < dimensions; i++)
+        _weight = new ColorVector(dimensions);
+        _bias = new ColorVector(dimensions);
+        for (int i = 0; i < dimensions; i++)
         {
-            _weight[i] = new T().Add(1);
+            _weight[i] = new Color(1, 1, 1);
+            _bias[i] = new Color(0.5f, 0.5f, 0.5f);
         }
 
-        _bias = new T[dimensions];
+        mean = new ColorVector(dimensions);
+        sigma = new ColorVector(dimensions);
+        normalized = new FeatureMap[dimensions][];
     }
 
-    public override T[][,] Backwards(T[][,] dL_dP, T[][,] input, float alpha)
+    public override FeatureMap[][] Backwards(FeatureMap[][] dL_dP, FeatureMap[][] input, float alpha)
     {
-        T[][,] dL_dPNext = new T[input.Length][,];
+        FeatureMap[][] dL_dPNext = new FeatureMap[_dimensions][];
 
-        for(int i = 0; i < input.Length; i++)
+        for(int i = 0; i < _dimensions; i++)
         {
             dL_dPNext[i] = Backwards(dL_dP[i], input[i], i, alpha);
         }
-        return dL_dPNext;
-    }
-
-    T[,] Backwards(T[,] dL_dP, T[,] input, int dimension, float alpha)
-    {
-        int x = input.GetLength(0);
-        int y = input.GetLength(1);
-        int xy = x * y;
-
-        T mean = new();
-        for (int i = 0; i < x; i++)
-        {
-            for (int j = 0; j < y; j++)
-            {
-                mean = mean.Add(input[i, j]);
-            }
-        }
-        mean = mean.Multiply(1f / xy);
-
-        T sigma2 = new();
-
-        for (int i = 0; i < x; i++)
-        {
-            for (int j = 0; j < y; j++)
-            {
-                sigma2 = sigma2.Add(input[i, j].Subtract(mean).Pow(2));
-            }
-        }
-
-        T sigma = sigma2.Add(0.001f).Pow(0.5f);
-
-        T[,] normalized = new T[x, y];
-        for (int i = 0; i < x; i++)
-        {
-            for (int j = 0; j < y; j++)
-            {
-                normalized[i, j] = input[i, j].Subtract(mean).Divide(sigma).ReLU().Multiply(_weight[dimension]).Add(_bias[dimension]);
-            }
-        }
-
-        T dL_dW = new();
-        T sum_dL_dP = new();
-        T dL_dS = new();
-        for (int i = 0; i < x; i++)
-        {
-            for(int j = 0; j < y; j++)
-            {
-                dL_dW = dL_dW.Add(dL_dP[i, j].Multiply(normalized[i,j]));
-                sum_dL_dP = sum_dL_dP.Add(dL_dP[i, j]);
-                dL_dS = dL_dS.Add(dL_dP[i, j].Add(input[i, j]));
-            }
-        }
-        dL_dS = dL_dS.Subtract(mean.Multiply( xy));
-        dL_dS = dL_dS.Multiply(sigma.Pow(-1.5f).Multiply(_weight[dimension]).Multiply(-0.5f));
-        T dl_dM = sum_dL_dP.Multiply(-1).Multiply(_weight[dimension]).Divide(sigma);
-
-        T[,] dL_dPNext = new T[x, y];
-
-        for(int i = 0; i < x; i++)
-        {
-            for(int j =0; j < y; j++)
-            {
-                dL_dPNext[i, j] = dL_dP[i, j].Divide(sigma).Add(dL_dS.Multiply(input[i, j].Subtract(mean)).Multiply(2 / xy)).Add(dl_dM.Multiply(1 / xy));
-            }
-        }
-
-        _weight[dimension] = _weight[dimension].Subtract(dL_dW.Multiply(alpha));
-        _bias[dimension] = _bias[dimension].Subtract(sum_dL_dP.Multiply(alpha));
 
         return dL_dPNext;
     }
 
-    public override T[][,] Forward(T[][,] input)
+    public override FeatureMap[][] Forward(FeatureMap[][] input)
     {
-        T[][,] output = new T[input.Length][,];
-
-        for(int i = 0; i < input.Length; i++)
+        for(int i = 0; i < _dimensions; i++)
         {
-            output[i] = Forward(input[i], i);
+            normalized[i] = Forward(input[i], i);
         }
 
-        return output;
+        return normalized;
+    }
+    
+    private FeatureMap[] Backwards(FeatureMap[] dL_dP, FeatureMap[] input, int dimension, float alpha)
+    {
+        int batches = input.Length;
+        int x = input[0].Width;
+        int y = input[0].Length;
+        float m = input[0].Area * batches;
+        float _m = 1 / m;
+
+        Color dL_dW = new();
+        Color sum_dL_dP = new();
+        Color dL_dS = new();
+        for (int i = 0; i < batches; i++)
+        {
+            for (int j = 0; j < x; j++)
+            {
+                for (int k = 0; k < y; k++)
+                {
+                    dL_dP[i][j, k] *= normalized[dimension][i][j, k].ReLUPropogation();
+                    dL_dW += dL_dP[i][j, k] * normalized[dimension][i][j, k];
+                    sum_dL_dP += dL_dP[i][j, k];
+                    dL_dS += dL_dP[i][j, k] * input[i][j, k];
+                }
+            }
+        }
+        dL_dS -= mean[dimension] * m;
+        dL_dS *= Color.Pow(sigma[dimension], -1.5f) * _weight[dimension] * -0.5f;
+        Color dl_dM = -sum_dL_dP * _weight[dimension] / sigma[dimension];
+
+        FeatureMap[] dL_dPNext = new FeatureMap[batches];
+
+        for (int i = 0; i < batches; i++)
+        {
+            dL_dPNext[i] = new FeatureMap(x, y);
+            for (int j = 0; j < x; j++)
+            {
+                for (int k = 0; k < y; k++)
+                {
+                    dL_dPNext[i][j, k] = (dL_dP[i][j, k] / sigma[dimension] + 2 * _m  * dL_dS * (input[i][j, k] - mean[dimension]) + _m * dl_dM).Clamp(1);
+                }
+            }
+        }
+
+        _weight[dimension] -= alpha * dL_dW.Clamp(1);
+        _bias[dimension] -= alpha * sum_dL_dP.Clamp(1);
+
+        return dL_dPNext;
     }
 
-    T[,] Forward(T[,] input, int dimension)
+    private FeatureMap[] Forward(FeatureMap[] input, int dimension)
     {
-        int x = input.GetLength(0);
-        int y = input.GetLength(1);
+        int batches = input.Length;
+        int x = input[0].Width;
+        int y = input[0].Length;
+        float m = input[0].Area * batches;
+        float _m = 1 / m;
 
-        T mean = new();
-        for(int i = 0; i < x; i++)
+        mean[dimension] = new();
+        for(int i = 0; i < batches; i++)
         {
-            for (int j = 0; j < y; j++)
+            for (int j = 0; j < x; j++)
             {
-                mean = mean.Add(input[i, j]);
+                for (int k = 0; k < y; k++)
+                {
+                    mean[dimension] += input[i][j, k];
+                }
             }
         }
-        mean = mean.Multiply(1f / x / y);
+        mean[dimension] = _m * mean[dimension];
 
-        T sigma2 = new();
+        Color sigma2 = new();
 
-        for(int i = 0; i < x; i++)
+        for(int i = 0; i < batches; i++)
         {
-            for(int j = 0; j < y; j++)
+            for (int j = 0; j < x; j++)
             {
-                sigma2 = sigma2.Add(input[i, j].Subtract(mean).Pow(2));
+                for (int k = 0; k < y; k++)
+                {
+                    sigma2 += Color.Pow(input[i][j, k] - mean[dimension], 2);
+                }
             }
         }
 
-        T sigma = sigma2.Add(0.001f).Pow(0.5f);
+        sigma2 = _m * sigma2;
+        sigma[dimension] = Color.Pow(sigma2 + new Color(0.001f, 0.001f, 0.001f), 0.5f);
 
-        T[,] output = new T[x, y];
-        for(int i = 0; i < x; i++)
+        FeatureMap[] output = new FeatureMap[batches];
+        for(int i = 0; i < batches; i++)
         {
-            for(int j = 0; j < y; j++)
+            output[i] = new FeatureMap(x, y);
+            for (int j = 0; j < x; j++)
             {
-                output[i,j] = input[i,j].Subtract(mean).Divide(sigma).ReLU().Multiply(_weight[dimension]).Add(_bias[dimension]);
+                for (int k = 0; k < y; k++)
+                {
+                    output[i][j, k] =((input[i][j, k] - mean[dimension]) / sigma[dimension]).ReLU() * _weight[dimension] + _bias[dimension];
+                }
             }
         }
 
