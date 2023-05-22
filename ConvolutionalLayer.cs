@@ -9,16 +9,25 @@ public class ConvolutionalLayer : Layer
 {
     [JsonProperty]
     protected Color[][,] _kernals;
+    protected Color[][,] _dL_dK;
 
     float _invK2;
+    protected FeatureMap[][] _convoluted;
+    protected FeatureMap[][] _dL_dPNext;
 
-    public ConvolutionalLayer(int kernalsNum, int kernalSize, int stride) : base(kernalsNum, kernalSize, stride)
+    const int CLAMP = 100;
+    const float LERANINGMULTIPLIER = 0.01f;
+
+    protected int _threadsWorking;
+
+    public ConvolutionalLayer(int dimensions, int kernalSize, int stride, ref FeatureMap[][] input) : base(dimensions, kernalSize, stride)
     {
-        _kernals = new Color[kernalsNum][,];
-
-        for (int i = 0; i < kernalsNum; i++)
+        _kernals = new Color[dimensions][,];
+        _dL_dK = new Color[dimensions][,];
+        for (int i = 0; i < dimensions; i++)
         {
             _kernals[i] = new Color[_kernalSize, _kernalSize];
+            _dL_dK[i] = new Color[kernalSize, _kernalSize];
             for (int j = 0; j < kernalSize; j++)
             {
                 for (int k = 0; k < kernalSize; k++)
@@ -27,6 +36,24 @@ public class ConvolutionalLayer : Layer
                 }
             }
         }
+
+        _convoluted = new FeatureMap[dimensions][];
+        _dL_dPNext = new FeatureMap[dimensions][];
+        for (int i = 0; i < dimensions; i++)
+        {
+            Pad(input[i]);
+            _convoluted[i] = new FeatureMap[input[i].Length];
+            _dL_dPNext[i] = new FeatureMap[input[i].Length];
+            for (int j = 0; j < input[i].Length; j++)
+            {
+                _dL_dPNext[i][j] = new FeatureMap(input[i][j].Width, input[i][j].Length);
+                int width = (input[i][j].Width - kernalSize) / stride;
+                int length = (input[i][j].Length - kernalSize) / stride;
+                _convoluted[i][j] = new FeatureMap(width, length);
+            }
+        }
+        input = _convoluted;
+
         _invK2 = 1f / (kernalSize * kernalSize);
     }
 
@@ -38,118 +65,141 @@ public class ConvolutionalLayer : Layer
         _invK2 = 1f / (_kernalSize * _kernalSize);
     }
 
-    public override FeatureMap[][] Backwards(FeatureMap[][] dL_dP, FeatureMap[][] input, float alpha)
+    public override FeatureMap[][] Backwards(FeatureMap[][] input, FeatureMap[][] dL_dP, float learningRate)
     {
-        FeatureMap[][] dL_dPNext = new FeatureMap[_dimensions][];
         for (int i = 0; i < _dimensions; i++)
         {
-            dL_dPNext[i] = Backwards(dL_dP[i], input[i], _kernals[i], alpha);
+            Backwards(input[i], _kernals[i], _dL_dK[i], dL_dP[i], _dL_dPNext[i], learningRate);
         }
 
-        return dL_dPNext;
+        do
+            Thread.Sleep(100);
+        while (_threadsWorking > 0);
+
+        for (int i = 0; i < _dimensions; i++)
+        {
+            for (int j = 0; j < _kernalSize; j++)
+            {
+                for (int k = 0; k < _kernalSize; k++)
+                {
+                    _kernals[i][j, k] -= learningRate * LERANINGMULTIPLIER * _dL_dK[i][j, k];
+                }
+            }
+        }
+
+        return _dL_dPNext;
     }
 
     public override FeatureMap[][] Forward(FeatureMap[][] input)
     {
-        FeatureMap[][] convoluted = new FeatureMap[_dimensions][];
         for (int i = 0; i < _dimensions; i++)
         {
-            convoluted[i] = Forward(input[i], _kernals[i]);
+            Forward(input[i], _convoluted[i], _kernals[i]);
         }
-        return convoluted;
+
+        do
+            Thread.Sleep(100);
+        while (_threadsWorking > 0);
+
+        return _convoluted;
     }
 
-    protected FeatureMap[] Backwards(FeatureMap[] dL_dP, FeatureMap[] input, Color[,] kernal, float alpha)
+    protected void Backwards(FeatureMap[] input, Color[,] kernal, Color[,] dL_dK, FeatureMap[] dL_dP, FeatureMap[] dL_dPNext, float learningRate)
     {
-        int batchLength = input.Length;
-        FeatureMap[] dL_dPNext = new FeatureMap[batchLength];
+        for(int i =0; i < _kernalSize; i++)
+        {
+            for(int j = 0; j < _kernalSize; j++)
+            {
+                dL_dK[i, j] = new Color(0, 0, 0);
+            }
+        }
 
+        int batchLength = input.Length;
         for (int i = 0; i < batchLength; i++)
         {
-            dL_dPNext[i] = Backwards(dL_dP[i], input[i], kernal, alpha);
+            ThreadPool.QueueUserWorkItem(Backwards, (input[i], kernal, dL_dK, dL_dP[i], dL_dPNext[i]));
         }
-
-        return dL_dPNext;
     }
 
-    protected FeatureMap Backwards(FeatureMap dL_dP, FeatureMap input, Color[,] kernal, float alpha)
+    protected void Backwards(object stateInfo)
     {
-        int widthSubdivisions = dL_dP.Width;
-        int lengthSubdivisions = dL_dP.Length;
-        FeatureMap dL_dPNext = new FeatureMap(input.Width, input.Length);
-        Color[,] dL_dK = new Color[_kernalSize, _kernalSize];
-        for (int strideX = 0; strideX < widthSubdivisions; strideX++)
+        if (stateInfo == null)
+            throw new ArgumentNullException(nameof(stateInfo));
+        (FeatureMap input, Color[,] kernal, Color[,] dL_dK, FeatureMap dL_dP, FeatureMap dL_dPNext) = ((FeatureMap, Color[,], Color[,], FeatureMap, FeatureMap))stateInfo;
+        Interlocked.Increment(ref _threadsWorking);
+        lock (dL_dPNext)
         {
-            for (int strideY = 0; strideY < lengthSubdivisions; strideY++)
+            lock (dL_dK)
             {
-                dL_dPNext[strideX, strideY] = new();
-                for (int kernalX = 0; kernalX < _kernalSize; kernalX++)
+                for (int strideX = 0; strideX < dL_dP.Width; strideX++)
                 {
-                    for (int kernalY = 0; kernalY < _kernalSize; kernalY++)
+                    for (int strideY = 0; strideY < dL_dP.Length; strideY++)
                     {
-                        int x = strideX * _stride + kernalX;
-                        int y = strideY * _stride + kernalY;
-                        Color dK = dL_dP[strideX, strideY]* input[x, y] * _invK2;
-                        Color dP = dL_dP[strideX, strideX] * kernal[kernalX, kernalY] * _invK2;
-                        dL_dK[kernalX, kernalY] += dK;
-                        dL_dK[kernalX, kernalY].Clamp(1);
-                        dL_dPNext[x, y] += dP;
+                        for (int kernalX = 0; kernalX < _kernalSize; kernalX++)
+                        {
+                            for (int kernalY = 0; kernalY < _kernalSize; kernalY++)
+                            {
+                                int x = strideX * _stride + kernalX;
+                                int y = strideY * _stride + kernalY;
+                                Color dK = dL_dP[strideX, strideY] * input[x, y] * _invK2;
+                                Color dP = dL_dP[strideX, strideX] * kernal[kernalX, kernalY] * _invK2;
+                                dL_dK[kernalX, kernalY] += dK;
+                                dL_dPNext[x, y] += dP;
+                            }
+                        }
+                    }
+                }
+                for (int i = 0; i < _kernalSize; i++)
+                {
+                    for (int j = 0; j < _kernalSize; j++)
+                    {
+                        dL_dK[i, j] = dL_dK[i, j].Clamp(CLAMP);
+                    }
+                }
+
+                for (int i = 0; i < dL_dPNext.Width; i++)
+                {
+                    for (int j = 0; j < dL_dPNext.Length; j++)
+                    {
+                        dL_dPNext[i, j] = dL_dPNext[i, j].Clamp(1f);
                     }
                 }
             }
         }
-
-        for(int i = 0; i < dL_dPNext.Width; i++)
-        {
-            for(int j = 0; j < dL_dPNext.Length; j++)
-            {
-                dL_dPNext[i, j] = dL_dPNext[i, j].Clamp(0.5f);
-            }
-        }
-
-        for (int i = 0; i < _kernalSize; i++)
-        {
-            for (int j = 0; j < _kernalSize; j++)
-            {
-                kernal[i, j] -= alpha * dL_dK[i, j];
-            }
-        }
-
-        return dL_dPNext;
+        Interlocked.Decrement(ref _threadsWorking);
     }
 
-    protected FeatureMap[] Forward(FeatureMap[] input, Color[,] kernal)
+    protected void Forward(FeatureMap[] input, FeatureMap[] convoluted, Color[,] kernal)
     {
-        Pad(input);
-        FeatureMap[] convoluted = new FeatureMap[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
-            convoluted[i] = Forward(input[i], kernal);
+            ThreadPool.QueueUserWorkItem(Forward, (input[i], convoluted[i], kernal));
         }
-        
-        return convoluted;
     }
 
-    protected FeatureMap Forward(FeatureMap input, Color[,] kernal)
+    protected void Forward(Object stateInfo)
     {
-        int widthSubdivisions = (input.Width - _kernalSize) / _stride;
-        int lengthSubdivisions = (input.Length - _kernalSize) / _stride;
-        FeatureMap convoluted = new FeatureMap(widthSubdivisions, lengthSubdivisions);
-        for (int shiftX = 0; shiftX < widthSubdivisions; shiftX++)
+        if (stateInfo == null)
+            throw new ArgumentNullException(nameof(stateInfo));
+        (FeatureMap input, FeatureMap convoluted, Color[,] kernal) = ((FeatureMap, FeatureMap, Color[,]))stateInfo;
+        Interlocked.Increment(ref _threadsWorking);
+        lock (convoluted)
         {
-            for (int shiftY = 0; shiftY < lengthSubdivisions; shiftY++)
+            for (int shiftX = 0; shiftX < convoluted.Width; shiftX++)
             {
-                for (int kernalX = 0; kernalX < _kernalSize; kernalX++)
+                for (int shiftY = 0; shiftY < convoluted.Length; shiftY++)
                 {
-                    for (int kernalY = 0; kernalY < _kernalSize; kernalY++)
+                    for (int kernalX = 0; kernalX < _kernalSize; kernalX++)
                     {
-                        convoluted[shiftX, shiftY] += input[shiftX * _stride + kernalX, shiftY * _stride + kernalY] * kernal[kernalX, kernalY];
+                        for (int kernalY = 0; kernalY < _kernalSize; kernalY++)
+                        {
+                            convoluted[shiftX, shiftY] += input[shiftX * _stride + kernalX, shiftY * _stride + kernalY] * kernal[kernalX, kernalY];
+                        }
                     }
+                    convoluted[shiftX, shiftY] *= _invK2;
                 }
-                convoluted[shiftX, shiftY] *= _invK2;
             }
         }
-
-        return convoluted;
+        Interlocked.Decrement(ref _threadsWorking);
     }
 }

@@ -6,8 +6,7 @@ using System.Xml;
 [Serializable]
 public class VectorizationLayer
 {
-    [JsonProperty]
-    readonly FeatureMap _matrix;
+    [JsonProperty] readonly FeatureMap _matrix;
 
     public VectorizationLayer(int vectorDimensions, int kernalNum)
     {
@@ -35,7 +34,7 @@ public class VectorizationLayer
         return output.Normalized();
     }
 
-    public FeatureMap[] Backwards(Vector dL_dI, Vector output, FeatureMap[] input, float alpha)
+    public FeatureMap[] Backwards(FeatureMap[] input, Vector dL_dI, float learningRate)
     {
         FeatureMap[] dL_dP = new FeatureMap[input.Length];
         int x = input[0].Width;
@@ -55,7 +54,7 @@ public class VectorizationLayer
             for (int j = 0; j < _matrix.Length; j++)
             {
                 Color val = dL_dI[i] * input[j].Average();
-                _matrix[i, j] -= alpha * val;
+                _matrix[i, j] -= learningRate * val;
             }
         }
 

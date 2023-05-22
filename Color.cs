@@ -32,8 +32,11 @@ public readonly struct Color
 
     public float B { get; }
     public float G { get; }
+
+    [JsonIgnore]
     public float Magnitude => MathF.Sqrt(R * R + G * G + B * B);
 
+    [JsonIgnore]
     public float SquareMagnitude => R * R + G * G + B * B;
     public float R { get; }
     public static Color operator -(Color color1, Color color2)

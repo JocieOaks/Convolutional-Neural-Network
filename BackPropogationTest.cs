@@ -34,16 +34,16 @@ public class BackPropogationTest
             }
         }
 
-        _testLayer = new VectorizationLayer(5, 1);
-        _impactLayer = new ConvolutionalLayer(1, 3, 1);
+        //_testLayer = new VectorizationLayer(5, 1);
+        //_impactLayer = new ConvolutionalLayer(1, 3, 1);
     }
 
-    public float Test(float testAlpha, float propAlpha)
+    public float Test(float testLearningRate, float propLearningRate)
     {
         Forward();
         float loss = Loss();
         Vector dL_dP = Gradient(loss);
-        Backward(dL_dP, testAlpha, propAlpha);
+        Backward(dL_dP, testLearningRate, propLearningRate);
         return loss;
     }
 
@@ -89,11 +89,11 @@ public class BackPropogationTest
         _finalOutput = _testLayer.Forward(_intermediate[0]);
     }
 
-    public void Backward(Vector gradient, float testAlpha, float propAlpha)
+    public void Backward(Vector gradient, float testLearningRate, float propLearningRate)
     {
         FeatureMap[][] dL_dP = new FeatureMap[1][];
-        dL_dP[0] = _testLayer.Backwards(gradient, _finalOutput, _intermediate[0], testAlpha);
-        _impactLayer.Backwards(dL_dP, _initialInput, propAlpha);
+        dL_dP[0] = _testLayer.Backwards(_intermediate[0], gradient, testLearningRate);
+        _impactLayer.Backwards(_initialInput, dL_dP, propLearningRate);
     }
 }
 

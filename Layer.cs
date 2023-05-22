@@ -48,6 +48,6 @@ public abstract class Layer
 
     public abstract FeatureMap[][] Forward(FeatureMap[][] input);
 
-    public abstract FeatureMap[][] Backwards(FeatureMap[][] dL_dP, FeatureMap[][] input, float alpha);
+    public abstract FeatureMap[][] Backwards(FeatureMap[][] input, FeatureMap[][] dL_dP, float learningRate);
 }
 

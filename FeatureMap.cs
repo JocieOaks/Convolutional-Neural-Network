@@ -1,14 +1,16 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Serialization;
 
+[System.Serializable]
 public class FeatureMap
 {
 
-    readonly Color[,] _map;
+    [JsonProperty] readonly Color[,] _map;
 
     public FeatureMap(int width, int length)
     {
@@ -32,10 +34,10 @@ public class FeatureMap
         }
     }
 
-    public int Width => _map.GetLength(0);
-    public int Length => _map.GetLength(1);
+    [JsonIgnore] public int Width => _map.GetLength(0);
+    [JsonIgnore] public int Length => _map.GetLength(1);
 
-    public int Area => Width * Length;
+    [JsonIgnore] public int Area => Width * Length;
 
     public Color Sum()
     {

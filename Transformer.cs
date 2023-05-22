@@ -4,34 +4,62 @@ using Newtonsoft.Json;
 [Serializable]
 public class Transformer
 {
-    [JsonProperty]
-    readonly float[,] _matrix;
+    [JsonProperty] readonly float[,] _boolMatrix;
+    [JsonProperty] readonly float[,] _floatMatrix;
 
-    public Transformer(int inputs, int outputs)
+    public Transformer(int bools, int floats, int outputs)
     {
-        _matrix = new float[outputs, inputs];
+        _boolMatrix = new float[outputs, bools];
         for(int i = 0; i < outputs; i++)
         {
-            for(int j = 0; j < inputs; j++)
+            for(int j = 0; j < bools; j++)
             {
-                _matrix[i, j] = (float)CLIP.Random.NextDouble();
+                _boolMatrix[i, j] = (float)CLIP.Random.NextDouble() - 0.5f;
+            }
+        }
+
+        _floatMatrix = new float[outputs, floats];
+        for (int i = 0; i < outputs; i++)
+        {
+            for (int j = 0; j < floats; j++)
+            {
+                _floatMatrix[i, j] = (float)CLIP.Random.NextDouble() - 0.5f;
             }
         }
     }
 
-    public Vector Forward(int[] input)
+    public Vector Forward(bool[] bools, float[] floats)
     {
+        Vector vector = _floatMatrix * new Vector(floats);
 
-        return _matrix * new Vector(input);
+        for(int i = 0; i < _boolMatrix.GetLength(0); i++)
+        {
+            for(int j = 0; j < _boolMatrix.GetLength(1); j++)
+            {
+                if (bools[j])
+                    vector[i] += _boolMatrix[i, j];
+            }
+        }
+
+        return vector;
     }
 
-    public void Backwards(Vector dL_dT, int[] input, float alpha)
+    public void Backwards(bool[] bools, float[] floats, Vector dL_dT, float learningRate)
     {
-        for(int i = 0; i < _matrix.GetLength(0); i++)
+        for(int i = 0; i < _floatMatrix.GetLength(0); i++)
         {
-            for(int j = 0; j < _matrix.GetLength(1); j++)
+            for(int j = 0; j < _floatMatrix.GetLength(1); j++)
             {
-                _matrix[i, j] -= alpha * dL_dT[i] * input[j];
+                _floatMatrix[i, j] -= learningRate * dL_dT[i] * floats[j];
+            }
+        }
+
+        for (int i = 0; i < _boolMatrix.GetLength(0); i++)
+        {
+            for (int j = 0; j < _boolMatrix.GetLength(1); j++)
+            {
+                if (bools[j])
+                    _boolMatrix[i, j] -= learningRate * dL_dT[i];
             }
         }
     }

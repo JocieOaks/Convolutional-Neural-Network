@@ -3,30 +3,32 @@
 [Serializable]
 public class InitialConvolutionLayer : ConvolutionalLayer
 {
-    public InitialConvolutionLayer(int kernalsNum, int kernalSize, int stride) : base(kernalsNum, kernalSize, stride)
+    public InitialConvolutionLayer(int dimensions, int kernalSize, int stride, ref FeatureMap[][] input) : base(dimensions, kernalSize, stride, ref input)
     {
     }
 
     public FeatureMap[][] Forward(FeatureMap[] input)
     {
-        FeatureMap[][] convoluted = new FeatureMap[_dimensions][];
         for (int i = 0; i < _dimensions; i++)
         {
-            convoluted[i] = Forward(input, _kernals[i]);
+            Forward(input, _convoluted[i], _kernals[i]);
         }
 
-        return convoluted;
+        while (_threadsWorking > 0)
+            Thread.Sleep(100);
+
+        return _convoluted;
     }
 
-    public FeatureMap[][] Backwards(FeatureMap[][] error, FeatureMap[] input, float alpha)
-    {
-        FeatureMap[][] corrections = new FeatureMap[_dimensions][];
-
+    public FeatureMap[][] Backwards(FeatureMap[] input, FeatureMap[][] dL_dP, float learningRate)
+    { 
         for (int i = 0; i < _dimensions; i++)
         {
-            corrections[i] = Backwards(error[i], input, _kernals[i], alpha);
+            Backwards(input, _kernals[i], _dL_dK[i], dL_dP[i], _dL_dPNext[i], learningRate);
         }
+        while (_threadsWorking > 0)
+            Thread.Sleep(100);
 
-        return corrections;
+        return _dL_dPNext;
     }
 }
