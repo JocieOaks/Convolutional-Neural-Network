@@ -146,59 +146,6 @@ public class CLIP
         return cosScores;
     }
 
-    /// <summary>
-    /// One way to minimize <see cref="Loss"/> is by making every image vector have a negative dot product with every description vector,
-    /// despite the intention being the dot product is negative for every pair except the expected pair, which has a dot product of 1.
-    /// Once it's reached this state, the gradient becomes zero, and the model can no longer learn. In order to encourage differentiation
-    /// between the resulting vectors from deep learning, we can add to the loss function based on the dot products between the vectors themselves.
-    /// </summary>
-    /// <returns></returns>
-    public float[,] VectorColinearityScore()
-    {
-        float[,] imageDots = new float[_batchSize, _batchSize];
-        for (int i = 0; i < _batchSize; i++)
-        {
-            for (int j = i + 1; j < _batchSize; j++)
-            {
-                imageDots[i, j] = imageDots[j, i] = MathF.Exp(10 * Vector.Dot(_imageVectors[i], _imageVectors[j]) - 5.5f);
-            }
-        }
-        return imageDots;
-    }
-
-    public static float VectorColinearityLoss(float[,] matrix)
-    {
-        float loss = 0;
-        int length = matrix.GetLength(0);
-        for (int i = 0; i < length; i++)
-        {
-            for (int j = i + 1; j < length; j++)
-            {
-                loss += matrix[i, j];
-            }
-        }
-
-        return loss / (length * length);
-    }
-
-    public Vector[] VectorColinearityGradient(float[,] matrix, float loss)
-    {
-        float mult = 5 * loss / (_batchSize * _batchSize);
-        Vector[] gradients = new Vector[_batchSize];
-        for (int i = 0; i < _batchSize; i++)
-        {
-            gradients[i] = new Vector(_imageVectors[i].Length);
-            for (int j = 0; j < _batchSize; j++)
-            {
-                if (i != j)
-                {
-                    gradients[i] += mult * matrix[i, j] * _imageVectors[j];
-                }
-            }
-        }
-        return gradients;
-    }
-
     public static float Loss(float[,] matrix)
     {
         float loss = 0.0f;
@@ -295,17 +242,47 @@ public class CLIP
         float[,] matrix = Score();
         float loss = Loss(matrix);
         (Vector[] imageGradient, Vector[] descriptionGradient) gradients = CalculateGradient(matrix, loss);
-        /*float[,] colinearMatrix = VectorColinearityScore();
-        float colinearLoss = VectorColinearityLoss(colinearMatrix);
-        Vector[] colinearGradient = VectorColinearityGradient(colinearMatrix, colinearLoss);
-
-        for (int i = 0; i < colinearGradient.Length; i++)
-        {
-            gradients.imageGradient[i] += 0.25f * colinearGradient[i];
-        }*/
 
         Backwards(gradients, input, learningRate);
-        return loss;// + colinearLoss;
+        return loss;
+    }
+
+    public IEnumerable<(float,float)> GradientTest(int vectorCount, int vectorLength)
+    {
+        _imageVectors = new Vector[vectorCount];
+        _descriptionVectors = new Vector[vectorCount];
+        for(int i = 0; i < vectorCount; i++)
+        {
+
+            Vector newImageVector = new Vector(vectorLength);
+            Vector newDescriptionVector = new Vector(vectorLength);
+            for(int j = 0; j < vectorLength; j++)
+            {
+                newImageVector[j] = (float)(Random.NextDouble() * 2 - 1);
+                newDescriptionVector[j] = (float)(Random.NextDouble() * 2 - 1);
+            }
+            _imageVectors[i] = newImageVector.Normalized();
+            _descriptionVectors[i] = newDescriptionVector.Normalized();
+        }
+
+        float[,] matrix = Score();
+        float loss = Loss(matrix);
+        float accuracy = Accuracy(matrix);
+        yield return (loss, accuracy);
+        for (int i = 0; i < 100; i++)
+        {
+            
+            (Vector[] imageGradients, Vector[] descriptionGradients) = CalculateGradient(matrix, loss);
+            for(int j = 0; j < vectorCount; j++)
+            {
+                _imageVectors[j] -= imageGradients[j] * 2;
+                _descriptionVectors[j] -= descriptionGradients[j] * 2;
+            }
+            matrix = Score();
+            loss = Loss(matrix);
+            accuracy = Accuracy(matrix);
+            yield return (loss, accuracy);
+        }
     }
 
     private static Vector[] DiagonalGradient(float[,] matrix, Vector[] gradientVectors, Vector dotVector, float loss, int index)
@@ -400,7 +377,7 @@ public class CLIP
         {
             gradients[i] = new Vector(gradientVectors[i].Length);
         }
-        for (int i = 1; i < length; i++)
+        for (int i = 0; i < length; i++)
         {
             for (int j = 0; j < length; j++)
             {
@@ -420,48 +397,5 @@ public class CLIP
     {
         return (CalculateGradient(matrix, _imageVectors, _descriptionVectors, loss),
             CalculateGradient(TransposeArray(matrix), _descriptionVectors, _imageVectors, loss));
-        /*(Vector[], Vector[]) gradients = (new Vector[_batchSize], new Vector[_batchSize]);
-        for (int i = 0; i < _batchSize; i++)
-        {
-            float totalI = ASYMPTOTEERRORFACTOR;
-            float totalD = ASYMPTOTEERRORFACTOR;
-            Vector dI_dV = -_descriptionVectors[i];
-            Vector dD_dV = -_imageVectors[i];
-            for (int j = 0; j < _batchSize; j++)
-            {
-                totalI += matrix[i, j];
-                totalD += matrix[j, i];
-
-                if (i != j)
-                {
-                    if (matrix[i, j] > 0)
-                    {
-                        dI_dV.Subtract(_descriptionVectors[j]);
-                    }
-                    if (matrix[j, i] > 0)
-                    {
-                        dD_dV.Subtract(_imageVectors[j]);
-                    }
-                }
-            }
-
-            dI_dV.Mult(1 / totalI);
-            dD_dV.Mult(1 / totalD);
-
-            float inv = 1 / (matrix[i, i] + ASYMPTOTEERRORFACTOR);
-
-            dI_dV.Add(_descriptionVectors[i]* inv);
-            dD_dV.Add(_imageVectors[i] * inv);
-
-            float batchInv = loss / _batchSize;
-
-            dI_dV.Mult(-batchInv);
-            dD_dV.Mult(-batchInv);
-
-            gradients.Item1[i] = dI_dV;
-            gradients.Item2[i] = dD_dV;
-        }
-        return gradients;
-    }*/
     }
 }
