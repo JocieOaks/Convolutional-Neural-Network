@@ -78,7 +78,9 @@ public class ConvolutionalLayer : Layer
         }
 
         do
+        {
             Thread.Sleep(100);
+        }
         while (_threadsWorking > 0);
 
         for (int i = 0; i < _dimensions; i++)
@@ -87,7 +89,7 @@ public class ConvolutionalLayer : Layer
             {
                 for (int k = 0; k < _kernalSize; k++)
                 {
-                    _kernals[i][j, k] -= learningRate * LEARNINGMULTIPLIER * _dL_dK[i][j, k];
+                    _kernals[i][j, k] -= learningRate * LEARNINGMULTIPLIER * _dL_dK[i][j, k].Clamp(CLAMP);
                 }
             }
         }
@@ -103,7 +105,9 @@ public class ConvolutionalLayer : Layer
         }
 
         do
+        {
             Thread.Sleep(100);
+        }
         while (_threadsWorking > 0);
 
         return _convoluted;
@@ -140,33 +144,17 @@ public class ConvolutionalLayer : Layer
                 {
                     for (int strideY = 0; strideY < dL_dP.Length; strideY++)
                     {
+                        Color dL = dL_dP[strideX, strideY] * _invK2;
                         for (int kernalX = 0; kernalX < _kernalSize; kernalX++)
                         {
                             for (int kernalY = 0; kernalY < _kernalSize; kernalY++)
                             {
                                 int x = strideX * _stride + kernalX;
                                 int y = strideY * _stride + kernalY;
-                                Color dK = dL_dP[strideX, strideY] * input[x, y] * _invK2;
-                                Color dP = dL_dP[strideX, strideX] * kernal[kernalX, kernalY] * _invK2;
-                                dL_dK[kernalX, kernalY] += dK;
-                                dL_dPNext[x, y] += dP;
+                                dL_dK[kernalX, kernalY] += dL * input[x, y];
+                                dL_dPNext[x, y] += dL * kernal[kernalX, kernalY];
                             }
                         }
-                    }
-                }
-                for (int i = 0; i < _kernalSize; i++)
-                {
-                    for (int j = 0; j < _kernalSize; j++)
-                    {
-                        dL_dK[i, j] = dL_dK[i, j].Clamp(CLAMP);
-                    }
-                }
-
-                for (int i = 0; i < dL_dPNext.Width; i++)
-                {
-                    for (int j = 0; j < dL_dPNext.Length; j++)
-                    {
-                        dL_dPNext[i, j] = dL_dPNext[i, j].Clamp(1f);
                     }
                 }
             }
