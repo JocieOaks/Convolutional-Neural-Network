@@ -22,7 +22,7 @@ public class BatchNormalizationLayer : Layer
         _bias = new ColorVector(_dimensions);
         for (int i = 0; i < _dimensions; i++)
         {
-            _weight[i] = new Color(Half.One, Half.One, Half.One);
+            _weight[i] = new Color(1, 1, 1);
             _bias[i] = new Color();
         }
 
@@ -44,7 +44,7 @@ public class BatchNormalizationLayer : Layer
         input = _normalized;
     }
 
-    public override FeatureMap[][] Backwards(FeatureMap[][] input, FeatureMap[][] dL_dP, Half learningRate)
+    public override FeatureMap[][] Backwards(FeatureMap[][] input, FeatureMap[][] dL_dP, float learningRate)
     {
         for(int i = 0; i < _dimensions; i++)
         {
@@ -76,7 +76,7 @@ public class BatchNormalizationLayer : Layer
     {
         if (stateInfo == null)
             throw new ArgumentNullException(nameof(stateInfo));
-        (int dimension, FeatureMap[] input, FeatureMap[] dL_dP, FeatureMap[] dL_dPNext, Half learningRate) = ((int, FeatureMap[], FeatureMap[], FeatureMap[], Half))stateInfo;
+        (int dimension, FeatureMap[] input, FeatureMap[] dL_dP, FeatureMap[] dL_dPNext, float learningRate) = ((int, FeatureMap[], FeatureMap[], FeatureMap[], float))stateInfo;
 
         Interlocked.Increment(ref _threadsWorking);
         lock (dL_dPNext)
@@ -84,8 +84,8 @@ public class BatchNormalizationLayer : Layer
             int batches = input.Length;
             int x = input[0].Width;
             int y = input[0].Length;
-            Half m = (Half)(input[0].Area * batches);
-            Half _m = Half.One / m;
+            float m = input[0].Area * batches;
+            float _m = 1 / m;
 
             Color dL_dW = new();
             Color sum_dL_dP = new();
@@ -104,7 +104,7 @@ public class BatchNormalizationLayer : Layer
                 }
             }
             dL_dS -= _mean[dimension] * m;
-            dL_dS *= Color.Pow(_sigma[dimension], (Half)(-1.5f)) * _weight[dimension] * (Half)(-0.5f);
+            dL_dS *= Color.Pow(_sigma[dimension], -1.5f) * _weight[dimension] * -0.5f;
             Color dl_dM = -sum_dL_dP * _weight[dimension] / _sigma[dimension];
 
             for (int i = 0; i < batches; i++)
@@ -113,13 +113,13 @@ public class BatchNormalizationLayer : Layer
                 {
                     for (int k = 0; k < y; k++)
                     {
-                        dL_dPNext[i][j, k] = (dL_dP[i][j, k] / _sigma[dimension] + (Half)2 * _m * dL_dS * (input[i][j, k] - _mean[dimension]) + _m * dl_dM).Clamp(Half.One);
+                        dL_dPNext[i][j, k] = (dL_dP[i][j, k] / _sigma[dimension] + 2 * _m * dL_dS * (input[i][j, k] - _mean[dimension]) + _m * dl_dM).Clamp(1);
                     }
                 }
             }
 
-            _weight[dimension] -= learningRate * dL_dW.Clamp(Half.One);
-            _bias[dimension] -= learningRate * sum_dL_dP.Clamp(Half.One);
+            _weight[dimension] -= learningRate * dL_dW.Clamp(1);
+            _bias[dimension] -= learningRate * sum_dL_dP.Clamp(1);
         }
         Interlocked.Decrement(ref _threadsWorking);
     }
@@ -135,8 +135,8 @@ public class BatchNormalizationLayer : Layer
             int batches = input.Length;
             int x = input[0].Width;
             int y = input[0].Length;
-            Half m = (Half)(input[0].Area * batches);
-            Half _m = Half.One / m;
+            float m = input[0].Area * batches;
+            float _m = 1 / m;
 
             _mean[dimension] = new();
             for (int i = 0; i < batches; i++)
@@ -159,13 +159,13 @@ public class BatchNormalizationLayer : Layer
                 {
                     for (int k = 0; k < y; k++)
                     {
-                        sigma2 += Color.Pow(input[i][j, k] - _mean[dimension], (Half)2);
+                        sigma2 += Color.Pow(input[i][j, k] - _mean[dimension], 2);
                     }
                 }
             }
 
             sigma2 = _m * sigma2;
-            _sigma[dimension] = Color.Pow(sigma2 + new Color(CLIP.ASYMPTOTEERRORFACTOR, CLIP.ASYMPTOTEERRORFACTOR, CLIP.ASYMPTOTEERRORFACTOR), (Half)0.5f);
+            _sigma[dimension] = Color.Pow(sigma2 + new Color(CLIP.ASYMPTOTEERRORFACTOR, CLIP.ASYMPTOTEERRORFACTOR, CLIP.ASYMPTOTEERRORFACTOR), 0.5f);
 
             for (int i = 0; i < batches; i++)
             {

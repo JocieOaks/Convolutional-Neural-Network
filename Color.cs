@@ -84,10 +84,9 @@ public readonly struct Color
         return new Color(MathF.Pow(color.R, power), MathF.Pow(color.G, power), MathF.Pow(color.B, power));
     }
 
-    public static Color Random(float range)
+    public static Color RandomGauss(float mean, float stdDev)
     {
-
-        return new Color((float)(CLIP.Random.NextDouble() - 0.5f) * 2 * range, (float)(CLIP.Random.NextDouble() - 0.5f) * 2 * range, (float)(CLIP.Random.NextDouble() - 0.5f) * 2 * range);
+        return new Color(CLIP.RandomGauss(mean, stdDev), CLIP.RandomGauss(mean, stdDev), CLIP.RandomGauss(mean, stdDev));
     }
 
     public Color ReLU()

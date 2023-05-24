@@ -39,6 +39,7 @@ public class VectorizationLayer
         FeatureMap[] dL_dP = new FeatureMap[input.Length];
         int x = input[0].Width;
         int y = input[0].Length;
+        float _xy = 1f / (x * y);
 
         ColorVector dL_dPV = _xy * dL_dI * _matrix;
 

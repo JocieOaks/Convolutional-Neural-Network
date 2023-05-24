@@ -3,7 +3,7 @@
 [Serializable]
 public class InitialConvolutionLayer : ConvolutionalLayer
 {
-    public InitialConvolutionLayer(int dimensions, int kernalSize, int stride, ref FeatureMap[][] input) : base(dimensions, kernalSize, stride, ref input)
+    public InitialConvolutionLayer(int kernalSize, int stride, ref FeatureMap[][] input) : base(kernalSize, stride, ref input)
     {
     }
 

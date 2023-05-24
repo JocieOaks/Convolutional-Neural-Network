@@ -59,11 +59,11 @@ public class CLIP
         _descriptionVectors = new Vector[batchSize];
         _imageVectorsNorm = new Vector[batchSize];
         _descriptionVectorsNorm = new Vector[batchSize];
-        //_layers.Add(new BatchNormalizationLayer(ref input));
+        _layers.Add(new BatchNormalizationLayer(ref input));
         for (int i = 0; i < depth; i++)
         {
             _layers.Add(new ConvolutionalLayer(3, 1, ref input));
-            //_layers.Add(new BatchNormalizationLayer(ref input));
+            _layers.Add(new BatchNormalizationLayer(ref input));
             if (i < 6 && i % 2 == 0)
                 _layers.Add(new AveragePoolLayer(2, ref input));
         }
@@ -160,29 +160,29 @@ public class CLIP
         return -loss / (length * length);
     }
 
-    public static Half RandomGauss(float mean, float stdDev)
+    public static float RandomGauss(float mean, float stdDev)
     {
         float u1 = 1 - (float)Random.NextDouble(); //uniform(0,1] random doubles
         float u2 = 1 - (float)Random.NextDouble();
         float randStdNormal = MathF.Sqrt(-2 * MathF.Log(u1)) * MathF.Sin(2 * MathF.PI * u2); //random normal(0,1)
-        return (Half)(mean + stdDev * randStdNormal); //random normal(mean,stdDev^2)
+        return mean + stdDev * randStdNormal; //random normal(mean,stdDev^2)
     }
 
-    public void Backwards((Vector[] dL_dI, Vector[] dL_dD) gradients, (FeatureMap image, bool[] bools, float[] floats)[] input, Half learningRate)
+    public void Backwards((Vector[] dL_dI, Vector[] dL_dD) gradients, (FeatureMap image, bool[] bools, float[] floats)[] input, float learningRate)
     {
         FeatureMap[] images = new FeatureMap[_batchSize];
         for (int i = 0; i < _batchSize; i++)
         {
             images[i] = input[i].image;
 
-            _transformer.Backwards(input[i].bools, input[i].floats, VectorNormalizationLayer.Backwards(_descriptionVectors[i], gradients.dL_dD[i]), (float)learningRate);
+            _transformer.Backwards(input[i].bools, input[i].floats, VectorNormalizationLayer.Backwards(_descriptionVectors[i], gradients.dL_dD[i]), learningRate);
         }
 
         var watch = System.Diagnostics.Stopwatch.StartNew();
         FeatureMap[][] transposed = new FeatureMap[_batchSize][];
         for (int i = 0; i < _batchSize; i++)
         {
-            transposed[i] = _vectorizationLayer.Backwards(_transposedFinalFeatureMap[i], VectorNormalizationLayer.Backwards(_imageVectors[i], gradients.dL_dI[i]), (float)learningRate);
+            transposed[i] = _vectorizationLayer.Backwards(_transposedFinalFeatureMap[i], VectorNormalizationLayer.Backwards(_imageVectors[i], gradients.dL_dI[i]), learningRate);
         }
         watch.Stop();
         var elapsedMs = watch.ElapsedMilliseconds;
@@ -193,13 +193,13 @@ public class CLIP
         for (int j = Depth - 1; j > 0; j--)
         {
             watch = System.Diagnostics.Stopwatch.StartNew();
-            current = _layers[j].Backwards(_featureMaps[j - 1], current, (Half)learningRate);
+            current = _layers[j].Backwards(_featureMaps[j - 1], current, learningRate);
             watch.Stop();
             elapsedMs = watch.ElapsedMilliseconds;
             Console.WriteLine($"Backwards {j} Layer Time: {elapsedMs / 1000f} s");
         }
         watch = System.Diagnostics.Stopwatch.StartNew();
-        current = _layers[0].Backwards(_initialFeatureMaps, current, (Half)learningRate);
+        current = _layers[0].Backwards(_initialFeatureMaps, current, learningRate);
         watch.Stop();
         elapsedMs = watch.ElapsedMilliseconds;
         Console.WriteLine($"Backwards 0 Layer Time: {elapsedMs / 1000f} s");
@@ -352,7 +352,7 @@ public class CLIP
         return (loss, accuracy);
     }
 
-    public float Train((FeatureMap image, bool[] bools, float[] floats)[] input, Half learningRate)
+    public float Train((FeatureMap image, bool[] bools, float[] floats)[] input, float learningRate)
     {
         Forward(input);
         float[,] matrix = Score();

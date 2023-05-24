@@ -38,7 +38,7 @@ public class BackPropogationTest
         //_impactLayer = new ConvolutionalLayer(1, 3, 1);
     }
 
-    public float Test(Half testLearningRate, Half propLearningRate)
+    public float Test(float testLearningRate, float propLearningRate)
     {
         Forward();
         float loss = Loss();
@@ -89,7 +89,7 @@ public class BackPropogationTest
         _finalOutput = _testLayer.Forward(_intermediate[0]);
     }
 
-    public void Backward(Vector gradient, Half testLearningRate, Half propLearningRate)
+    public void Backward(Vector gradient, float testLearningRate, float propLearningRate)
     {
         FeatureMap[][] dL_dP = new FeatureMap[1][];
         dL_dP[0] = _testLayer.Backwards(_intermediate[0], gradient, (float)testLearningRate);
