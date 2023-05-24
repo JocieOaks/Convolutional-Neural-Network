@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
 
-public class NormalizationLayer : Layer
+public class BatchNormalizationLayer : Layer
 {
     [JsonProperty] private ColorVector _bias;
     [JsonProperty] private ColorVector _weight;
@@ -16,22 +16,22 @@ public class NormalizationLayer : Layer
     private readonly ColorVector _mean;
     private readonly ColorVector _sigma;
     private int _threadsWorking;
-    public NormalizationLayer(int dimensions,  ref FeatureMap[][] input) : base(dimensions, 0,0)
+    public BatchNormalizationLayer(ref FeatureMap[][] input) : base(input.Length, 0,0)
     {
-        _weight = new ColorVector(dimensions);
-        _bias = new ColorVector(dimensions);
-        for (int i = 0; i < dimensions; i++)
+        _weight = new ColorVector(_dimensions);
+        _bias = new ColorVector(_dimensions);
+        for (int i = 0; i < _dimensions; i++)
         {
-            _weight[i] = new Color(1, 1, 1);
-            _bias[i] = new Color(0.5f, 0.5f, 0.5f);
+            _weight[i] = new Color(Half.One, Half.One, Half.One);
+            _bias[i] = new Color();
         }
 
-        _mean = new ColorVector(dimensions);
-        _sigma = new ColorVector(dimensions);
+        _mean = new ColorVector(_dimensions);
+        _sigma = new ColorVector(_dimensions);
 
-        _normalized = new FeatureMap[dimensions][];
-        _dL_dPNext = new FeatureMap[dimensions][];
-        for (int i = 0; i < dimensions; i++)
+        _normalized = new FeatureMap[_dimensions][];
+        _dL_dPNext = new FeatureMap[_dimensions][];
+        for (int i = 0; i < _dimensions; i++)
         {
             _normalized[i] = new FeatureMap[input[i].Length];
             _dL_dPNext[i] = new FeatureMap[input[i].Length];
@@ -44,7 +44,7 @@ public class NormalizationLayer : Layer
         input = _normalized;
     }
 
-    public override FeatureMap[][] Backwards(FeatureMap[][] input, FeatureMap[][] dL_dP, float learningRate)
+    public override FeatureMap[][] Backwards(FeatureMap[][] input, FeatureMap[][] dL_dP, Half learningRate)
     {
         for(int i = 0; i < _dimensions; i++)
         {
@@ -76,7 +76,7 @@ public class NormalizationLayer : Layer
     {
         if (stateInfo == null)
             throw new ArgumentNullException(nameof(stateInfo));
-        (int dimension, FeatureMap[] input, FeatureMap[] dL_dP, FeatureMap[] dL_dPNext, float learningRate) = ((int, FeatureMap[], FeatureMap[], FeatureMap[], float))stateInfo;
+        (int dimension, FeatureMap[] input, FeatureMap[] dL_dP, FeatureMap[] dL_dPNext, Half learningRate) = ((int, FeatureMap[], FeatureMap[], FeatureMap[], Half))stateInfo;
 
         Interlocked.Increment(ref _threadsWorking);
         lock (dL_dPNext)
@@ -84,8 +84,8 @@ public class NormalizationLayer : Layer
             int batches = input.Length;
             int x = input[0].Width;
             int y = input[0].Length;
-            float m = input[0].Area * batches;
-            float _m = 1 / m;
+            Half m = (Half)(input[0].Area * batches);
+            Half _m = Half.One / m;
 
             Color dL_dW = new();
             Color sum_dL_dP = new();
@@ -104,7 +104,7 @@ public class NormalizationLayer : Layer
                 }
             }
             dL_dS -= _mean[dimension] * m;
-            dL_dS *= Color.Pow(_sigma[dimension], -1.5f) * _weight[dimension] * -0.5f;
+            dL_dS *= Color.Pow(_sigma[dimension], (Half)(-1.5f)) * _weight[dimension] * (Half)(-0.5f);
             Color dl_dM = -sum_dL_dP * _weight[dimension] / _sigma[dimension];
 
             for (int i = 0; i < batches; i++)
@@ -113,13 +113,13 @@ public class NormalizationLayer : Layer
                 {
                     for (int k = 0; k < y; k++)
                     {
-                        dL_dPNext[i][j, k] = (dL_dP[i][j, k] / _sigma[dimension] + 2 * _m * dL_dS * (input[i][j, k] - _mean[dimension]) + _m * dl_dM).Clamp(1);
+                        dL_dPNext[i][j, k] = (dL_dP[i][j, k] / _sigma[dimension] + (Half)2 * _m * dL_dS * (input[i][j, k] - _mean[dimension]) + _m * dl_dM).Clamp(Half.One);
                     }
                 }
             }
 
-            _weight[dimension] -= learningRate * dL_dW.Clamp(1);
-            _bias[dimension] -= learningRate * sum_dL_dP.Clamp(1);
+            _weight[dimension] -= learningRate * dL_dW.Clamp(Half.One);
+            _bias[dimension] -= learningRate * sum_dL_dP.Clamp(Half.One);
         }
         Interlocked.Decrement(ref _threadsWorking);
     }
@@ -135,8 +135,8 @@ public class NormalizationLayer : Layer
             int batches = input.Length;
             int x = input[0].Width;
             int y = input[0].Length;
-            float m = input[0].Area * batches;
-            float _m = 1 / m;
+            Half m = (Half)(input[0].Area * batches);
+            Half _m = Half.One / m;
 
             _mean[dimension] = new();
             for (int i = 0; i < batches; i++)
@@ -159,13 +159,13 @@ public class NormalizationLayer : Layer
                 {
                     for (int k = 0; k < y; k++)
                     {
-                        sigma2 += Color.Pow(input[i][j, k] - _mean[dimension], 2);
+                        sigma2 += Color.Pow(input[i][j, k] - _mean[dimension], (Half)2);
                     }
                 }
             }
 
             sigma2 = _m * sigma2;
-            _sigma[dimension] = Color.Pow(sigma2 + new Color(CLIP.ASYMPTOTEERRORFACTOR, CLIP.ASYMPTOTEERRORFACTOR, CLIP.ASYMPTOTEERRORFACTOR), 0.5f);
+            _sigma[dimension] = Color.Pow(sigma2 + new Color(CLIP.ASYMPTOTEERRORFACTOR, CLIP.ASYMPTOTEERRORFACTOR, CLIP.ASYMPTOTEERRORFACTOR), (Half)0.5f);
 
             for (int i = 0; i < batches; i++)
             {

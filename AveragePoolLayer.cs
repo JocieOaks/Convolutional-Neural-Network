@@ -4,15 +4,16 @@ using System.Runtime.Serialization;
 [Serializable]
 public class AveragePoolLayer : Layer
 {
-    float _invK2;
+    private readonly static Half FOURTH = (Half)0.25;
+    Half _invK2;
     private readonly FeatureMap[][] _pooled;
     private readonly FeatureMap[][] _dL_dPNext;
-    public AveragePoolLayer(int dimensions, int kernalSize, ref FeatureMap[][] input) : base(dimensions, kernalSize, kernalSize)
+    public AveragePoolLayer(int kernalSize, ref FeatureMap[][] input) : base(input.Length, kernalSize, kernalSize)
     {
-        _invK2 = 1f / (kernalSize * kernalSize);
-        _pooled = new FeatureMap[dimensions][];
-        _dL_dPNext = new FeatureMap[dimensions][];
-        for(int i = 0; i < dimensions; i++)
+        _invK2 = Half.One / (Half)(kernalSize * kernalSize);
+        _pooled = new FeatureMap[_dimensions][];
+        _dL_dPNext = new FeatureMap[_dimensions][];
+        for(int i = 0; i < _dimensions; i++)
         {
             Pad(input[i]);
             _pooled[i] = new FeatureMap[input[i].Length];
@@ -30,7 +31,7 @@ public class AveragePoolLayer : Layer
 
     public AveragePoolLayer() : base(0, 0, 0) { }
 
-    public override FeatureMap[][] Backwards(FeatureMap[][] input, FeatureMap[][] dL_dP, float learningRate)
+    public override FeatureMap[][] Backwards(FeatureMap[][] input, FeatureMap[][] dL_dP, Half learningRate)
     {
         for(int i = 0; i < _dimensions; i++)
         {
@@ -52,7 +53,7 @@ public class AveragePoolLayer : Layer
     [OnDeserialized]
     public void OnDeserialized(StreamingContext context)
     {
-        _invK2 = 1f / (_kernalSize * _kernalSize);
+        _invK2 = Half.One / (Half)(_kernalSize * _kernalSize);
     }
 
     void Backwards(FeatureMap[] dL_dP, FeatureMap[] dL_dPNext)
@@ -95,7 +96,7 @@ public class AveragePoolLayer : Layer
                         pooled[i, j] += input[i * _kernalSize + k, j * _kernalSize + l];
                     }
                 }
-                pooled[i, j] *= 0.25f;
+                pooled[i, j] *= FOURTH;
             }
         }
     }

@@ -20,26 +20,31 @@ public class ConvolutionalLayer : Layer
 
     protected int _threadsWorking;
 
-    public ConvolutionalLayer(int dimensions, int kernalSize, int stride, ref FeatureMap[][] input) : base(dimensions, kernalSize, stride)
+    public ConvolutionalLayer(int kernalSize, int stride, ref FeatureMap[][] input) : base(input.Length, kernalSize, stride)
     {
-        _kernals = new Color[dimensions][,];
-        _dL_dK = new Color[dimensions][,];
-        for (int i = 0; i < dimensions; i++)
+        _kernals = new Color[_dimensions][,];
+        _dL_dK = new Color[_dimensions][,];
+
+        float variance = 0.333f / (_dimensions * kernalSize * kernalSize);
+        float stdDev = MathF.Sqrt(variance);
+
+        for (int i = 0; i < _dimensions; i++)
         {
             _kernals[i] = new Color[_kernalSize, _kernalSize];
             _dL_dK[i] = new Color[kernalSize, _kernalSize];
+
             for (int j = 0; j < kernalSize; j++)
             {
                 for (int k = 0; k < kernalSize; k++)
                 {
-                    _kernals[i][j, k] = Color.Random(0.5f);
+                    _kernals[i][j, k] = Color.RandomGauss(0, stdDev);
                 }
             }
         }
 
-        _convoluted = new FeatureMap[dimensions][];
-        _dL_dPNext = new FeatureMap[dimensions][];
-        for (int i = 0; i < dimensions; i++)
+        _convoluted = new FeatureMap[_dimensions][];
+        _dL_dPNext = new FeatureMap[_dimensions][];
+        for (int i = 0; i < _dimensions; i++)
         {
             Pad(input[i]);
             _convoluted[i] = new FeatureMap[input[i].Length];
@@ -82,7 +87,7 @@ public class ConvolutionalLayer : Layer
             {
                 for (int k = 0; k < _kernalSize; k++)
                 {
-                    _kernals[i][j, k] -= learningRate * LERANINGMULTIPLIER * _dL_dK[i][j, k];
+                    _kernals[i][j, k] -= learningRate * LEARNINGMULTIPLIER * _dL_dK[i][j, k];
                 }
             }
         }
@@ -106,7 +111,7 @@ public class ConvolutionalLayer : Layer
 
     protected void Backwards(FeatureMap[] input, Color[,] kernal, Color[,] dL_dK, FeatureMap[] dL_dP, FeatureMap[] dL_dPNext, float learningRate)
     {
-        for(int i =0; i < _kernalSize; i++)
+        for(int i = 0; i < _kernalSize; i++)
         {
             for(int j = 0; j < _kernalSize; j++)
             {
@@ -167,6 +172,43 @@ public class ConvolutionalLayer : Layer
             }
         }
         Interlocked.Decrement(ref _threadsWorking);
+    }
+
+    protected void Backwards(FeatureMap input, Color[,] kernal, Color[,] dL_dK, FeatureMap dL_dP, FeatureMap dL_dPNext)
+    {
+        for (int strideX = 0; strideX < dL_dP.Width; strideX++)
+        {
+            for (int strideY = 0; strideY < dL_dP.Length; strideY++)
+            {
+                for (int kernalX = 0; kernalX < _kernalSize; kernalX++)
+                {
+                    for (int kernalY = 0; kernalY < _kernalSize; kernalY++)
+                    {
+                        int x = strideX * _stride + kernalX;
+                        int y = strideY * _stride + kernalY;
+                        Color dK = dL_dP[strideX, strideY] * input[x, y] * _invK2;
+                        Color dP = dL_dP[strideX, strideX] * kernal[kernalX, kernalY] * _invK2;
+                        dL_dK[kernalX, kernalY] += dK;
+                        dL_dPNext[x, y] += dP;
+                    }
+                }
+            }
+        }
+        for (int i = 0; i < _kernalSize; i++)
+        {
+            for (int j = 0; j < _kernalSize; j++)
+            {
+                dL_dK[i, j] = dL_dK[i, j].Clamp(CLAMP);
+            }
+        }
+
+        for (int i = 0; i < dL_dPNext.Width; i++)
+        {
+            for (int j = 0; j < dL_dPNext.Length; j++)
+            {
+                dL_dPNext[i, j] = dL_dPNext[i, j].Clamp(Half.One);
+            }
+        }
     }
 
     protected void Forward(FeatureMap[] input, FeatureMap[] convoluted, Color[,] kernal)

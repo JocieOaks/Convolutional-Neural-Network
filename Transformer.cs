@@ -9,12 +9,15 @@ public class Transformer
 
     public Transformer(int bools, int floats, int outputs)
     {
+        float variance = 2f / (bools + floats + outputs);
+        float stdDev = MathF.Sqrt(variance);
+
         _boolMatrix = new float[outputs, bools];
         for(int i = 0; i < outputs; i++)
         {
             for(int j = 0; j < bools; j++)
             {
-                _boolMatrix[i, j] = (float)CLIP.Random.NextDouble() - 0.5f;
+                _boolMatrix[i, j] = (float)CLIP.RandomGauss(0, stdDev);
             }
         }
 
@@ -50,7 +53,7 @@ public class Transformer
         {
             for(int j = 0; j < _floatMatrix.GetLength(1); j++)
             {
-                _floatMatrix[i, j] -= learningRate * dL_dT[i] * floats[j];
+                _floatMatrix[i, j] -= learningRate * 100 * dL_dT[i] * floats[j];
             }
         }
 
@@ -59,7 +62,7 @@ public class Transformer
             for (int j = 0; j < _boolMatrix.GetLength(1); j++)
             {
                 if (bools[j])
-                    _boolMatrix[i, j] -= learningRate * dL_dT[i];
+                    _boolMatrix[i, j] -= learningRate * 100 * dL_dT[i];
             }
         }
     }

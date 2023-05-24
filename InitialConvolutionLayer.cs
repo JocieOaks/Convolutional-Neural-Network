@@ -14,8 +14,9 @@ public class InitialConvolutionLayer : ConvolutionalLayer
             Forward(input, _convoluted[i], _kernals[i]);
         }
 
-        while (_threadsWorking > 0)
+        do
             Thread.Sleep(100);
+        while (_threadsWorking > 0);
 
         return _convoluted;
     }
@@ -24,10 +25,21 @@ public class InitialConvolutionLayer : ConvolutionalLayer
     { 
         for (int i = 0; i < _dimensions; i++)
         {
-            Backwards(input, _kernals[i], _dL_dK[i], dL_dP[i], _dL_dPNext[i], learningRate);
+            Backwards(input, _kernals[i], _dL_dK[i], dL_dP[i], _dL_dPNext[i]);
         }
         while (_threadsWorking > 0)
             Thread.Sleep(100);
+
+        for (int i = 0; i < _dimensions; i++)
+        {
+            for (int j = 0; j < _kernalSize; j++)
+            {
+                for (int k = 0; k < _kernalSize; k++)
+                {
+                    _kernals[i][j, k] -= learningRate * LEARNINGMULTIPLIER * _dL_dK[i][j, k];
+                }
+            }
+        }
 
         return _dL_dPNext;
     }

@@ -8,14 +8,16 @@ public class VectorizationLayer
 {
     [JsonProperty] readonly FeatureMap _matrix;
 
-    public VectorizationLayer(int vectorDimensions, int kernalNum)
+    public VectorizationLayer(int vectorDimensions, int featureMapDimensions)
     {
-        _matrix = new FeatureMap(vectorDimensions, kernalNum);
+        float variance = 2f / (3 * featureMapDimensions + vectorDimensions);
+        float stdDev = MathF.Sqrt(variance);
+        _matrix = new FeatureMap(vectorDimensions, featureMapDimensions);
         for(int i = 0; i < vectorDimensions; i++)
         {
-            for(int j = 0; j < kernalNum; j++)
+            for(int j = 0; j < featureMapDimensions; j++)
             {
-                _matrix[i, j] = Color.Random(1);
+                _matrix[i, j] = Color.RandomGauss(0, stdDev);
             }
         }
     }
@@ -29,9 +31,7 @@ public class VectorizationLayer
             vector[i] = input[i].Average();
         }
 
-        Vector output = _matrix * vector;
-
-        return output.Normalized();
+        return _matrix * vector;
     }
 
     public FeatureMap[] Backwards(FeatureMap[] input, Vector dL_dI, float learningRate)
@@ -39,7 +39,6 @@ public class VectorizationLayer
         FeatureMap[] dL_dP = new FeatureMap[input.Length];
         int x = input[0].Width;
         int y = input[0].Length;
-        float _xy = 1f / input[0].Area;
 
         ColorVector dL_dPV = _xy * dL_dI * _matrix;
 

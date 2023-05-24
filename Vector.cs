@@ -52,20 +52,23 @@ public class Vector
         return dot;
     }
 
-    public static float Magnitude(Vector vector)
+    public float Magnitude
     {
-        float sum = 0;
-        for (int i = 0; i < vector.Length; i++)
+        get
         {
-            sum += vector[i] * vector[i];
-        }
+            float sum = 0;
+            for (int i = 0; i < _values.Length; i++)
+            {
+                sum += _values[i] * _values[i];
+            }
 
-        return MathF.Sqrt(sum);
+            return MathF.Sqrt(sum);
+        }
     }
 
     public Vector Normalized()
     {
-        float magnitude = Magnitude(this);
+        float magnitude = Magnitude;
 
         if (magnitude == 0)
             return this;

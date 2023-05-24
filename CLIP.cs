@@ -4,34 +4,39 @@ using Newtonsoft.Json;
 using System;
 using System.Buffers.Binary;
 using System.ComponentModel.DataAnnotations;
+using System.IO;
+using System.Reflection;
 using System.Runtime.Serialization;
 
 [Serializable]
 public class CLIP
 {
-    public static Random Random { get; } = new Random();
     public const float ASYMPTOTEERRORFACTOR = 1e-6f; //Used to avoid divide by zero or log of zero going to infinity.
+    [JsonProperty]
+    readonly private int _batchSize;
 
     [JsonProperty]
-    readonly private VectorizationLayer _vectorizationLayer;
-    [JsonProperty]
-    readonly private Transformer _transformer;
-    [JsonProperty]
     readonly private InitialConvolutionLayer _initialConvolutionLayer;
+
     [JsonProperty]
     readonly private List<Layer> _layers = new();
 
-    private FeatureMap[][] _initialFeatureMaps;
-    private FeatureMap[][][] _featureMaps;
-    private FeatureMap[][] _transposedFinalFeatureMap;
-    private Vector[] _imageVectors;
-    private Vector[] _descriptionVectors;
-
-    private int Depth => _layers.Count;
     [JsonProperty]
-    readonly private int _batchSize;
-    readonly private int _vectorDimensions;
+    readonly private Transformer _transformer;
 
+    readonly private int _vectorDimensions;
+    [JsonProperty]
+    readonly private VectorizationLayer _vectorizationLayer;
+
+    Vector[] _descriptionVectors;
+    private Vector[] _descriptionVectorsNorm;
+    private FeatureMap[][][] _featureMaps;
+    Vector[] _imageVectors;
+    private Vector[] _imageVectorsNorm;
+    //Used to avoid divide by zero or log of zero going to infinity.
+    private FeatureMap[][] _initialFeatureMaps;
+
+    private FeatureMap[][] _transposedFinalFeatureMap;
     public CLIP(int depth, int dimensions, int vectorDimensions, int batchSize, int descriptionBoolLength, int descriptionFloatLength, int width, int length)
     {
         FeatureMap[][] input = new FeatureMap[dimensions][];
@@ -44,7 +49,7 @@ public class CLIP
             }
         }
 
-        _initialConvolutionLayer = new InitialConvolutionLayer(dimensions, 3, 2, ref input);
+        _initialConvolutionLayer = new InitialConvolutionLayer(3, 1, ref input);
         _vectorizationLayer = new VectorizationLayer(vectorDimensions, dimensions);
         _transformer = new Transformer(descriptionBoolLength, descriptionFloatLength, vectorDimensions);
         _batchSize = batchSize;
@@ -52,150 +57,23 @@ public class CLIP
 
         _imageVectors = new Vector[batchSize];
         _descriptionVectors = new Vector[batchSize];
-
+        _imageVectorsNorm = new Vector[batchSize];
+        _descriptionVectorsNorm = new Vector[batchSize];
+        //_layers.Add(new BatchNormalizationLayer(ref input));
         for (int i = 0; i < depth; i++)
         {
-            _layers.Add(new ConvolutionalLayer(dimensions, 3, 1, ref input));
-            _layers.Add(new NormalizationLayer(dimensions, ref input));
+            _layers.Add(new ConvolutionalLayer(3, 1, ref input));
+            //_layers.Add(new BatchNormalizationLayer(ref input));
             if (i < 6 && i % 2 == 0)
-                _layers.Add(new AveragePoolLayer(dimensions, 2, ref input));
+                _layers.Add(new AveragePoolLayer(2, ref input));
         }
         _featureMaps = new FeatureMap[Depth][][];
     }
 
     public CLIP() { }
 
-    [OnDeserialized]
-    public void OnDeserialized(StreamingContext context)
-    {
-        _imageVectors = new Vector[_batchSize];
-        _descriptionVectors = new Vector[_batchSize];
-        _featureMaps = new FeatureMap[Depth][][];
-    }
-
-    public void Forward((FeatureMap image, bool[] bools, float[] floats)[] input)
-    {
-        FeatureMap[][] current;
-        FeatureMap[] images = new FeatureMap[_batchSize];
-        for (int i = 0; i < _batchSize; i++)
-        {
-            images[i] = input[i].image;
-            _descriptionVectors[i] = _transformer.Forward(input[i].bools, input[i].floats).Normalized();
-        }
-
-        current = _initialConvolutionLayer.Forward(images);
-        _initialFeatureMaps = current;
-
-        for (int j = 0; j < Depth; j++)
-        {
-            current = _layers[j].Forward(current);
-            _featureMaps[j] = current;
-        }
-
-        //Normalization preferes featuremaps grouped by dimension first, while Vectorization prefers them to be grouped by batch member first.
-        //This transposes the featuremaps to perform Vectorization.
-
-        _transposedFinalFeatureMap = TransposeArray(current);
-
-        for (int i = 0; i < _batchSize; i++)
-        {
-            _imageVectors[i] = _vectorizationLayer.Forward(_transposedFinalFeatureMap[i]);
-        }
-    }
-
-
-    private static T[][] TransposeArray<T>(T[][] array)
-    {
-        T[][] transposed = new T[array[0].Length][];
-        for (int i = 0; i < transposed.Length; i++)
-        {
-            transposed[i] = new T[array.Length];
-            for (int j = 0; j < transposed[i].Length; j++)
-            {
-                transposed[i][j] = array[j][i];
-            }
-        }
-        return transposed;
-    }
-
-    private static T[,] TransposeArray<T>(T[,] array)
-    {
-        T[,] transposed = new T[array.GetLength(0), array.GetLength(1)];
-        for (int i = 0; i < transposed.GetLength(0); i++)
-        {
-            for (int j = 0; j < transposed.GetLength(1); j++)
-            {
-                transposed[i, j] = array[j, i];
-            }
-        }
-        return transposed;
-    }
-
-    public float[,] Score()
-    {
-        float[,] cosScores = new float[_batchSize, _batchSize];
-
-        for (int i = 0; i < _batchSize; i++)
-        {
-            for (int j = 0; j < _batchSize; j++)
-            {
-                cosScores[i, j] = Vector.Dot(_imageVectors[i], _descriptionVectors[j]);
-            }
-        }
-
-        return cosScores;
-    }
-
-    public static float Loss(float[,] matrix)
-    {
-        float loss = 0.0f;
-        int length = matrix.GetLength(0);
-        for (int i = 0; i < length; i++)
-        {
-            float totalI = 0;
-            float totalD = 0;
-            for (int j = 0; j < length; j++)
-            {
-                totalI += MathF.Exp(2 * matrix[i, j] - 2);
-                totalD += MathF.Exp(2 * matrix[j, i] - 2);
-            }
-
-            for (int j = 0; j < length; j++)
-            {
-                if (i == j)
-                    loss += MathF.Log(MathF.Exp(2 * matrix[i, j] - 2) * MathF.Exp(2 * matrix[j, i] - 2) / totalD / totalI);
-                else
-                    loss += MathF.Log((totalD - MathF.Exp(2 * matrix[j, i] - 2)) / totalD) + MathF.Log((totalI - MathF.Exp(2 * matrix[i, j] - 2)) / totalI);
-            }
-        }
-        return -loss / (length * length);
-    }
-
-    public void Backwards((Vector[] dL_dI, Vector[] dL_dD) gradients, (FeatureMap image, bool[] bools, float[] floats)[] input, float learningRate)
-    {
-        FeatureMap[] images = new FeatureMap[_batchSize];
-        for (int i = 0; i < _batchSize; i++)
-        {
-            images[i] = input[i].image;
-            _transformer.Backwards(input[i].bools, input[i].floats, gradients.dL_dD[i], learningRate);
-        }
-
-        FeatureMap[][] transposed = new FeatureMap[_batchSize][];
-        for (int i = 0; i < _batchSize; i++)
-        {
-            transposed[i] = _vectorizationLayer.Backwards(_transposedFinalFeatureMap[i], gradients.dL_dI[i], learningRate);
-        }
-
-        FeatureMap[][] current = TransposeArray(transposed);
-
-        for (int j = Depth - 1; j > 0; j--)
-        {
-            current = _layers[j].Backwards(_featureMaps[j - 1], current, learningRate);
-        }
-        current = _layers[0].Backwards(_initialFeatureMaps, current, learningRate);
-        _initialConvolutionLayer.Backwards(images, current, learningRate);
-    }
-
+    public static Random Random { get; } = new Random();
+    private int Depth => _layers.Count;
     public static float Accuracy(float[,] matrix)
     {
         int correct = 0;
@@ -227,6 +105,244 @@ public class CLIP
         return correct / (2f * matrix.GetLength(0));
     }
 
+    public static CLIP? LoadFromFile(string file)
+    {
+        CLIP? clip = null;
+
+        if (File.Exists(file))
+        {
+            try
+            {
+                string dataToLoad = "";
+                using (FileStream stream = new(file, FileMode.Open))
+                {
+                    using (StreamReader read = new(stream))
+                    {
+                        dataToLoad = read.ReadToEnd();
+                    }
+                }
+                clip = JsonConvert.DeserializeObject<CLIP>(dataToLoad, new JsonSerializerSettings
+                {
+                    TypeNameHandling = TypeNameHandling.Auto
+                });
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Error occured when trying to load data from file: " + file + "\n" + e.ToString());
+            }
+        }
+
+        return clip;
+    }
+
+    public static float Loss(float[,] matrix)
+    {
+        float loss = 0.0f;
+        int length = matrix.GetLength(0);
+        for (int i = 0; i < length; i++)
+        {
+            float totalI = 0;
+            float totalD = 0;
+            for (int j = 0; j < length; j++)
+            {
+                totalI += MathF.Exp(2 * matrix[i, j] - 2);
+                totalD += MathF.Exp(2 * matrix[j, i] - 2);
+            }
+
+            for (int j = 0; j < length; j++)
+            {
+                if (i == j)
+                    loss += MathF.Log(MathF.Exp(2 * matrix[i, j] - 2) * MathF.Exp(2 * matrix[j, i] - 2) / totalD / totalI);
+                else
+                    loss += MathF.Log((totalD - MathF.Exp(2 * matrix[j, i] - 2)) / totalD) + MathF.Log((totalI - MathF.Exp(2 * matrix[i, j] - 2)) / totalI);
+            }
+        }
+        return -loss / (length * length);
+    }
+
+    public static Half RandomGauss(float mean, float stdDev)
+    {
+        float u1 = 1 - (float)Random.NextDouble(); //uniform(0,1] random doubles
+        float u2 = 1 - (float)Random.NextDouble();
+        float randStdNormal = MathF.Sqrt(-2 * MathF.Log(u1)) * MathF.Sin(2 * MathF.PI * u2); //random normal(0,1)
+        return (Half)(mean + stdDev * randStdNormal); //random normal(mean,stdDev^2)
+    }
+
+    public void Backwards((Vector[] dL_dI, Vector[] dL_dD) gradients, (FeatureMap image, bool[] bools, float[] floats)[] input, Half learningRate)
+    {
+        FeatureMap[] images = new FeatureMap[_batchSize];
+        for (int i = 0; i < _batchSize; i++)
+        {
+            images[i] = input[i].image;
+
+            _transformer.Backwards(input[i].bools, input[i].floats, VectorNormalizationLayer.Backwards(_descriptionVectors[i], gradients.dL_dD[i]), (float)learningRate);
+        }
+
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        FeatureMap[][] transposed = new FeatureMap[_batchSize][];
+        for (int i = 0; i < _batchSize; i++)
+        {
+            transposed[i] = _vectorizationLayer.Backwards(_transposedFinalFeatureMap[i], VectorNormalizationLayer.Backwards(_imageVectors[i], gradients.dL_dI[i]), (float)learningRate);
+        }
+        watch.Stop();
+        var elapsedMs = watch.ElapsedMilliseconds;
+        Console.WriteLine($"Backwards Vectorization Time: {elapsedMs / 1000f} s");
+
+        FeatureMap[][] current = TransposeArray(transposed);
+
+        for (int j = Depth - 1; j > 0; j--)
+        {
+            watch = System.Diagnostics.Stopwatch.StartNew();
+            current = _layers[j].Backwards(_featureMaps[j - 1], current, (Half)learningRate);
+            watch.Stop();
+            elapsedMs = watch.ElapsedMilliseconds;
+            Console.WriteLine($"Backwards {j} Layer Time: {elapsedMs / 1000f} s");
+        }
+        watch = System.Diagnostics.Stopwatch.StartNew();
+        current = _layers[0].Backwards(_initialFeatureMaps, current, (Half)learningRate);
+        watch.Stop();
+        elapsedMs = watch.ElapsedMilliseconds;
+        Console.WriteLine($"Backwards 0 Layer Time: {elapsedMs / 1000f} s");
+        watch = System.Diagnostics.Stopwatch.StartNew();
+        _initialConvolutionLayer.Backwards(images, current, learningRate);
+        watch.Stop();
+        elapsedMs = watch.ElapsedMilliseconds;
+        Console.WriteLine($"Backwards Initial Convolution Time: {elapsedMs / 1000f} s");
+    }
+
+    public void Forward((FeatureMap image, bool[] bools, float[] floats)[] input)
+    {
+        FeatureMap[][] current;
+        FeatureMap[] images = new FeatureMap[_batchSize];
+        for (int i = 0; i < _batchSize; i++)
+        {
+            images[i] = input[i].image;
+            _descriptionVectors[i] = _transformer.Forward(input[i].bools, input[i].floats);
+            _descriptionVectorsNorm[i] = VectorNormalizationLayer.Forward(_descriptionVectors[i]);
+        }
+
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        current = _initialConvolutionLayer.Forward(images);
+        watch.Stop();
+        var elapsedMs = watch.ElapsedMilliseconds;
+        Console.WriteLine($"Initial Convolution Time: {elapsedMs / 1000f} s");
+
+        _initialFeatureMaps = current;
+
+        for (int j = 0; j < Depth; j++)
+        {
+            watch = System.Diagnostics.Stopwatch.StartNew();
+            current = _layers[j].Forward(current);
+            _featureMaps[j] = current;
+            watch.Stop();
+            elapsedMs = watch.ElapsedMilliseconds;
+            Console.WriteLine($"{j} Layer Time: {elapsedMs / 1000f} s");
+        }
+
+        //Normalization preferes featuremaps grouped by dimension first, while Vectorization prefers them to be grouped by batch member first.
+        //This transposes the featuremaps to perform Vectorization.
+
+        _transposedFinalFeatureMap = TransposeArray(current);
+        watch = System.Diagnostics.Stopwatch.StartNew();
+        for (int i = 0; i < _batchSize; i++)
+        {
+            _imageVectors[i] = _vectorizationLayer.Forward(_transposedFinalFeatureMap[i]);
+            _imageVectorsNorm[i] = VectorNormalizationLayer.Forward(_imageVectors[i]);
+        }
+        watch.Stop();
+        elapsedMs = watch.ElapsedMilliseconds;
+        Console.WriteLine($"Vectorization Time: {elapsedMs / 1000f} s");
+    }
+
+    public IEnumerable<(float, float)> GradientTest(int vectorCount, int vectorLength)
+    {
+        _imageVectorsNorm = new Vector[vectorCount];
+        _descriptionVectorsNorm = new Vector[vectorCount];
+        for (int i = 0; i < vectorCount; i++)
+        {
+
+            Vector newImageVector = new Vector(vectorLength);
+            Vector newDescriptionVector = new Vector(vectorLength);
+            for (int j = 0; j < vectorLength; j++)
+            {
+                newImageVector[j] = (float)(Random.NextDouble() * 2 - 1);
+                newDescriptionVector[j] = (float)(Random.NextDouble() * 2 - 1);
+            }
+            _imageVectorsNorm[i] = newImageVector.Normalized();
+            _descriptionVectorsNorm[i] = newDescriptionVector.Normalized();
+        }
+
+        float[,] matrix = Score();
+        float loss = Loss(matrix);
+        float accuracy = Accuracy(matrix);
+        yield return (loss, accuracy);
+        for (int i = 0; i < 10; i++)
+        {
+
+            (Vector[] imageGradients, Vector[] descriptionGradients) = CalculateGradient(matrix, loss);
+            for (int j = 0; j < vectorCount; j++)
+            {
+                _imageVectorsNorm[j] -= imageGradients[j] * 2;
+                _descriptionVectorsNorm[j] -= descriptionGradients[j] * 2;
+            }
+            matrix = Score();
+            loss = Loss(matrix);
+            accuracy = Accuracy(matrix);
+            yield return (loss, accuracy);
+        }
+    }
+
+    [OnDeserialized]
+    public void OnDeserialized(StreamingContext context)
+    {
+        _imageVectorsNorm = new Vector[_batchSize];
+        _descriptionVectorsNorm = new Vector[_batchSize];
+        _featureMaps = new FeatureMap[Depth][][];
+    }
+
+    public void SaveToFile(string file)
+    {
+        try
+        {
+            // create the directory the file will be written to if it doesn't already exist
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+
+            // serialize the C# game data object into Json
+            string dataToStore = JsonConvert.SerializeObject(this, Formatting.Indented, new JsonSerializerSettings
+            {
+                TypeNameHandling = TypeNameHandling.Auto
+            });
+
+            // write the serialized data to the file
+            using (FileStream stream = File.Create(file))
+            {
+                using (StreamWriter writer = new(stream))
+                {
+                    writer.Write(dataToStore);
+                }
+            }
+
+        }
+        catch (System.Exception e)
+        {
+            Console.WriteLine("Error occured when trying to save data to file: " + file + "\n" + e.ToString());
+        }
+    }
+    public float[,] Score()
+    {
+        float[,] cosScores = new float[_batchSize, _batchSize];
+
+        for (int i = 0; i < _batchSize; i++)
+        {
+            for (int j = 0; j < _batchSize; j++)
+            {
+                cosScores[i, j] = Vector.Dot(_imageVectorsNorm[i], _descriptionVectorsNorm[j]);
+            }
+        }
+
+        return cosScores;
+    }
+
     public (float, float) Test((FeatureMap image, bool[] bools, float[] floats)[] input)
     {
         Forward(input);
@@ -236,7 +352,7 @@ public class CLIP
         return (loss, accuracy);
     }
 
-    public float Train((FeatureMap image, bool[] bools, float[] floats)[] input, float learningRate)
+    public float Train((FeatureMap image, bool[] bools, float[] floats)[] input, Half learningRate)
     {
         Forward(input);
         float[,] matrix = Score();
@@ -247,42 +363,28 @@ public class CLIP
         return loss;
     }
 
-    public IEnumerable<(float,float)> GradientTest(int vectorCount, int vectorLength)
+    private static Vector[] CalculateGradient(float[,] matrix, Vector[] gradientVectors, Vector[] dotVectors, float loss)
     {
-        _imageVectors = new Vector[vectorCount];
-        _descriptionVectors = new Vector[vectorCount];
-        for(int i = 0; i < vectorCount; i++)
+        int length = gradientVectors.Length;
+        Vector[] gradients = new Vector[length];
+        for (int i = 0; i < length; i++)
         {
-
-            Vector newImageVector = new Vector(vectorLength);
-            Vector newDescriptionVector = new Vector(vectorLength);
-            for(int j = 0; j < vectorLength; j++)
-            {
-                newImageVector[j] = (float)(Random.NextDouble() * 2 - 1);
-                newDescriptionVector[j] = (float)(Random.NextDouble() * 2 - 1);
-            }
-            _imageVectors[i] = newImageVector.Normalized();
-            _descriptionVectors[i] = newDescriptionVector.Normalized();
+            gradients[i] = new Vector(gradientVectors[i].Length);
         }
-
-        float[,] matrix = Score();
-        float loss = Loss(matrix);
-        float accuracy = Accuracy(matrix);
-        yield return (loss, accuracy);
-        for (int i = 0; i < 100; i++)
+        for (int i = 0; i < length; i++)
         {
-            
-            (Vector[] imageGradients, Vector[] descriptionGradients) = CalculateGradient(matrix, loss);
-            for(int j = 0; j < vectorCount; j++)
+            for (int j = 0; j < length; j++)
             {
-                _imageVectors[j] -= imageGradients[j] * 2;
-                _descriptionVectors[j] -= descriptionGradients[j] * 2;
+                Vector[] nextGradients = i == j ?
+                    DiagonalGradient(matrix, gradientVectors, dotVectors[i], loss, i) :
+                    NonDiagonalGradient(matrix, gradientVectors, dotVectors[j], loss, i, j);
+                for (int k = 0; k < length; k++)
+                {
+                    gradients[k] += nextGradients[k];
+                }
             }
-            matrix = Score();
-            loss = Loss(matrix);
-            accuracy = Accuracy(matrix);
-            yield return (loss, accuracy);
         }
+        return gradients;
     }
 
     private static Vector[] DiagonalGradient(float[,] matrix, Vector[] gradientVectors, Vector dotVector, float loss, int index)
@@ -351,7 +453,7 @@ public class CLIP
 
         float a = 1 - b / c;
         float invc2 = MathF.Pow(c, -2);
-        float mult = - loss / (a * matrix.GetLength(0) * matrix.GetLength(1));
+        float mult = -loss / (a * matrix.GetLength(0) * matrix.GetLength(1));
 
         for (int i = 0; i < gradientVectors.Length; i++)
         {
@@ -369,33 +471,35 @@ public class CLIP
         return gradients;
     }
 
-    private static Vector[] CalculateGradient(float[,] matrix, Vector[] gradientVectors, Vector[] dotVectors, float loss)
+    private static T[][] TransposeArray<T>(T[][] array)
     {
-        int length = gradientVectors.Length;
-        Vector[] gradients = new Vector[length];
-        for(int i = 0; i < length; i++)
+        T[][] transposed = new T[array[0].Length][];
+        for (int i = 0; i < transposed.Length; i++)
         {
-            gradients[i] = new Vector(gradientVectors[i].Length);
-        }
-        for (int i = 0; i < length; i++)
-        {
-            for (int j = 0; j < length; j++)
+            transposed[i] = new T[array.Length];
+            for (int j = 0; j < transposed[i].Length; j++)
             {
-                Vector[] nextGradients = i == j ?
-                    DiagonalGradient(matrix, gradientVectors, dotVectors[i], loss, i) :
-                    NonDiagonalGradient(matrix, gradientVectors, dotVectors[j], loss, i, j);
-                for (int k = 0; k < length; k++)
-                {
-                    gradients[k] += nextGradients[k];
-                }
+                transposed[i][j] = array[j][i];
             }
         }
-        return gradients;
+        return transposed;
     }
 
+    private static T[,] TransposeArray<T>(T[,] array)
+    {
+        T[,] transposed = new T[array.GetLength(0), array.GetLength(1)];
+        for (int i = 0; i < transposed.GetLength(0); i++)
+        {
+            for (int j = 0; j < transposed.GetLength(1); j++)
+            {
+                transposed[i, j] = array[j, i];
+            }
+        }
+        return transposed;
+    }
     private (Vector[], Vector[]) CalculateGradient(float[,] matrix, float loss)
     {
-        return (CalculateGradient(matrix, _imageVectors, _descriptionVectors, loss),
-            CalculateGradient(TransposeArray(matrix), _descriptionVectors, _imageVectors, loss));
+        return (CalculateGradient(matrix, _imageVectorsNorm, _descriptionVectorsNorm, loss),
+            CalculateGradient(TransposeArray(matrix), _descriptionVectorsNorm, _imageVectorsNorm, loss));
     }
 }

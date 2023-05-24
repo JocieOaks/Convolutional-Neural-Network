@@ -29,7 +29,7 @@ public class BackPropogationTest
             {
                 for (int j = 0; j < 20; j++)
                 {
-                    _initialInput[0][0][i, j] = Color.Random(1);
+                    _initialInput[0][0][i, j] = Color.RandomGauss(0, 0.3f);
                 }
             }
         }
@@ -38,7 +38,7 @@ public class BackPropogationTest
         //_impactLayer = new ConvolutionalLayer(1, 3, 1);
     }
 
-    public float Test(float testLearningRate, float propLearningRate)
+    public float Test(Half testLearningRate, Half propLearningRate)
     {
         Forward();
         float loss = Loss();
@@ -89,10 +89,10 @@ public class BackPropogationTest
         _finalOutput = _testLayer.Forward(_intermediate[0]);
     }
 
-    public void Backward(Vector gradient, float testLearningRate, float propLearningRate)
+    public void Backward(Vector gradient, Half testLearningRate, Half propLearningRate)
     {
         FeatureMap[][] dL_dP = new FeatureMap[1][];
-        dL_dP[0] = _testLayer.Backwards(_intermediate[0], gradient, testLearningRate);
+        dL_dP[0] = _testLayer.Backwards(_intermediate[0], gradient, (float)testLearningRate);
         _impactLayer.Backwards(_initialInput, dL_dP, propLearningRate);
     }
 }

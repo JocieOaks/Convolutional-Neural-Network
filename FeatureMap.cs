@@ -1,6 +1,7 @@
 ﻿using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -56,5 +57,24 @@ public class FeatureMap
     public Color Average()
     {
         return Sum() / Area;
+    }
+
+    public float SumMagnitude()
+    {
+        float sum = 0;
+        for (int i = 0; i < Width; i++)
+        {
+            for (int j = 0; j < Length; j++)
+            {
+                sum += (float)_map[i, j].Magnitude;
+            }
+        }
+
+        return sum;
+    }
+
+    public float AverageMagnitude()
+    {
+        return SumMagnitude() / Area;
     }
 }
