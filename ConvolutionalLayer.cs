@@ -20,8 +20,6 @@ public class ConvolutionalLayer : Layer
 
     protected float[][] _dL_dK;
 
-    protected Color[][] _dL_dKOld;
-
     protected FeatureMap[][] _dL_dPNext;
 
     protected float _invK2;
@@ -34,7 +32,6 @@ public class ConvolutionalLayer : Layer
     {
         _kernals = new Color[_dimensions][];
         _dL_dK = new float[_dimensions][];
-        _dL_dKOld = new Color[_dimensions][];
 
         float variance = 0.333f / (_dimensions * kernalSize * kernalSize);
         float stdDev = MathF.Sqrt(variance);
@@ -43,7 +40,6 @@ public class ConvolutionalLayer : Layer
         {
             _kernals[i] = new Color[_kernalSize * _kernalSize];
             _dL_dK[i] = new float[_kernalSize * _kernalSize * 3];
-            _dL_dKOld[i] = new Color[_kernalSize * _kernalSize];
             for (int j = 0; j < _kernalSize * _kernalSize; j++)
             {
                 _kernals[i][j] = Color.RandomGauss(0, stdDev);
@@ -189,13 +185,13 @@ public class ConvolutionalLayer : Layer
             for (int i = 0; i < kF[0].KernalSize; i++)
             {
                 Color dK = dL * input[offset + i];
-                dL_dK[(j * kF[0].KernalSize + i) * 3] += dK.R;
-                dL_dK[(j * kF[0].KernalSize + i) * 3 + 1] += dK.G;
-                dL_dK[(j * kF[0].KernalSize + i) * 3 + 2] += dK.B;
-                Color dP = dL * kernal[j * kF[0].KernalSize + i];
-                dL_dPNext[(offset + i) * 3] += dP.R;
-                dL_dPNext[(offset + i) * 3 + 1] += dP.G;
-                dL_dPNext[(offset + i) * 3 + 2] += dP.B;
+                Atomic.Add(ref dL_dK[(j * kF[0].KernalSize + i) * 3], dK.R);
+                Atomic.Add(ref dL_dK[(j * kF[0].KernalSize + i) * 3 + 1], dK.G);
+                Atomic.Add(ref dL_dK[(j * kF[0].KernalSize + i) * 3 + 2], dK.B);
+                Color dP = dL * kernal[j + i * kF[0].KernalSize];
+                Atomic.Add(ref dL_dPNext[(offset + i) * 3], dP.R);
+                Atomic.Add(ref dL_dPNext[(offset + i) * 3 + 1], dP.G);
+                Atomic.Add(ref dL_dPNext[(offset + i) * 3 + 2], dP.B);
             }
         }
     }
