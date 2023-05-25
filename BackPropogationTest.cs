@@ -10,10 +10,11 @@ public class BackPropogationTest
 {
 
     readonly FeatureMap[][] _initialInput;
-    FeatureMap[][] _intermediate;
-    Vector _finalOutput;
 
-    VectorizationLayer _testLayer;
+    FeatureMap[][] oldPropogation;
+    FeatureMap[][] newPropogation;
+
+    ConvolutionalLayer _testLayer;
     Layer _impactLayer;
 
     public BackPropogationTest()
@@ -29,30 +30,30 @@ public class BackPropogationTest
             {
                 for (int j = 0; j < 20; j++)
                 {
-                    _initialInput[0][0][i, j] = Color.RandomGauss(0, 0.3f);
+                    _initialInput[0][0][j, i] = new Color(CLIP.Random.Next(-1,2), CLIP.Random.Next(-1, 2), CLIP.Random.Next(-1, 2));
                 }
             }
         }
-
-        //_testLayer = new VectorizationLayer(5, 1);
+        FeatureMap[][] current = _initialInput;
+        _testLayer = new ConvolutionalLayer(3, 1, ref current);
         //_impactLayer = new ConvolutionalLayer(1, 3, 1);
     }
 
     public float Test(float testLearningRate, float propLearningRate)
     {
         Forward();
-        float loss = Loss();
-        Vector dL_dP = Gradient(loss);
-        Backward(dL_dP, testLearningRate, propLearningRate);
-        return loss;
+        //float loss = Loss();
+        //Vector dL_dP = Gradient(loss);
+        Backward(new Vector(4), testLearningRate, propLearningRate);
+        return 0;
     }
 
     public float Loss()
     {
         float sum = 0;
-        for(int i = 0; i < _finalOutput.Length; i++)
+        //for(int i = 0; i < _finalOutput.Length; i++)
         {
-            sum += MathF.Pow(_finalOutput[i], 2);
+        //    sum += MathF.Pow(_finalOutput[i], 2);
         }
 
         return sum;
@@ -60,7 +61,7 @@ public class BackPropogationTest
 
     public Vector Gradient(float loss)
     {
-        Vector dL_dP = _finalOutput * 2;
+        Vector dL_dP = new Vector(4) * 2;
         /*FeatureMap[][] dL_dP = new FeatureMap[_finalOutput.Length][];
         for (int i = 0; i < _finalOutput.Length; i++)
         {
@@ -85,15 +86,11 @@ public class BackPropogationTest
 
     public void Forward()
     {
-        _intermediate = _impactLayer.Forward(_initialInput);
-        _finalOutput = _testLayer.Forward(_intermediate[0]);
     }
 
     public void Backward(Vector gradient, float testLearningRate, float propLearningRate)
     {
-        FeatureMap[][] dL_dP = new FeatureMap[1][];
-        dL_dP[0] = _testLayer.Backwards(_intermediate[0], gradient, (float)testLearningRate);
-        _impactLayer.Backwards(_initialInput, dL_dP, propLearningRate);
+        //dL_dP[0] = _testLayer.Backwards(_intermediate[0], gradient, (float)testLearningRate);
     }
 }
 

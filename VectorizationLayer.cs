@@ -13,9 +13,10 @@ public class VectorizationLayer
         float variance = 2f / (3 * featureMapDimensions + vectorDimensions);
         float stdDev = MathF.Sqrt(variance);
         _matrix = new FeatureMap(vectorDimensions, featureMapDimensions);
-        for(int i = 0; i < vectorDimensions; i++)
+
+        for (int j = 0; j < featureMapDimensions; j++)
         {
-            for(int j = 0; j < featureMapDimensions; j++)
+            for (int i = 0; i < vectorDimensions; i++)
             {
                 _matrix[i, j] = Color.RandomGauss(0, stdDev);
             }
@@ -48,10 +49,9 @@ public class VectorizationLayer
             dL_dP[i] = new FeatureMap(x, y, dL_dPV[i]);
         }
 
-
-        for (int i = 0; i < _matrix.Width; i++)
+        for (int j = 0; j < _matrix.Length; j++)
         {
-            for (int j = 0; j < _matrix.Length; j++)
+            for (int i = 0; i < _matrix.Width; i++)
             {
                 Color val = dL_dI[i] * input[j].Average();
                 _matrix[i, j] -= learningRate * val;

@@ -66,9 +66,10 @@ public class AveragePoolLayer : Layer
 
     private void Backwards(FeatureMap dL_dP, FeatureMap dL_dPNext)
     {
-        for (int x = 0; x < dL_dPNext.Width; x++)
+
+        for (int y = 0; y < dL_dPNext.Length; y++)
         {
-            for (int y = 0; y < dL_dPNext.Length; y++)
+            for (int x = 0; x < dL_dPNext.Width; x++)
             {
                 dL_dPNext[x, y] = dL_dP[x / _kernalSize, y / _kernalSize] * _invK2;
             }
