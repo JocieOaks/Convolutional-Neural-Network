@@ -18,22 +18,28 @@ public class InitialConvolutionLayer : ConvolutionalLayer
             using (Accelerator accelerator = context.CreateCudaAccelerator(0))
             {
                 MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceConvoluted = new MemoryBuffer1D<Color, Stride1D.Dense>[_dimensions, input.Length];
+                
                 for (int j = 0; j < input.Length; j++)
                 {
                     using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = input[j].Allocate(accelerator);
+                    
                     for (int i = 0; i < _dimensions; i++)
                     {
                         deviceConvoluted[i, j] = _convoluted[i][j].AllocateEmpty(accelerator);
                         using MemoryBuffer1D<Color, Stride1D.Dense> deviceKernal = accelerator.Allocate1D(_kernals[i]);
-                        using MemoryBuffer1D<KernalFeatures, Stride1D.Dense> deviceKernalFeatures = accelerator.Allocate1D<KernalFeatures>(new KernalFeatures[] { new KernalFeatures(input[j].Width, _convoluted[i][j].Width, _kernalSize, _stride, _invK2) });
-                        using AcceleratorStream stream = accelerator.CreateStream();
-                        Action<AcceleratorStream, Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<KernalFeatures>> forwardKernal =
-                            accelerator.LoadAutoGroupedKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<KernalFeatures>>(ForwardKernal);
+                        using MemoryBuffer1D<GPUKernalFeatures, Stride1D.Dense> deviceKernalFeatures = accelerator.Allocate1D<GPUKernalFeatures>(new GPUKernalFeatures[] { new GPUKernalFeatures(input[j].Width, _convoluted[i][j].Width, _kernalSize, _stride, _invK2) });
+                        
+                        Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<GPUKernalFeatures>> forwardKernal =
+                            accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<GPUKernalFeatures>>(ForwardKernal);
+                        
                         Index2D index = new(_convoluted[i][j].Width, _convoluted[i][j].Length);
-                        forwardKernal(stream, index, deviceInput.View, deviceConvoluted[i, j].View, deviceKernal.View, deviceKernalFeatures.View);
+                        
+                        forwardKernal(index, deviceInput.View, deviceConvoluted[i, j].View, deviceKernal.View, deviceKernalFeatures.View);
                     }
                 }
+                
                 accelerator.Synchronize();
+                
                 for (int i = 0; i < _dimensions; i++)
                 {
                     for (int j = 0; j < input.Length; j++)
@@ -64,19 +70,21 @@ public class InitialConvolutionLayer : ConvolutionalLayer
                         using MemoryBuffer1D<float, Stride1D.Dense> deviceDL_dPNext = accelerator.Allocate1D<float>(input[j].Area * 3);
                         using MemoryBuffer1D<Color, Stride1D.Dense> deviceKernal = accelerator.Allocate1D(_kernals[i]);
                         using MemoryBuffer1D<Color, Stride1D.Dense> deviceDL_dP = dL_dP[i][j].Allocate(accelerator);
-                        using MemoryBuffer1D<KernalFeatures, Stride1D.Dense> deviceKernalFeatures = accelerator.Allocate1D<KernalFeatures>(new KernalFeatures[] { new KernalFeatures(input[j].Width, dL_dP[i][j].Width, _kernalSize, _stride, _invK2) });
-                        using AcceleratorStream stream = accelerator.CreateStream();
+                        using MemoryBuffer1D<GPUKernalFeatures, Stride1D.Dense> deviceKernalFeatures = 
+                            accelerator.Allocate1D(new GPUKernalFeatures[] { new GPUKernalFeatures(input[j].Width, dL_dP[i][j].Width, _kernalSize, _stride, _invK2) });
 
-                        Action<AcceleratorStream, Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<KernalFeatures>> backWardsKernal =
-                            accelerator.LoadAutoGroupedKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<KernalFeatures>>(BackwardsKernal);
+                        Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<GPUKernalFeatures>> backWardsKernal =
+                            accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<GPUKernalFeatures>>(BackwardsKernal);
 
                         Index2D index = new(dL_dP[i][j].Width, dL_dP[i][j].Length);
 
-                        backWardsKernal(stream, index, deviceInput.View, deviceKernal.View, deviceDL_dP.View, deviceDL_dPNext.View, deviceDL_dK[i].View, deviceKernalFeatures.View);
+                        backWardsKernal(index, deviceInput.View, deviceKernal.View, deviceDL_dP.View, deviceDL_dPNext.View, deviceDL_dK[i].View, deviceKernalFeatures.View);
 
                     }
                 }
+                
                 accelerator.Synchronize();
+                
                 for (int i = 0; i < _dimensions; i++)
                 {
                     deviceDL_dK[i].CopyToCPU(_dL_dK[i]);

@@ -76,28 +76,31 @@ public class ConvolutionalLayer : Layer
             {
                 MemoryBuffer1D<float, Stride1D.Dense>[,] deviceDL_dPNext = new MemoryBuffer1D<float, Stride1D.Dense>[_dimensions, input[0].Length];
                 MemoryBuffer1D<float, Stride1D.Dense>[] deviceDL_dK = new MemoryBuffer1D<float, Stride1D.Dense>[_dimensions];
+                
                 for (int i = 0; i < _dimensions; i++)
                 {
                     deviceDL_dK[i] = accelerator.Allocate1D<float>(_dL_dK[i].Length);
                     for (int j = 0; j < input[i].Length; j++)
                     {
-                        using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = input[i][j].Allocate(accelerator);
                         deviceDL_dPNext[i, j] = accelerator.Allocate1D<float>(input[i][j].Area * 3);
+                        using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = input[i][j].Allocate(accelerator);
                         using MemoryBuffer1D<Color, Stride1D.Dense> deviceKernal = accelerator.Allocate1D(_kernals[i]);
                         using MemoryBuffer1D<Color, Stride1D.Dense> deviceDL_dP = dL_dP[i][j].Allocate(accelerator);
-                        using MemoryBuffer1D<KernalFeatures, Stride1D.Dense> deviceKernalFeatures = accelerator.Allocate1D<KernalFeatures>(new KernalFeatures[] { new KernalFeatures(input[i][j].Width, dL_dP[i][j].Width, _kernalSize, _stride, _invK2) });
-                        using AcceleratorStream stream = accelerator.CreateStream();
+                        using MemoryBuffer1D<GPUKernalFeatures, Stride1D.Dense> deviceKernalFeatures = 
+                            accelerator.Allocate1D(new GPUKernalFeatures[] { new GPUKernalFeatures(input[i][j].Width, dL_dP[i][j].Width, _kernalSize, _stride, _invK2) });
 
-                        Action<AcceleratorStream, Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<KernalFeatures>> backWardsKernal =
-                            accelerator.LoadAutoGroupedKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<KernalFeatures>>(BackwardsKernal);
+                        Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<GPUKernalFeatures>> backWardsKernal =
+                            accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<GPUKernalFeatures>>(BackwardsKernal);
 
                         Index2D index = new(dL_dP[i][j].Width, dL_dP[i][j].Length);
                             
-                        backWardsKernal(stream, index, deviceInput.View, deviceKernal.View, deviceDL_dP.View, deviceDL_dPNext[i, j].View, deviceDL_dK[i].View, deviceKernalFeatures.View);
+                        backWardsKernal(index, deviceInput.View, deviceKernal.View, deviceDL_dP.View, deviceDL_dPNext[i, j].View, deviceDL_dK[i].View, deviceKernalFeatures.View);
                         
                     }
                 }
+                
                 accelerator.Synchronize();
+                
                 for (int i = 0; i < _dimensions; i++)
                 {
                     for (int j = 0; j < input[i].Length; j++)
@@ -136,23 +139,29 @@ public class ConvolutionalLayer : Layer
             using (Accelerator accelerator = context.CreateCudaAccelerator(0))
             {
                 MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceConvoluted = new MemoryBuffer1D<Color, Stride1D.Dense>[_dimensions, input[0].Length];
+                
                 for (int i = 0; i < _dimensions; i++)
                 {
                     for (int j = 0; j < input[i].Length; j++)
                     {
-                        using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = input[i][j].Allocate(accelerator);
                         deviceConvoluted[i, j] = _convoluted[i][j].AllocateEmpty(accelerator);
+                        using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = input[i][j].Allocate(accelerator);
                         using MemoryBuffer1D<Color, Stride1D.Dense> deviceKernal = accelerator.Allocate1D(_kernals[i]);
-                        using MemoryBuffer1D<KernalFeatures, Stride1D.Dense> deviceKernalFeatures = accelerator.Allocate1D<KernalFeatures>(new KernalFeatures[] { new KernalFeatures(input[i][j].Width, _convoluted[i][j].Width, _kernalSize, _stride, _invK2) });
-                        using AcceleratorStream stream = accelerator.CreateStream();
-                        Action<AcceleratorStream, Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<KernalFeatures>> forwardKernal =
-                            accelerator.LoadAutoGroupedKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<KernalFeatures>>(ForwardKernal);
+                        using MemoryBuffer1D<GPUKernalFeatures, Stride1D.Dense> deviceKernalFeatures = 
+                            accelerator.Allocate1D(new GPUKernalFeatures[] { new GPUKernalFeatures(input[i][j].Width, _convoluted[i][j].Width, _kernalSize, _stride, _invK2) });
+                        
+                        Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<GPUKernalFeatures>> forwardKernal =
+                            accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<GPUKernalFeatures>>(ForwardKernal);
+                        
                         Index2D index = new(_convoluted[i][j].Width, _convoluted[i][j].Length);
-                        forwardKernal(stream, index, deviceInput.View, deviceConvoluted[i, j].View, deviceKernal.View, deviceKernalFeatures.View);
+                        
+                        forwardKernal(index, deviceInput.View, deviceConvoluted[i, j].View, deviceKernal.View, deviceKernalFeatures.View);
 
                     }
                 }
+                
                 accelerator.Synchronize();
+                
                 for (int i = 0; i < _dimensions; i++)
                 {
                     for (int j = 0; j < input[i].Length; j++)
@@ -172,16 +181,13 @@ public class ConvolutionalLayer : Layer
     {
         _invK2 = 1f / (_kernalSize * _kernalSize);
     }
-    protected static void BackwardsKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> kernal, ArrayView<Color> dL_dP, ArrayView<float> dL_dPNext, ArrayView<float> dL_dK, ArrayView<KernalFeatures> kF)
+    protected static void BackwardsKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> kernal, ArrayView<Color> dL_dP, ArrayView<float> dL_dPNext, ArrayView<float> dL_dK, ArrayView<GPUKernalFeatures> kF)
     {
         Color dL = dL_dP[index.Y * kF[0].OutputWidth + index.X] * kF[0].InverseKSquared;
 
         for (int j = 0; j < kF[0].KernalSize; j++)
         {
-            int x = index.X * kF[0].Stride;
-            int y = index.Y * kF[0].Stride + j;
-
-            int offset = y * kF[0].InputWidth + x;
+            int offset = (index.Y * kF[0].Stride + j) * kF[0].InputWidth + index.X * kF[0].Stride;
             for (int i = 0; i < kF[0].KernalSize; i++)
             {
                 Color dK = dL * input[offset + i];
@@ -196,7 +202,7 @@ public class ConvolutionalLayer : Layer
         }
     }
 
-    protected static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> convoluted, ArrayView<Color> kernal, ArrayView<KernalFeatures> kF)
+    protected static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> convoluted, ArrayView<Color> kernal, ArrayView<GPUKernalFeatures> kF)
     {
         Color sum = new();
 
@@ -209,23 +215,5 @@ public class ConvolutionalLayer : Layer
             }
         }
         convoluted[index.Y * kF[0].OutputWidth + index.X] = sum * kF[0].InverseKSquared;
-    }
-
-    public readonly struct KernalFeatures
-    {
-        public KernalFeatures(int inputWidth, int outputWidth, int kernalSize, int stride, float inverseKSquared)
-        {
-            InputWidth = inputWidth;
-            OutputWidth = outputWidth;
-            KernalSize = kernalSize;
-            Stride = stride;
-            InverseKSquared = inverseKSquared;
-        }
-
-        public int InputWidth { get; }
-        public float InverseKSquared { get; }
-        public int KernalSize { get; }
-        public int OutputWidth { get; }
-        public int Stride { get; }
     }
 }
