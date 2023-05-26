@@ -50,7 +50,6 @@ public class CLIP
         }
 
         _initialConvolutionLayer = new InitialConvolutionLayer(3, 1, ref input);
-        _vectorizationLayer = new VectorizationLayer(vectorDimensions, dimensions);
         _transformer = new Transformer(descriptionBoolLength, descriptionFloatLength, vectorDimensions);
         _batchSize = batchSize;
         _vectorDimensions = vectorDimensions;
@@ -67,6 +66,7 @@ public class CLIP
             if (i < 6 && i % 2 == 0)
                 _layers.Add(new AveragePoolLayer(2, ref input));
         }
+        _vectorizationLayer = new VectorizationLayer(vectorDimensions, input);
         _featureMaps = new FeatureMap[Depth][][];
     }
 
@@ -180,10 +180,9 @@ public class CLIP
 
         var watch = System.Diagnostics.Stopwatch.StartNew();
         FeatureMap[][] transposed = new FeatureMap[_batchSize][];
-        for (int i = 0; i < _batchSize; i++)
-        {
-            transposed[i] = _vectorizationLayer.Backwards(_transposedFinalFeatureMap[i], VectorNormalizationLayer.Backwards(_imageVectors[i], gradients.dL_dI[i]), learningRate);
-        }
+
+        transposed = _vectorizationLayer.Backwards(VectorNormalizationLayer.Backwards(_imageVectors, gradients.dL_dI), learningRate);
+        
         watch.Stop();
         var elapsedMs = watch.ElapsedMilliseconds;
         Console.WriteLine($"Backwards Vectorization Time: {elapsedMs / 1000f} s");
@@ -244,11 +243,10 @@ public class CLIP
 
         _transposedFinalFeatureMap = TransposeArray(current);
         watch = System.Diagnostics.Stopwatch.StartNew();
-        for (int i = 0; i < _batchSize; i++)
-        {
-            _imageVectors[i] = _vectorizationLayer.Forward(_transposedFinalFeatureMap[i]);
-            _imageVectorsNorm[i] = VectorNormalizationLayer.Forward(_imageVectors[i]);
-        }
+        _imageVectors = _vectorizationLayer.Forward(_transposedFinalFeatureMap);
+
+        _imageVectorsNorm = VectorNormalizationLayer.Forward(_imageVectors);
+        
         watch.Stop();
         elapsedMs = watch.ElapsedMilliseconds;
         Console.WriteLine($"Vectorization Time: {elapsedMs / 1000f} s");

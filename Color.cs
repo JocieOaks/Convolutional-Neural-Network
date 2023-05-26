@@ -1,10 +1,36 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
 using ILGPU;
+using ILGPU.AtomicOperations;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
 using System.Data.Common;
 using System.Diagnostics.Contracts;
+
+public struct AtomicAddColor : IAtomicOperation<Color>
+{
+    public Color Operation(Color current, Color value)
+    {
+        return current + value;
+    }
+}
+
+public struct AtomicCompareExchangeColor : ICompareExchangeOperation<Color>
+{
+    public Color CompareExchange(ref Color target, Color compare, Color value)
+    {
+        if (IsSame(target, compare))
+        {
+            target = value;
+        }
+        return compare;
+    }
+
+    public bool IsSame(Color left, Color right)
+    {
+        return left.R == right.R && left.G == right.G && left.B == right.B;
+    }
+}
 
 [Serializable]
 public readonly struct Color
@@ -15,6 +41,16 @@ public readonly struct Color
         R = r;
         G = g;
         B = b;
+    }
+
+    public Color(float[] values)
+    {
+        if (values.Length != 3)
+            throw new ArgumentException("Values are not correct length.");
+
+        R = values[0];
+        G = values[1];
+        B = values[2];
     }
 
     public Color()
@@ -38,9 +74,22 @@ public readonly struct Color
     [JsonIgnore]
     public float Magnitude => MathF.Sqrt(R * R + G * G + B * B);
 
+    public float R { get; }
+
     [JsonIgnore]
     public float SquareMagnitude => R * R + G * G + B * B;
-    public float R { get; }
+    public static float Dot(Color color1, Color color2)
+    {
+        return color1.R * color2.R + color1.G * color2.G + color1.B * color2.B;
+    }
+
+    public static explicit operator Color(MemoryBuffer1D<float, Stride1D.Dense> array)
+    {
+        float[] values = new float[3];
+        array.CopyToCPU(values);
+        return new Color(values[0], values[1], values[2]);
+    }
+
     public static Color operator -(Color color1, Color color2)
     {
         return new Color(color1.R - color2.R, color1.G - color2.G, color1.B - color2.B);
@@ -49,6 +98,11 @@ public readonly struct Color
     public static Color operator -(Color color)
     {
         return new Color(-color.R, -color.G, -color.B);
+    }
+
+    public static Color operator -(Color color, ArrayView<float> array)
+    {
+        return new Color(color.R - array[0], color.G - array[1], color.B - array[2]);
     }
 
     public static Color operator *(Color color1, Color color2)
@@ -88,12 +142,6 @@ public readonly struct Color
         Atomic.Add(ref array[2], color.B);
         return array;
     }
-
-    public static Color operator -(Color color, ArrayView<float> array)
-    {
-        return new Color(color.R - array[0], color.G - array[1], color.B - array[2]);
-    }
-
     public static Color Pow(Color color, float power)
     {
         return new Color(MathF.Pow(color.R, power), MathF.Pow(color.G, power), MathF.Pow(color.B, power));
@@ -104,14 +152,14 @@ public readonly struct Color
         return new Color(CLIP.RandomGauss(mean, stdDev), CLIP.RandomGauss(mean, stdDev), CLIP.RandomGauss(mean, stdDev));
     }
 
+    public Color Clamp(float val)
+    {
+        return new Color(R > val ? val : R < -val ? -val : R, G > val ? val : G < -val ? -val : G, B > val ? val : B < -val ? -val : B);
+    }
+
     public Color ReLU()
     {
         return new Color(R < 0 ? 0 : R, G < 0 ? 0 : G, B < 0 ? 0 : B);
-    }
-
-    public override string ToString()
-    {
-        return "R: " + MathF.Round(R, 2) + " G: " + MathF.Round(G, 2) + " B: " + MathF.Round(B, 2);
     }
 
     public Color ReLUPropogation()
@@ -119,20 +167,8 @@ public readonly struct Color
         return new Color(R == 0 ? 0 : 1, G == 0 ? 0 : 1, B == 0 ? 0 : 1);
     }
 
-    public Color Clamp(float val)
+    public override string ToString()
     {
-        return new Color(R > val ? val : R < -val ? -val : R, G > val ? val : G < -val ? -val : G, B > val ? val : B < -val ? -val : B);
-    }
-
-    public static float Dot(Color color1, Color color2)
-    {
-        return color1.R * color2.R + color1.G * color2.G + color1.B * color2.B;
-    }
-
-    public static explicit operator Color(MemoryBuffer1D<float, Stride1D.Dense> array)
-    {
-        float[] values = new float[3];
-        array.CopyToCPU(values);
-        return new Color(values[0], values[1], values[2]);
+        return "R: " + MathF.Round(R, 2) + " G: " + MathF.Round(G, 2) + " B: " + MathF.Round(B, 2);
     }
 }

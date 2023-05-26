@@ -19,6 +19,7 @@ public class ConvolutionalLayer : Layer
     protected FeatureMap[][] _convoluted;
 
     protected float[][] _dL_dK;
+    float[][] _next;
 
     protected FeatureMap[][] _dL_dPNext;
 
@@ -32,6 +33,7 @@ public class ConvolutionalLayer : Layer
     {
         _kernals = new Color[_dimensions][];
         _dL_dK = new float[_dimensions][];
+        _next = new float[_dimensions][];
 
         float variance = 0.333f / (_dimensions * kernalSize * kernalSize);
         float stdDev = MathF.Sqrt(variance);
@@ -40,6 +42,7 @@ public class ConvolutionalLayer : Layer
         {
             _kernals[i] = new Color[_kernalSize * _kernalSize];
             _dL_dK[i] = new float[_kernalSize * _kernalSize * 3];
+            _next[i] = new float[input[i][0].Area * 3];
             for (int j = 0; j < _kernalSize * _kernalSize; j++)
             {
                 _kernals[i][j] = Color.RandomGauss(0, stdDev);
@@ -105,14 +108,13 @@ public class ConvolutionalLayer : Layer
                 {
                     for (int j = 0; j < input[i].Length; j++)
                     {
-                        float[] next = new float[_dL_dPNext[i][j].Area * 3];
-                        deviceDL_dPNext[i, j].CopyToCPU(next);
+                        deviceDL_dPNext[i, j].CopyToCPU(_next[i]);
                         for (int l = 0; l < input[i][j].Length; l++)
                         {
                             for (int k = 0; k < _dL_dPNext[i][j].Width; k++)
                             {
                                 int index = (l * _dL_dPNext[i][j].Width + k) * 3;
-                                _dL_dPNext[i][j][k,l] = new Color(next[index], next[index + 1], next[index + 2]);
+                                _dL_dPNext[i][j][k,l] = new Color(_next[i][index], _next[i][index + 1], _next[i][index + 2]);
                             }
                         }
                         deviceDL_dPNext[i, j].Dispose();
