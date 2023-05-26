@@ -6,6 +6,7 @@ using ILGPU.Runtime;
 using Newtonsoft.Json;
 using System.Data.Common;
 using System.Diagnostics.Contracts;
+using System.Runtime.InteropServices;
 
 public struct AtomicAddColor : IAtomicOperation<Color>
 {
@@ -33,6 +34,7 @@ public struct AtomicCompareExchangeColor : ICompareExchangeOperation<Color>
 }
 
 [Serializable]
+[StructLayout(LayoutKind.Sequential, Size = 12)]
 public readonly struct Color
 {
     [JsonConstructor]

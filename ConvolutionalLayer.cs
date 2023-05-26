@@ -108,15 +108,7 @@ public class ConvolutionalLayer : Layer
                 {
                     for (int j = 0; j < input[i].Length; j++)
                     {
-                        deviceDL_dPNext[i, j].CopyToCPU(_next[i]);
-                        for (int l = 0; l < input[i][j].Length; l++)
-                        {
-                            for (int k = 0; k < _dL_dPNext[i][j].Width; k++)
-                            {
-                                int index = (l * _dL_dPNext[i][j].Width + k) * 3;
-                                _dL_dPNext[i][j][k,l] = new Color(_next[i][index], _next[i][index + 1], _next[i][index + 2]);
-                            }
-                        }
+                        _dL_dPNext[i][j].CopyFromBuffer(deviceDL_dPNext[i,j]);
                         deviceDL_dPNext[i, j].Dispose();
                     }
 

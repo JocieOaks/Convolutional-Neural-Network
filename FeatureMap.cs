@@ -5,6 +5,8 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Serialization;
@@ -13,14 +15,14 @@ using System.Xml.Serialization;
 public class FeatureMap
 {
 
-    [JsonProperty] readonly Color[] _map;
+    [JsonProperty] UnionMap _map;
 
     public FeatureMap(int width, int length)
     {
         Width = width;
         Length = length;
 
-        _map = new Color[width * length];
+        _map = new UnionMap(width * length);
     }
 
     public FeatureMap(int width, int length, Color initial) : this(width, length)
@@ -37,7 +39,7 @@ public class FeatureMap
         }
     }
 
-    [JsonIgnore] public int Area => _map.Length;
+    [JsonIgnore] public int Area => Length * Width;
 
     [JsonIgnore] public int Length { get; }
 
@@ -50,12 +52,14 @@ public class FeatureMap
     }
     public MemoryBuffer1D<Color, Stride1D.Dense> Allocate(Accelerator accelerator)
     {
-        return accelerator.Allocate1D(_map);
+        MemoryBuffer1D<Color, Stride1D.Dense> buffer = accelerator.Allocate1D<Color>(Area);
+        buffer.AsArrayView<Color>(0, Area).CopyFromCPU(_map.ColorsSpanReadonly(Area));
+        return buffer;
     }
 
     public MemoryBuffer1D<Color, Stride1D.Dense> AllocateEmpty(Accelerator accelerator)
     {
-        return accelerator.Allocate1D<Color>(_map.Length);
+        return accelerator.Allocate1D<Color>(Area);
     }
 
     public Color Average()
@@ -70,7 +74,7 @@ public class FeatureMap
 
     public void CopyFromBuffer(MemoryBuffer1D<Color, Stride1D.Dense> buffer)
     {
-        buffer.CopyToCPU(_map);
+        buffer.AsArrayView<Color>(0, Area).CopyToCPU(_map.ColorsSpan(Area));
     }
 
     public Color Sum()
@@ -98,5 +102,33 @@ public class FeatureMap
         }
 
         return sum;
+    }
+
+    public void CopyFromBuffer(MemoryBuffer1D<float, Stride1D.Dense> buffer)
+    {
+        buffer.CopyToCPU(_map.Floats);
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    private struct UnionMap
+    {
+        [FieldOffset(0)] Color[] _colors;
+        [FieldOffset(0)] float[] _floats;
+
+        public float[] Floats => _floats;
+        public Color[] Colors => _colors;
+        public ReadOnlySpan<Color> ColorsSpanReadonly(int length) => new ReadOnlySpan<Color>(_colors, 0, length);
+        public Span<Color> ColorsSpan(int length) => new Span<Color>(_colors, 0, length);
+
+        public Color this[int index]
+        {
+            get => _colors[index];
+            set => _colors[index] = value;
+        }
+
+        public UnionMap(int length)
+        {
+            _floats = new float[length * 3];
+        }
     }
 }
