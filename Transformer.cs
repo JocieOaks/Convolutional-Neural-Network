@@ -47,13 +47,13 @@ public class Transformer
         return vector;
     }
 
-    public void Backwards(bool[] bools, float[] floats, Vector dL_dT, float learningRate)
+    public void Backwards(bool[] bools, float[] floats, Vector descriptionGradient, float learningRate)
     {
         for(int i = 0; i < _floatMatrix.GetLength(0); i++)
         {
             for(int j = 0; j < _floatMatrix.GetLength(1); j++)
             {
-                _floatMatrix[i, j] -= learningRate * 100 * dL_dT[i] * floats[j];
+                _floatMatrix[i, j] -= learningRate * 100 * descriptionGradient[i] * floats[j];
             }
         }
 
@@ -62,7 +62,7 @@ public class Transformer
             for (int j = 0; j < _boolMatrix.GetLength(1); j++)
             {
                 if (bools[j])
-                    _boolMatrix[i, j] -= learningRate * 100 * dL_dT[i];
+                    _boolMatrix[i, j] -= learningRate * 100 * descriptionGradient[i];
             }
         }
     }

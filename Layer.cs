@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using ILGPU.Runtime.Cuda;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,39 +16,44 @@ public abstract class Layer
     [JsonProperty]
     protected int _dimensions;
 
-    public Layer(int dimensions, int kernalSize, int stride)
+    protected FeatureMap[][] _outputs;
+    protected FeatureMap[][] _outGradients;
+    protected LayerInfo[] _layerInfos;
+
+    public Layer(int kernalSize, int stride, ref FeatureMap[][] input)
     {
         _kernalSize = kernalSize;
         _stride = stride;
-        _dimensions = dimensions;
-    }
-
-    protected void Pad(FeatureMap[] input)
-    {
-        int paddingX = (input[0].Width - _kernalSize) % _stride;
-        int paddingY = (input[0].Length - _kernalSize) % _stride;
-        if (paddingX == 0 && paddingY == 0)
-            return;
-
-        int halfX = paddingX / 2;
-        int halfY = paddingY / 2;
-        for (int k = 0; k < input.Length; k++)
+        _dimensions = input.Length;
+        _layerInfos = new LayerInfo[_dimensions];
+        _outputs = new FeatureMap[input.Length][];
+        _outGradients = new FeatureMap[input.Length][];
+        for(int i = 0; i < _dimensions; i++)
         {
-            FeatureMap padded = new FeatureMap(input[k].Width + paddingX, input[k].Length + paddingY);
-            for (int i = 0; i < input[k].Width; i++)
+            int batchSize = input[i].Length;
+            _outputs[i] = new FeatureMap[batchSize];
+            _outGradients[i] = new FeatureMap[batchSize];
+            LayerInfo layer = _layerInfos[i] = new LayerInfo()
             {
-                for (int j = 0; j < input[k].Length; j++)
-                {
-                    padded[i + halfX, j + halfY] = input[k][i, j];
-                }
+                KernalSize = kernalSize,
+                Stride = stride,
+                InverseKSquared = 1f / (kernalSize * kernalSize),
+                InputWidth = input[i][0].Width,
+                InputLength = input[i][0].Length,
+                OutputWidth = 2 + (input[i][0].Width - (kernalSize + stride)) / stride,
+                OutputLength = 2 + (input[i][0].Length - (kernalSize + stride)) / stride
+            };
+            for (int j = 0; j < batchSize; j++)
+            {
+                _outGradients[i][j] = new FeatureMap(layer.InputWidth, layer.InputLength);
+                _outputs[i][j] = new FeatureMap(layer.OutputWidth, layer.OutputLength);
             }
-            input[k] = padded;
         }
-        return;
+        input = _outputs;
     }
 
     public abstract FeatureMap[][] Forward(FeatureMap[][] input);
 
-    public abstract FeatureMap[][] Backwards(FeatureMap[][] input, FeatureMap[][] dL_dP, float learningRate);
+    public abstract FeatureMap[][] Backwards(FeatureMap[][] input, FeatureMap[][] inGradient, float learningRate);
 }
 

@@ -11,30 +11,22 @@ public class InitialConvolutionLayer : ConvolutionalLayer
     {
     }
 
-    public FeatureMap[][] Forward(FeatureMap[] input)
+    public FeatureMap[][] Forward(FeatureMap[] inputs)
     {
         using (Context context = Context.Create(builder => builder.Cuda()))
         {
             using (Accelerator accelerator = context.CreateCudaAccelerator(0))
             {
-                MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceConvoluted = new MemoryBuffer1D<Color, Stride1D.Dense>[_dimensions, input.Length];
+                MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceConvoluted = new MemoryBuffer1D<Color, Stride1D.Dense>[_dimensions, inputs.Length];
                 
-                for (int j = 0; j < input.Length; j++)
+                for (int j = 0; j < inputs.Length; j++)
                 {
-                    using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = input[j].Allocate(accelerator);
+                    using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = inputs[j].Allocate(accelerator);
                     
                     for (int i = 0; i < _dimensions; i++)
                     {
-                        deviceConvoluted[i, j] = _convoluted[i][j].AllocateEmpty(accelerator);
-                        using MemoryBuffer1D<Color, Stride1D.Dense> deviceKernal = accelerator.Allocate1D(_kernals[i]);
-                        using MemoryBuffer1D<GPUKernalFeatures, Stride1D.Dense> deviceKernalFeatures = accelerator.Allocate1D<GPUKernalFeatures>(new GPUKernalFeatures[] { new GPUKernalFeatures(input[j].Width, _convoluted[i][j].Width, _kernalSize, _stride, _invK2) });
-                        
-                        Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<GPUKernalFeatures>> forwardKernal =
-                            accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<GPUKernalFeatures>>(ForwardKernal);
-                        
-                        Index2D index = new(_convoluted[i][j].Width, _convoluted[i][j].Length);
-                        
-                        forwardKernal(index, deviceInput.View, deviceConvoluted[i, j].View, deviceKernal.View, deviceKernalFeatures.View);
+
+                        deviceConvoluted[i, j] = InitializeForwardKernal(i, deviceInput, accelerator);
                     }
                 }
                 
@@ -42,44 +34,32 @@ public class InitialConvolutionLayer : ConvolutionalLayer
                 
                 for (int i = 0; i < _dimensions; i++)
                 {
-                    for (int j = 0; j < input.Length; j++)
+                    for (int j = 0; j < inputs.Length; j++)
                     {
-                        _convoluted[i][j].CopyFromBuffer(deviceConvoluted[i, j]);
+                        Convoluted[i][j].CopyFromBuffer(deviceConvoluted[i, j]);
                         deviceConvoluted[i, j].Dispose();
                     }
                 }
             }
         }
 
-        return _convoluted;
+        return Convoluted;
     }
 
-    public FeatureMap[][] Backwards(FeatureMap[] input, FeatureMap[][] dL_dP, float learningRate)
+    public FeatureMap[][] Backwards(FeatureMap[] inputs, FeatureMap[][] inGradients, float learningRate)
     {
         using (Context context = Context.Create(builder => builder.Cuda()))
         {
             using (Accelerator accelerator = context.CreateCudaAccelerator(0))
             {
-                MemoryBuffer1D<float, Stride1D.Dense>[] deviceDL_dK = new MemoryBuffer1D<float, Stride1D.Dense>[_dimensions];
-                for (int j = 0; j < input.Length; j++)
+                MemoryBuffer1D<float, Stride1D.Dense>[] deviceKernalGradient = new MemoryBuffer1D<float, Stride1D.Dense>[_dimensions];
+                for (int j = 0; j < inputs.Length; j++)
                 {
-                    using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = input[j].Allocate(accelerator);
+                    using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = inputs[j].Allocate(accelerator);
                     for (int i = 0; i < _dimensions; i++)
                     {
-                        deviceDL_dK[i] = accelerator.Allocate1D<float>(_dL_dK[i].Length);
-                        using MemoryBuffer1D<float, Stride1D.Dense> deviceDL_dPNext = accelerator.Allocate1D<float>(input[j].Area * 3);
-                        using MemoryBuffer1D<Color, Stride1D.Dense> deviceKernal = accelerator.Allocate1D(_kernals[i]);
-                        using MemoryBuffer1D<Color, Stride1D.Dense> deviceDL_dP = dL_dP[i][j].Allocate(accelerator);
-                        using MemoryBuffer1D<GPUKernalFeatures, Stride1D.Dense> deviceKernalFeatures = 
-                            accelerator.Allocate1D(new GPUKernalFeatures[] { new GPUKernalFeatures(input[j].Width, dL_dP[i][j].Width, _kernalSize, _stride, _invK2) });
-
-                        Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<GPUKernalFeatures>> backWardsKernal =
-                            accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<GPUKernalFeatures>>(BackwardsKernal);
-
-                        Index2D index = new(dL_dP[i][j].Width, dL_dP[i][j].Length);
-
-                        backWardsKernal(index, deviceInput.View, deviceKernal.View, deviceDL_dP.View, deviceDL_dPNext.View, deviceDL_dK[i].View, deviceKernalFeatures.View);
-
+                        deviceKernalGradient[i] = accelerator.Allocate1D<float>(_kernalGradient[i].Length);
+                        InitializeBackwardsKernal(i, deviceInput, inGradients[i][j], accelerator, deviceKernalGradient[i]);
                     }
                 }
                 
@@ -87,17 +67,17 @@ public class InitialConvolutionLayer : ConvolutionalLayer
                 
                 for (int i = 0; i < _dimensions; i++)
                 {
-                    deviceDL_dK[i].CopyToCPU(_dL_dK[i]);
-                    deviceDL_dK[i].Dispose();
+                    deviceKernalGradient[i].CopyToCPU(_kernalGradient[i]);
+                    deviceKernalGradient[i].Dispose();
 
                     for (int j = 0; j < _kernalSize * _kernalSize; j++)
                     {
-                        _kernals[i][j] -= learningRate * LEARNINGMULTIPLIER * new Color(_dL_dK[i][j * 3], _dL_dK[i][j * 3 + 1], _dL_dK[i][j * 3 + 2]).Clamp(CLAMP);
+                        _kernals[i][j] -= learningRate * LEARNINGMULTIPLIER * new Color(_kernalGradient[i][j * 3], _kernalGradient[i][j * 3 + 1], _kernalGradient[i][j * 3 + 2]).Clamp(CLAMP);
                     }
                 }
             }
         }
 
-        return _dL_dPNext;
+        return _outGradients;
     }
 }

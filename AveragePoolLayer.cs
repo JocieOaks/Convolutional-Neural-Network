@@ -7,56 +7,35 @@ using System.Runtime.Serialization;
 [Serializable]
 public class AveragePoolLayer : Layer
 {
-    private readonly static float FOURTH = 0.25f;
     float _invK2;
-    private readonly FeatureMap[][] _pooled;
-    private readonly FeatureMap[][] _dL_dPNext;
-    public AveragePoolLayer(int kernalSize, ref FeatureMap[][] input) : base(input.Length, kernalSize, kernalSize)
+    private FeatureMap[][] Pooled => _outputs;
+    public AveragePoolLayer(int kernalSize, ref FeatureMap[][] input) : base(kernalSize, kernalSize, ref input)
     {
-        _invK2 = 1f / (kernalSize * kernalSize);
-        _pooled = new FeatureMap[_dimensions][];
-        _dL_dPNext = new FeatureMap[_dimensions][];
-        for(int i = 0; i < _dimensions; i++)
-        {
-            Pad(input[i]);
-            _pooled[i] = new FeatureMap[input[i].Length];
-            _dL_dPNext[i] = new FeatureMap[input[i].Length];
-            for(int j = 0; j < input[i].Length; j++)
-            {
-                _dL_dPNext[i][j] = new FeatureMap(input[i][j].Width, input[i][j].Length);
-                int width = input[i][j].Width / kernalSize;
-                int length = input[i][j].Length / kernalSize;
-                _pooled[i][j] = new FeatureMap(width, length);
-            }
-        }
-        input = _pooled;
     }
 
-    public AveragePoolLayer() : base(0, 0, 0) { }
-
-    public override FeatureMap[][] Backwards(FeatureMap[][] input, FeatureMap[][] dL_dP, float learningRate)
+    public override FeatureMap[][] Backwards(FeatureMap[][] input, FeatureMap[][] inGradient, float learningRate)
     {
         using (Context context = Context.Create(builder => builder.Cuda()))
         {
             using (Accelerator accelerator = context.CreateCudaAccelerator(0))
             {
-                MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceDL_dPNext = new MemoryBuffer1D<Color, Stride1D.Dense>[_dimensions, dL_dP[0].Length];
+                MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceOutGradient = new MemoryBuffer1D<Color, Stride1D.Dense>[_dimensions, inGradient[0].Length];
 
                 for (int i = 0; i < _dimensions; i++)
                 {
-                    for (int j = 0; j < dL_dP[i].Length; j++)
+                    for (int j = 0; j < inGradient[i].Length; j++)
                     {
-                        deviceDL_dPNext[i, j] = _dL_dPNext[i][j].AllocateEmpty(accelerator);
-                        using MemoryBuffer1D<Color, Stride1D.Dense> deviceDL_dP = dL_dP[i][j].Allocate(accelerator);
-                        using MemoryBuffer1D<GPUKernalFeatures, Stride1D.Dense> deviceKernalFeatures =
-                            accelerator.Allocate1D(new GPUKernalFeatures[] { new GPUKernalFeatures(dL_dP[i][j].Width, _dL_dPNext[i][j].Width, _kernalSize, _stride, _invK2) });
+                        deviceOutGradient[i, j] = _outGradients[i][j].AllocateEmpty(accelerator);
+                        using MemoryBuffer1D<Color, Stride1D.Dense> deviceInGradient = inGradient[i][j].Allocate(accelerator);
+                        using MemoryBuffer1D<LayerInfo, Stride1D.Dense> deviceLayerInfo =
+                            accelerator.Allocate1D(new LayerInfo[] { _layerInfos[i] });
 
-                        Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<GPUKernalFeatures>> forwardKernal =
-                            accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<GPUKernalFeatures>>(BackwardsKernal);
+                        Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>> forwardKernal =
+                            accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(BackwardsKernal);
 
-                        Index2D index = new(_dL_dPNext[i][j].Width, _dL_dPNext[i][j].Length);
+                        Index2D index = new(_outGradients[i][j].Width, _outGradients[i][j].Length);
 
-                        forwardKernal(index, deviceDL_dP.View, deviceDL_dPNext[i, j].View, deviceKernalFeatures.View);
+                        forwardKernal(index, deviceInGradient.View, deviceOutGradient[i, j].View, deviceLayerInfo.View);
 
                     }
                 }
@@ -67,13 +46,13 @@ public class AveragePoolLayer : Layer
                 {
                     for (int j = 0; j < input[i].Length; j++)
                     {
-                        _dL_dPNext[i][j].CopyFromBuffer(deviceDL_dPNext[i, j]);
-                        deviceDL_dPNext[i, j].Dispose();
+                        _outGradients[i][j].CopyFromBuffer(deviceOutGradient[i, j]);
+                        deviceOutGradient[i, j].Dispose();
                     }
                 }
             }
         }
-        return _dL_dPNext;
+        return _outGradients;
     }
 
     public override FeatureMap[][] Forward(FeatureMap[][] input)
@@ -88,17 +67,17 @@ public class AveragePoolLayer : Layer
                 {
                     for (int j = 0; j < input[i].Length; j++)
                     {
-                        devicePooled[i, j] = _pooled[i][j].AllocateEmpty(accelerator);
+                        devicePooled[i, j] = Pooled[i][j].AllocateEmpty(accelerator);
                         using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = input[i][j].Allocate(accelerator);
-                        using MemoryBuffer1D<GPUKernalFeatures, Stride1D.Dense> deviceKernalFeatures =
-                            accelerator.Allocate1D(new GPUKernalFeatures[] { new GPUKernalFeatures(input[i][j].Width, _pooled[i][j].Width, _kernalSize, _stride, _invK2) });
+                        using MemoryBuffer1D<LayerInfo, Stride1D.Dense> deviceLayerInfo =
+                            accelerator.Allocate1D(new LayerInfo[] { _layerInfos[i] });
 
-                        Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<GPUKernalFeatures>> forwardKernal =
-                            accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<GPUKernalFeatures>>(ForwardKernal);
+                        Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>> forwardKernal =
+                            accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(ForwardKernal);
 
-                        Index2D index = new(_pooled[i][j].Width, _pooled[i][j].Length);
+                        Index2D index = new(Pooled[i][j].Width, Pooled[i][j].Length);
 
-                        forwardKernal(index, deviceInput.View, devicePooled[i, j].View, deviceKernalFeatures.View);
+                        forwardKernal(index, deviceInput.View, devicePooled[i, j].View, deviceLayerInfo.View);
 
                     }
                 }
@@ -109,13 +88,13 @@ public class AveragePoolLayer : Layer
                 {
                     for (int j = 0; j < input[i].Length; j++)
                     {
-                        _pooled[i][j].CopyFromBuffer(devicePooled[i, j]);
+                        Pooled[i][j].CopyFromBuffer(devicePooled[i, j]);
                         devicePooled[i, j].Dispose();
                     }
                 }
             }
         }
-        return _pooled;
+        return Pooled;
     }
 
     [OnDeserialized]
@@ -124,45 +103,25 @@ public class AveragePoolLayer : Layer
         _invK2 = 1f / (_kernalSize * _kernalSize);
     }
 
-    void Backwards(FeatureMap[] dL_dP, FeatureMap[] dL_dPNext)
+    private static void BackwardsKernal(Index2D index, ArrayView<Color> inGradient, ArrayView<Color> outGradient, ArrayView<LayerInfo> layer)
     {
-        for (int i = 0; i < dL_dP.Length; i++)
-        {
-            Backwards(dL_dP[i], dL_dPNext[i]);
-        }
+        //Unlike other Backwards Kernals, this kernal indexes by the outGradient rather than the inGradient, so the equations for index are inverted.
+        int inGradientIndex = (index.Y / layer[0].KernalSize) * layer[0].OutputWidth  + index.X / layer[0].KernalSize;
+        int outGradientIndex = index.Y * layer[0].InputWidth + index.X;
+        outGradient[outGradientIndex] = inGradient[inGradientIndex] * layer[0].InverseKSquared;
     }
 
-    private void Backwards(FeatureMap dL_dP, FeatureMap dL_dPNext)
+    private static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> pooled, ArrayView<LayerInfo> info)
     {
-
-        for (int y = 0; y < dL_dPNext.Length; y++)
+        Color sum = new();
+        for(int j = 0; j < info[0].KernalSize; j++)
         {
-            for (int x = 0; x < dL_dPNext.Width; x++)
+            for(int i = 0; i < info[0].KernalSize; i++)
             {
-                dL_dPNext[x, y] = dL_dP[x / _kernalSize, y / _kernalSize] * _invK2;
+                if (info[0].TryGetInputIndex(index.X, i, index.Y, j, out int inputIndex))
+                    sum += input[inputIndex];
             }
         }
-    }
-
-    private static void BackwardsKernal(Index2D index, ArrayView<Color> dL_dP, ArrayView<Color> dL_dPNext, ArrayView<GPUKernalFeatures> kF)
-    {
-        int position = (index.Y / kF[0].KernalSize) * kF[0].InputWidth  + index.X / kF[0].KernalSize;
-        int nextPosition = index.Y * kF[0].OutputWidth + index.X;
-        dL_dPNext[nextPosition] = dL_dP[position] * kF[0].InverseKSquared;
-    }
-
-    private static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> pooled, ArrayView<GPUKernalFeatures> kF)
-    {
-        int offset = index.Y * kF[0].Stride * kF[0].InputWidth + index.X * kF[0].Stride;
-        Color sum = new Color();
-        for(int j = 0; j < kF[0].KernalSize; j++)
-        {
-            for(int i = 0; i < kF[0].KernalSize; i++)
-            {
-                sum += input[offset + i];
-            }
-            offset += kF[0].InputWidth;
-        }
-        pooled[index.Y * kF[0].OutputWidth + index.X] = sum * kF[0].InverseKSquared;
+        pooled[info[0].OutputIndex(index.X, index.Y)] = sum * info[0].InverseKSquared;
     }
 }

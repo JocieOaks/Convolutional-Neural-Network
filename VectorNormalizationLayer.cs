@@ -23,29 +23,29 @@ public static class VectorNormalizationLayer
         return input.Normalized();
     }
 
-    public static Vector[] Backwards(Vector[] input, Vector[] dL_dV)
+    public static Vector[] Backwards(Vector[] input, Vector[] inGradients)
     {
-        Vector[] vectors = new Vector[input.Length];
-        for(int i = 0; i < vectors.Length ; i++)
+        Vector[] outGradients = new Vector[input.Length];
+        for(int i = 0; i < outGradients.Length ; i++)
         {
-            vectors[i] = Backwards(input[i], dL_dV[i]);
+            outGradients[i] = Backwards(input[i], inGradients[i]);
         }
-        return vectors;
+        return outGradients;
     }
 
-    public static Vector Backwards(Vector input, Vector dL_dV)
+    public static Vector Backwards(Vector input, Vector inGradient)
     {
         float magnitude = input.Magnitude;
         float invMagnitude = 1 / magnitude;
 
-        Vector dL_dVNext = new Vector(dL_dV.Length);
+        Vector outGradient = new Vector(inGradient.Length);
 
-        for(int i = 0; i < dL_dV.Length; i++)
+        for(int i = 0; i < inGradient.Length; i++)
         {
-            dL_dVNext[i] = (magnitude - input[i] * input[i] * invMagnitude) * invMagnitude * invMagnitude * dL_dV[i];
+            outGradient[i] = (magnitude - input[i] * input[i] * invMagnitude) * invMagnitude * invMagnitude * inGradient[i];
         }
 
-        return dL_dVNext;
+        return outGradient;
     }
 
 }

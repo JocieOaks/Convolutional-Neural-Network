@@ -13,7 +13,7 @@ public class BackPropogationTest
     FeatureMap[][] _oldPropagation;
     FeatureMap[][] _newPropagation;
 
-    ConvolutionalLayerGPU _layerGPU;
+    ConvolutionalLayer _layerGPU;
     ConvolutionalLayer _layer;
 
     public BackPropogationTest()
@@ -35,7 +35,7 @@ public class BackPropogationTest
         }
 
         FeatureMap[][] current = _initialInput;
-        _layerGPU = new ConvolutionalLayerGPU(3, 1, ref current);
+        _layerGPU = new ConvolutionalLayer(3, 1, ref current);
         current = _initialInput;
         _layer = new ConvolutionalLayer(3, 1, ref current);
     }
@@ -58,7 +58,7 @@ public class BackPropogationTest
 
     public Vector Gradient(float loss)
     {
-        Vector dL_dP = new Vector(4)* 2;
+        Vector gradient = new Vector(4)* 2;
         /*FeatureMap[][] dL_dP = new FeatureMap[_finalOutput.Length][];
         for (int i = 0; i < _finalOutput.Length; i++)
         {
@@ -78,7 +78,7 @@ public class BackPropogationTest
                 }
             }
         }*/
-        return dL_dP;
+        return gradient;
     }
 
     public void Forward()
@@ -100,11 +100,11 @@ public class BackPropogationTest
 
     public void Backward(Vector gradient, float testLearningRate, float propLearningRate)
     {
-        FeatureMap[][] dL_dP = new FeatureMap[1][];
-        dL_dP[0] = new FeatureMap[1];
-        dL_dP[0][0] = new FeatureMap(_oldPropagation[0][0].Width, _oldPropagation[0][0].Length, new Color(0.5f, -0.5f, 1f));
-        _oldPropagation = _layer.Backwards(_initialInput, dL_dP, 1);
-        _newPropagation = _layerGPU.Backwards(_initialInput, dL_dP, 1);
+        FeatureMap[][] imageGradient = new FeatureMap[1][];
+        imageGradient[0] = new FeatureMap[1];
+        imageGradient[0][0] = new FeatureMap(_oldPropagation[0][0].Width, _oldPropagation[0][0].Length, new Color(0.5f, -0.5f, 1f));
+        _oldPropagation = _layer.Backwards(_initialInput, imageGradient, 1);
+        _newPropagation = _layerGPU.Backwards(_initialInput, imageGradient, 1);
 
         for (int i = 0; i < _oldPropagation[0][0].Width; i++)
         {

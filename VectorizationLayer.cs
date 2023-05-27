@@ -8,7 +8,7 @@ public class VectorizationLayer
 {
     [JsonProperty] readonly FeatureMap _matrix;
     ColorVector[] _vectors;
-    FeatureMap[][] _dL_dP;
+    FeatureMap[][] _featureMapGradient;
     public VectorizationLayer(int vectorDimensions, FeatureMap[][] input)
     {
         int featureMapDimensions = input.Length;
@@ -18,15 +18,15 @@ public class VectorizationLayer
         _matrix = new FeatureMap(vectorDimensions, featureMapDimensions);
 
         _vectors = new ColorVector[batchSize];
-        _dL_dP = new FeatureMap[batchSize][];
+        _featureMapGradient = new FeatureMap[batchSize][];
 
         for(int i = 0; i < batchSize; i++)
         {
             _vectors[i] = new ColorVector(featureMapDimensions);
-            _dL_dP[i] = new FeatureMap[featureMapDimensions];
+            _featureMapGradient[i] = new FeatureMap[featureMapDimensions];
             for(int j = 0; j < featureMapDimensions; j++)
             {
-                _dL_dP[i][j] = new FeatureMap(input[j][i].Width, input[j][i].Length);
+                _featureMapGradient[i][j] = new FeatureMap(input[j][i].Width, input[j][i].Length);
             }
         }
 
@@ -60,29 +60,29 @@ public class VectorizationLayer
         return _matrix * vector;
     }
 
-    public FeatureMap[][] Backwards(Vector[] dL_dI, float learningRate)
+    public FeatureMap[][] Backwards(Vector[] vectorGradient, float learningRate)
     {
-        for(int i = 0; i < dL_dI.Length; i++)
+        for(int i = 0; i < vectorGradient.Length; i++)
         {
-            Backwards(_dL_dP[i], dL_dI[i], _vectors[i], learningRate);
+            Backwards(_featureMapGradient[i], vectorGradient[i], _vectors[i], learningRate);
         }
 
-        return _dL_dP;
+        return _featureMapGradient;
     }
 
-    public FeatureMap[] Backwards(FeatureMap[] dL_dP, Vector dL_dI, ColorVector vector, float learningRate)
+    public FeatureMap[] Backwards(FeatureMap[] featureMapGradient, Vector vectorGradient, ColorVector vector, float learningRate)
     {
-        float _xy = 1f / dL_dP[0].Area;
+        float _xy = 1f / featureMapGradient[0].Area;
 
-        ColorVector dL_dPV = _xy * dL_dI * _matrix;
+        ColorVector pixelGradient = _xy * vectorGradient * _matrix;
 
-        for(int i = 0; i < dL_dP.Length; i++)
+        for(int i = 0; i < featureMapGradient.Length; i++)
         {
-            for(int j = 0; j < dL_dP[i].Length; j++)
+            for(int j = 0; j < featureMapGradient[i].Length; j++)
             {
-                for(int k = 0; k < dL_dP[i].Width; k++)
+                for(int k = 0; k < featureMapGradient[i].Width; k++)
                 {
-                    dL_dP[i][k, j] = dL_dPV[i];
+                    featureMapGradient[i][k, j] = pixelGradient[i];
                 }
             }
         }
@@ -91,11 +91,11 @@ public class VectorizationLayer
         {
             for (int i = 0; i < _matrix.Width; i++)
             {
-                Color val = dL_dI[i] * vector[j];
+                Color val = vectorGradient[i] * vector[j];
                 _matrix[i, j] -= learningRate * val;
             }
         }
 
-        return dL_dP;
+        return featureMapGradient;
     }
 }

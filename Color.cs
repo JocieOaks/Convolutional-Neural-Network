@@ -8,31 +8,6 @@ using System.Data.Common;
 using System.Diagnostics.Contracts;
 using System.Runtime.InteropServices;
 
-public struct AtomicAddColor : IAtomicOperation<Color>
-{
-    public Color Operation(Color current, Color value)
-    {
-        return current + value;
-    }
-}
-
-public struct AtomicCompareExchangeColor : ICompareExchangeOperation<Color>
-{
-    public Color CompareExchange(ref Color target, Color compare, Color value)
-    {
-        if (IsSame(target, compare))
-        {
-            target = value;
-        }
-        return compare;
-    }
-
-    public bool IsSame(Color left, Color right)
-    {
-        return left.R == right.R && left.G == right.G && left.B == right.B;
-    }
-}
-
 [Serializable]
 [StructLayout(LayoutKind.Sequential, Size = 12)]
 public readonly struct Color
@@ -77,6 +52,19 @@ public readonly struct Color
     public float Magnitude => MathF.Sqrt(R * R + G * G + B * B);
 
     public float R { get; }
+
+    public float this[int index]
+    {
+        get
+        {
+            return index switch
+            {
+                0 => R,
+                1 => G,
+                _ => B
+            };
+        }
+    }
 
     [JsonIgnore]
     public float SquareMagnitude => R * R + G * G + B * B;

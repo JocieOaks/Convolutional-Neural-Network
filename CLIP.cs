@@ -168,42 +168,40 @@ public class CLIP
         return mean + stdDev * randStdNormal; //random normal(mean,stdDev^2)
     }
 
-    public void Backwards((Vector[] dL_dI, Vector[] dL_dD) gradients, (FeatureMap image, bool[] bools, float[] floats)[] input, float learningRate)
+    public void Backwards((Vector[] image, Vector[] description) gradients, (FeatureMap image, bool[] bools, float[] floats)[] input, float learningRate)
     {
         FeatureMap[] images = new FeatureMap[_batchSize];
         for (int i = 0; i < _batchSize; i++)
         {
             images[i] = input[i].image;
 
-            _transformer.Backwards(input[i].bools, input[i].floats, VectorNormalizationLayer.Backwards(_descriptionVectors[i], gradients.dL_dD[i]), learningRate);
+            _transformer.Backwards(input[i].bools, input[i].floats, VectorNormalizationLayer.Backwards(_descriptionVectors[i], gradients.description[i]), learningRate);
         }
 
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        FeatureMap[][] transposed = new FeatureMap[_batchSize][];
-
-        transposed = _vectorizationLayer.Backwards(VectorNormalizationLayer.Backwards(_imageVectors, gradients.dL_dI), learningRate);
+        FeatureMap[][] transposedGradient = _vectorizationLayer.Backwards(VectorNormalizationLayer.Backwards(_imageVectors, gradients.image), learningRate);
         
         watch.Stop();
         var elapsedMs = watch.ElapsedMilliseconds;
         Console.WriteLine($"Backwards Vectorization Time: {elapsedMs / 1000f} s");
 
-        FeatureMap[][] current = TransposeArray(transposed);
+        FeatureMap[][] currentGradient = TransposeArray(transposedGradient);
 
         for (int j = Depth - 1; j > 0; j--)
         {
             watch = System.Diagnostics.Stopwatch.StartNew();
-            current = _layers[j].Backwards(_featureMaps[j - 1], current, learningRate);
+            currentGradient = _layers[j].Backwards(_featureMaps[j - 1], currentGradient, learningRate);
             watch.Stop();
             elapsedMs = watch.ElapsedMilliseconds;
             Console.WriteLine($"Backwards {j} Layer Time: {elapsedMs / 1000f} s");
         }
         watch = System.Diagnostics.Stopwatch.StartNew();
-        current = _layers[0].Backwards(_initialFeatureMaps, current, learningRate);
+        currentGradient = _layers[0].Backwards(_initialFeatureMaps, currentGradient, learningRate);
         watch.Stop();
         elapsedMs = watch.ElapsedMilliseconds;
         Console.WriteLine($"Backwards 0 Layer Time: {elapsedMs / 1000f} s");
         watch = System.Diagnostics.Stopwatch.StartNew();
-        _initialConvolutionLayer.Backwards(images, current, learningRate);
+        _initialConvolutionLayer.Backwards(images, currentGradient, learningRate);
         watch.Stop();
         elapsedMs = watch.ElapsedMilliseconds;
         Console.WriteLine($"Backwards Initial Convolution Time: {elapsedMs / 1000f} s");
