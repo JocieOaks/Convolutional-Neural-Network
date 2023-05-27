@@ -8,9 +8,29 @@ using System.Threading.Tasks;
 public static class VectorNormalizationLayer
 {
 
+    public static Vector[] Forward(Vector[] input)
+    {
+        Vector[] vectors = new Vector[input.Length];
+        for(int i = 0; i < vectors.Length; i++)
+        {
+            vectors[i] = Forward(input[i]);
+        }
+        return vectors;
+    }
+
     public static Vector Forward(Vector input)
     {
         return input.Normalized();
+    }
+
+    public static Vector[] Backwards(Vector[] input, Vector[] dL_dV)
+    {
+        Vector[] vectors = new Vector[input.Length];
+        for(int i = 0; i < vectors.Length ; i++)
+        {
+            vectors[i] = Backwards(input[i], dL_dV[i]);
+        }
+        return vectors;
     }
 
     public static Vector Backwards(Vector input, Vector dL_dV)

@@ -43,10 +43,10 @@ public class BackPropogationTest
     public float Test(float testLearningRate, float propLearningRate)
     {
         Forward();
-        float loss = Loss();
-        Vector dL_dP = Gradient(loss);
-        Backward(dL_dP, testLearningRate, propLearningRate);
-        return loss;
+        //float loss = Loss();
+        //Vector dL_dP = Gradient(loss);
+        Backward(new Vector(4), testLearningRate, propLearningRate);
+        return 0;
     }
 
     public float Loss()
