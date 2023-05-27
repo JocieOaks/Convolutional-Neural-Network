@@ -10,11 +10,11 @@ public class BackPropogationTest
 {
 
     readonly FeatureMap[][] _initialInput;
-    FeatureMap[][] _intermediate;
-    Vector _finalOutput;
+    FeatureMap[][] _oldPropagation;
+    FeatureMap[][] _newPropagation;
 
-    VectorizationLayer _testLayer;
-    Layer _impactLayer;
+    ConvolutionalLayerGPU _layerGPU;
+    ConvolutionalLayer _layer;
 
     public BackPropogationTest()
     {
@@ -29,13 +29,15 @@ public class BackPropogationTest
             {
                 for (int j = 0; j < 20; j++)
                 {
-                    _initialInput[0][0][i, j] = Color.RandomGauss(0, 0.3f);
+                    _initialInput[0][0][i, j] = new Color(i % 4 * 0.25f, j % 4 * 0.25f, -i % 4 * 0.25f);
                 }
             }
         }
 
-        //_testLayer = new VectorizationLayer(5, 1);
-        //_impactLayer = new ConvolutionalLayer(1, 3, 1);
+        FeatureMap[][] current = _initialInput;
+        _layerGPU = new ConvolutionalLayerGPU(3, 1, ref current);
+        current = _initialInput;
+        _layer = new ConvolutionalLayer(3, 1, ref current);
     }
 
     public float Test(float testLearningRate, float propLearningRate)
@@ -50,17 +52,13 @@ public class BackPropogationTest
     public float Loss()
     {
         float sum = 0;
-        for(int i = 0; i < _finalOutput.Length; i++)
-        {
-            sum += MathF.Pow(_finalOutput[i], 2);
-        }
 
         return sum;
     }
 
     public Vector Gradient(float loss)
     {
-        Vector dL_dP = _finalOutput * 2;
+        Vector dL_dP = new Vector(4)* 2;
         /*FeatureMap[][] dL_dP = new FeatureMap[_finalOutput.Length][];
         for (int i = 0; i < _finalOutput.Length; i++)
         {
@@ -85,15 +83,39 @@ public class BackPropogationTest
 
     public void Forward()
     {
-        _intermediate = _impactLayer.Forward(_initialInput);
-        _finalOutput = _testLayer.Forward(_intermediate[0]);
+        _oldPropagation = _layer.Forward(_initialInput);
+        _newPropagation = _layerGPU.Forward(_initialInput);
+
+        for(int i = 0; i < _oldPropagation[0][0].Width; i++)
+        {
+            for(int j = 0; j < _oldPropagation[0][0].Length; j++)
+            {
+                Color old = _oldPropagation[0][0][j, i];
+                Color New = _newPropagation[0][0][j, i];
+                if (old.R != New.R || old.G != New.G || old.B != New.B)
+                    Console.WriteLine($"Forward Old: {old} \t New: {New}");
+            }
+        }
     }
 
     public void Backward(Vector gradient, float testLearningRate, float propLearningRate)
     {
         FeatureMap[][] dL_dP = new FeatureMap[1][];
-        dL_dP[0] = _testLayer.Backwards(_intermediate[0], gradient, (float)testLearningRate);
-        _impactLayer.Backwards(_initialInput, dL_dP, propLearningRate);
+        dL_dP[0] = new FeatureMap[1];
+        dL_dP[0][0] = new FeatureMap(_oldPropagation[0][0].Width, _oldPropagation[0][0].Length, new Color(0.5f, -0.5f, 1f));
+        _oldPropagation = _layer.Backwards(_initialInput, dL_dP, 1);
+        _newPropagation = _layerGPU.Backwards(_initialInput, dL_dP, 1);
+
+        for (int i = 0; i < _oldPropagation[0][0].Width; i++)
+        {
+            for (int j = 0; j < _oldPropagation[0][0].Length; j++)
+            {
+                Color old = _oldPropagation[0][0][j, i];
+                Color New = _newPropagation[0][0][j, i];
+                if (old.R != New.R || old.G != New.G || old.B != New.B)
+                    Console.WriteLine($"Backwards Old: {old} \t New: {New}");
+            }
+        }
     }
 }
 
