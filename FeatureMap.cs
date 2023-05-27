@@ -15,14 +15,14 @@ using System.Xml.Serialization;
 public class FeatureMap
 {
 
-    [JsonProperty] UnionMap _map;
+    [JsonProperty] Color[] _map;
 
     public FeatureMap(int width, int length)
     {
         Width = width;
         Length = length;
 
-        _map = new UnionMap(width * length);
+        _map = new Color[width * length];
     }
 
     public FeatureMap(int width, int length, Color initial) : this(width, length)
@@ -39,7 +39,7 @@ public class FeatureMap
         }
     }
 
-    [JsonIgnore] public int Area => Length * Width;
+    [JsonIgnore] public int Area => _map.Length;
 
     [JsonIgnore] public int Length { get; }
 
@@ -52,9 +52,7 @@ public class FeatureMap
     }
     public MemoryBuffer1D<Color, Stride1D.Dense> Allocate(Accelerator accelerator)
     {
-        MemoryBuffer1D<Color, Stride1D.Dense> buffer = accelerator.Allocate1D<Color>(Area);
-        buffer.AsArrayView<Color>(0, Area).CopyFromCPU(_map.ColorsSpanReadonly(Area));
-        return buffer;
+        return accelerator.Allocate1D(_map);
     }
 
     public MemoryBuffer1D<Color, Stride1D.Dense> AllocateEmpty(Accelerator accelerator)
@@ -74,7 +72,7 @@ public class FeatureMap
 
     public void CopyFromBuffer(MemoryBuffer1D<Color, Stride1D.Dense> buffer)
     {
-        buffer.AsArrayView<Color>(0, Area).CopyToCPU(_map.ColorsSpan(Area));
+        buffer.CopyToCPU(_map);
     }
 
     public Color Sum()
@@ -106,29 +104,13 @@ public class FeatureMap
 
     public void CopyFromBuffer(MemoryBuffer1D<float, Stride1D.Dense> buffer)
     {
-        buffer.CopyToCPU(_map.Floats);
-    }
-
-    [StructLayout(LayoutKind.Explicit)]
-    private struct UnionMap
-    {
-        [FieldOffset(0)] Color[] _colors;
-        [FieldOffset(0)] float[] _floats;
-
-        public float[] Floats => _floats;
-        public Color[] Colors => _colors;
-        public ReadOnlySpan<Color> ColorsSpanReadonly(int length) => new ReadOnlySpan<Color>(_colors, 0, length);
-        public Span<Color> ColorsSpan(int length) => new Span<Color>(_colors, 0, length);
-
-        public Color this[int index]
+        unsafe
         {
-            get => _colors[index];
-            set => _colors[index] = value;
-        }
-
-        public UnionMap(int length)
-        {
-            _floats = new float[length * 3];
+            fixed (void* ptr = &_map[0])
+            {
+                Span<float> span = new Span<float>(ptr, Area * 3);
+                buffer.AsArrayView<float>(0, Area * 3).CopyToCPU(span);
+            } 
         }
     }
 }
