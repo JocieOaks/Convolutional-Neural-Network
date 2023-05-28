@@ -1,6 +1,7 @@
 ﻿// See https://aka.ms/new-console-template for more information
 using Newtonsoft.Json;
 using System.Drawing.Drawing2D;
+using System.Numerics;
 using System.Xml;
 
 [Serializable]
@@ -8,25 +9,24 @@ public class VectorizationLayer
 {
     [JsonProperty] readonly FeatureMap _matrix;
     ColorVector[] _vectors;
-    FeatureMap[][] _featureMapGradient;
-    public VectorizationLayer(int vectorDimensions, FeatureMap[][] input)
+    FeatureMap[,] _transposedGradient;
+    public VectorizationLayer(int vectorDimensions, FeatureMap[,] input)
     {
-        int featureMapDimensions = input.Length;
-        int batchSize = input[0].Length;
+        int featureMapDimensions = input.GetLength(0);
+        int batchSize = input.GetLength(1);
         float variance = 2f / (3 * featureMapDimensions + vectorDimensions);
         float stdDev = MathF.Sqrt(variance);
         _matrix = new FeatureMap(vectorDimensions, featureMapDimensions);
 
         _vectors = new ColorVector[batchSize];
-        _featureMapGradient = new FeatureMap[batchSize][];
+        _transposedGradient = new FeatureMap[batchSize, featureMapDimensions];
 
         for(int i = 0; i < batchSize; i++)
         {
             _vectors[i] = new ColorVector(featureMapDimensions);
-            _featureMapGradient[i] = new FeatureMap[featureMapDimensions];
             for(int j = 0; j < featureMapDimensions; j++)
             {
-                _featureMapGradient[i][j] = new FeatureMap(input[j][i].Width, input[j][i].Length);
+                _transposedGradient[i,j] = new FeatureMap(input[j, i].Width, input[j, i].Length);
             }
         }
 
@@ -39,50 +39,46 @@ public class VectorizationLayer
         }
     }
 
-    public Vector[] Forward(FeatureMap[][] input)
+    public Vector[] Forward(FeatureMap[,] inputTransposed)
     {
-        Vector[] vectors = new Vector[input.Length];
-        for(int i = 0; i < input.Length; i++)
+        Vector[] vectors = new Vector[inputTransposed.GetLength(0)];
+        for(int i = 0; i < inputTransposed.GetLength(0); i++)
         {
-            vectors[i] = Forward(input[i], _vectors[i]);
+            ColorVector vector = new ColorVector(inputTransposed.GetLength(1));
+            for (int j = 0; j < inputTransposed.GetLength(1); j++)
+            {
+                vector[j] = inputTransposed[i, j].Average();
+            }
+
+            vectors[i] = _matrix * vector;
         }
 
         return vectors;
     }
 
-    public Vector Forward(FeatureMap[] input, ColorVector vector) 
-    { 
-        for(int i = 0; i < input.Length; i++)
-        {
-            vector[i] = input[i].Average();
-        }
-
-        return _matrix * vector;
-    }
-
-    public FeatureMap[][] Backwards(Vector[] vectorGradient, float learningRate)
+    public FeatureMap[,] Backwards(Vector[] vectorGradient, float learningRate)
     {
         for(int i = 0; i < vectorGradient.Length; i++)
         {
-            Backwards(_featureMapGradient[i], vectorGradient[i], _vectors[i], learningRate);
+            Backwards(i, vectorGradient[i], _vectors[i], learningRate);
         }
 
-        return _featureMapGradient;
+        return _transposedGradient;
     }
 
-    public FeatureMap[] Backwards(FeatureMap[] featureMapGradient, Vector vectorGradient, ColorVector vector, float learningRate)
+    public void Backwards(int batch, Vector vectorGradient, ColorVector vector, float learningRate)
     {
-        float _xy = 1f / featureMapGradient[0].Area;
+        float _xy = 1f / _transposedGradient[batch, 0].Area;
 
         ColorVector pixelGradient = _xy * vectorGradient * _matrix;
 
-        for(int i = 0; i < featureMapGradient.Length; i++)
+        for(int i = 0; i < _transposedGradient.GetLength(1); i++)
         {
-            for(int j = 0; j < featureMapGradient[i].Length; j++)
+            for(int j = 0; j < _transposedGradient[batch, i].Length; j++)
             {
-                for(int k = 0; k < featureMapGradient[i].Width; k++)
+                for(int k = 0; k < _transposedGradient[batch, i].Width; k++)
                 {
-                    featureMapGradient[i][k, j] = pixelGradient[i];
+                    _transposedGradient[batch, i][k, j] = pixelGradient[i];
                 }
             }
         }
@@ -95,7 +91,5 @@ public class VectorizationLayer
                 _matrix[i, j] -= learningRate * val;
             }
         }
-
-        return featureMapGradient;
     }
 }

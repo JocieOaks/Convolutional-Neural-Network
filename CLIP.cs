@@ -30,22 +30,21 @@ public class CLIP
 
     Vector[] _descriptionVectors;
     private Vector[] _descriptionVectorsNorm;
-    private FeatureMap[][][] _featureMaps;
+    private FeatureMap[][,] _featureMaps;
     Vector[] _imageVectors;
     private Vector[] _imageVectorsNorm;
     //Used to avoid divide by zero or log of zero going to infinity.
-    private FeatureMap[][] _initialFeatureMaps;
+    private FeatureMap[,] _initialFeatureMaps;
 
-    private FeatureMap[][] _transposedFinalFeatureMap;
+    private FeatureMap[,] _transposedFinalFeatureMap;
     public CLIP(int depth, int dimensions, int vectorDimensions, int batchSize, int descriptionBoolLength, int descriptionFloatLength, int width, int length)
     {
-        FeatureMap[][] input = new FeatureMap[dimensions][];
+        FeatureMap[,] input = new FeatureMap[dimensions, batchSize];
         for (int i = 0; i < dimensions; i++)
         {
-            input[i] = new FeatureMap[batchSize];
             for (int j = 0; j < batchSize; j++)
             {
-                input[i][j] = new FeatureMap(width, length);
+                input[i, j] = new FeatureMap(width, length);
             }
         }
 
@@ -67,7 +66,7 @@ public class CLIP
                 _layers.Add(new AveragePoolLayer(2, ref input));
         }
         _vectorizationLayer = new VectorizationLayer(vectorDimensions, input);
-        _featureMaps = new FeatureMap[Depth][][];
+        _featureMaps = new FeatureMap[Depth][,];
     }
 
     public CLIP() { }
@@ -179,13 +178,13 @@ public class CLIP
         }
 
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        FeatureMap[][] transposedGradient = _vectorizationLayer.Backwards(VectorNormalizationLayer.Backwards(_imageVectors, gradients.image), learningRate);
+        FeatureMap[,] transposedGradient = _vectorizationLayer.Backwards(VectorNormalizationLayer.Backwards(_imageVectors, gradients.image), learningRate);
         
         watch.Stop();
         var elapsedMs = watch.ElapsedMilliseconds;
         Console.WriteLine($"Backwards Vectorization Time: {elapsedMs / 1000f} s");
 
-        FeatureMap[][] currentGradient = TransposeArray(transposedGradient);
+        FeatureMap[,] currentGradient = TransposeArray(transposedGradient);
 
         for (int j = Depth - 1; j > 0; j--)
         {
@@ -209,7 +208,7 @@ public class CLIP
 
     public void Forward((FeatureMap image, bool[] bools, float[] floats)[] input)
     {
-        FeatureMap[][] current;
+        FeatureMap[,] current;
         FeatureMap[] images = new FeatureMap[_batchSize];
         for (int i = 0; i < _batchSize; i++)
         {
@@ -293,7 +292,7 @@ public class CLIP
     {
         _imageVectorsNorm = new Vector[_batchSize];
         _descriptionVectorsNorm = new Vector[_batchSize];
-        _featureMaps = new FeatureMap[Depth][][];
+        _featureMaps = new FeatureMap[Depth][,];
     }
 
     public void SaveToFile(string file)
@@ -558,7 +557,7 @@ public class CLIP
 
     private static T[,] TransposeArray<T>(T[,] array)
     {
-        T[,] transposed = new T[array.GetLength(0), array.GetLength(1)];
+        T[,] transposed = new T[array.GetLength(1), array.GetLength(0)];
         for (int i = 0; i < transposed.GetLength(0); i++)
         {
             for (int j = 0; j < transposed.GetLength(1); j++)

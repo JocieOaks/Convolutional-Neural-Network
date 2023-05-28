@@ -8,32 +8,32 @@ using System.Runtime.Serialization;
 public class AveragePoolLayer : Layer
 {
     float _invK2;
-    private FeatureMap[][] Pooled => _outputs;
-    public AveragePoolLayer(int kernalSize, ref FeatureMap[][] input) : base(kernalSize, kernalSize, ref input)
+    private FeatureMap[,] Pooled => _outputs;
+    public AveragePoolLayer(int kernalSize, ref FeatureMap[,] input) : base(kernalSize, kernalSize, ref input)
     {
     }
 
-    public override FeatureMap[][] Backwards(FeatureMap[][] input, FeatureMap[][] inGradient, float learningRate)
+    public override FeatureMap[,] Backwards(FeatureMap[,] input, FeatureMap[,] inGradient, float learningRate)
     {
         using (Context context = Context.Create(builder => builder.Cuda()))
         {
             using (Accelerator accelerator = context.CreateCudaAccelerator(0))
             {
-                MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceOutGradient = new MemoryBuffer1D<Color, Stride1D.Dense>[_dimensions, inGradient[0].Length];
+                MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceOutGradient = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, inGradient.GetLength(1)];
 
-                for (int i = 0; i < _dimensions; i++)
+                for (int i = 0; i < _inputDimensions; i++)
                 {
-                    for (int j = 0; j < inGradient[i].Length; j++)
+                    for (int j = 0; j < inGradient.GetLength(1); j++)
                     {
-                        deviceOutGradient[i, j] = _outGradients[i][j].AllocateEmpty(accelerator);
-                        using MemoryBuffer1D<Color, Stride1D.Dense> deviceInGradient = inGradient[i][j].Allocate(accelerator);
+                        deviceOutGradient[i, j] = _outGradients[i, j].AllocateEmpty(accelerator);
+                        using MemoryBuffer1D<Color, Stride1D.Dense> deviceInGradient = inGradient[i, j].Allocate(accelerator);
                         using MemoryBuffer1D<LayerInfo, Stride1D.Dense> deviceLayerInfo =
                             accelerator.Allocate1D(new LayerInfo[] { _layerInfos[i] });
 
                         Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>> forwardKernal =
                             accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(BackwardsKernal);
 
-                        Index2D index = new(_outGradients[i][j].Width, _outGradients[i][j].Length);
+                        Index2D index = new(_outGradients[i,j].Width, _outGradients[i,j].Length);
 
                         forwardKernal(index, deviceInGradient.View, deviceOutGradient[i, j].View, deviceLayerInfo.View);
 
@@ -42,11 +42,11 @@ public class AveragePoolLayer : Layer
 
                 accelerator.Synchronize();
 
-                for (int i = 0; i < _dimensions; i++)
+                for (int i = 0; i < _inputDimensions; i++)
                 {
-                    for (int j = 0; j < input[i].Length; j++)
+                    for (int j = 0; j < input.GetLength(1); j++)
                     {
-                        _outGradients[i][j].CopyFromBuffer(deviceOutGradient[i, j]);
+                        _outGradients[i,j].CopyFromBuffer(deviceOutGradient[i, j]);
                         deviceOutGradient[i, j].Dispose();
                     }
                 }
@@ -55,27 +55,27 @@ public class AveragePoolLayer : Layer
         return _outGradients;
     }
 
-    public override FeatureMap[][] Forward(FeatureMap[][] input)
+    public override FeatureMap[,] Forward(FeatureMap[,] input)
     {
         using (Context context = Context.Create(builder => builder.Cuda()))
         {
             using (Accelerator accelerator = context.CreateCudaAccelerator(0))
             {
-                MemoryBuffer1D<Color, Stride1D.Dense>[,] devicePooled = new MemoryBuffer1D<Color, Stride1D.Dense>[_dimensions, input[0].Length];
+                MemoryBuffer1D<Color, Stride1D.Dense>[,] devicePooled = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, input.GetLength(1)];
 
-                for (int i = 0; i < _dimensions; i++)
+                for (int i = 0; i < _inputDimensions; i++)
                 {
-                    for (int j = 0; j < input[i].Length; j++)
+                    for (int j = 0; j < input.GetLength(1); j++)
                     {
-                        devicePooled[i, j] = Pooled[i][j].AllocateEmpty(accelerator);
-                        using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = input[i][j].Allocate(accelerator);
+                        devicePooled[i, j] = Pooled[i, j].AllocateEmpty(accelerator);
+                        using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = input[i,j].Allocate(accelerator);
                         using MemoryBuffer1D<LayerInfo, Stride1D.Dense> deviceLayerInfo =
                             accelerator.Allocate1D(new LayerInfo[] { _layerInfos[i] });
 
                         Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>> forwardKernal =
                             accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(ForwardKernal);
 
-                        Index2D index = new(Pooled[i][j].Width, Pooled[i][j].Length);
+                        Index2D index = new(Pooled[i,j].Width, Pooled[i,j].Length);
 
                         forwardKernal(index, deviceInput.View, devicePooled[i, j].View, deviceLayerInfo.View);
 
@@ -84,11 +84,11 @@ public class AveragePoolLayer : Layer
 
                 accelerator.Synchronize();
 
-                for (int i = 0; i < _dimensions; i++)
+                for (int i = 0; i < _inputDimensions; i++)
                 {
-                    for (int j = 0; j < input[i].Length; j++)
+                    for (int j = 0; j < input.GetLength(1); j++)
                     {
-                        Pooled[i][j].CopyFromBuffer(devicePooled[i, j]);
+                        Pooled[i,j].CopyFromBuffer(devicePooled[i, j]);
                         devicePooled[i, j].Dispose();
                     }
                 }

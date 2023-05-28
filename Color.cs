@@ -161,4 +161,9 @@ public readonly struct Color
     {
         return "R: " + MathF.Round(R, 2) + " G: " + MathF.Round(G, 2) + " B: " + MathF.Round(B, 2);
     }
+
+    public float[] ToArray()
+    {
+        return new float[] { R, G, B };
+    }
 }

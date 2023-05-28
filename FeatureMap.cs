@@ -41,6 +41,8 @@ public class FeatureMap
 
     [JsonIgnore] public int Area => _map.Length;
 
+    [JsonIgnore] public int FloatLength => _map.Length * 3;
+
     [JsonIgnore] public int Length { get; }
 
     [JsonIgnore] public int Width { get; }
