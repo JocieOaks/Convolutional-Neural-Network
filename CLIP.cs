@@ -324,6 +324,7 @@ public class CLIP
             Console.WriteLine("Error occured when trying to save data to file: " + file + "\n" + e.ToString());
         }
     }
+
     public float[,] Score()
     {
         float[,] cosScores = new float[_batchSize, _batchSize];
@@ -348,15 +349,89 @@ public class CLIP
         return (loss, accuracy);
     }
 
-    public float Train((FeatureMap image, bool[] bools, float[] floats)[] input, float learningRate)
+    public float[,] CrossDescriptionScore()
+    {
+        float[,] score = new float[_batchSize, _batchSize];
+        for(int i = 0; i < _batchSize; i++)
+        {
+            for(int j = i + 1; j < _batchSize; j++)
+            {
+                float loss = Vector.Dot(_descriptionVectorsNorm[i], _descriptionVectorsNorm[j]);
+                if(loss > 0)
+                {
+                    score[i, j] = loss;
+                    score[j, i] = loss;
+                }
+            }
+        }
+        return score;
+    }
+
+    public float CrossDescriptionLoss(float[,] score)
+    {
+        float loss = 0;
+        for(int i = 0; i < _batchSize; i++)
+        {
+            for(int j = i + 1; j < _batchSize; j++)
+            {
+                if (score[i, j] > 0)
+                {
+                    loss += -2 * MathF.Log(1 - score[i, j] + ASYMPTOTEERRORFACTOR);
+                }
+            }
+        }
+        return loss / (_batchSize * _batchSize);
+    }
+
+    public Vector[] CrossDescriptionGradient(float loss, float[,] score)
+    {
+        Vector[] gradients = new Vector[_batchSize];
+        for(int i = 0; i < _batchSize; i++)
+        {
+            gradients[i] = new Vector(_vectorDimensions);
+        }
+
+        float mult = loss / (_batchSize * _batchSize); 
+
+        for(int i = 0; i < _batchSize; i++)
+        {
+            for(int j = 0; j < _batchSize; j++)
+            {
+                if (score[i,j] > 0)
+                {
+                    gradients[i] += MathF.Max(mult / (1 - score[i, j] + ASYMPTOTEERRORFACTOR), 0.1f) * _descriptionVectorsNorm[j];
+                }
+            }
+        }
+
+        return gradients;
+    }
+    Vector[] _imageGradient;
+    Vector[] _descriptionGradient;
+    Vector[] _previousImageGradient;
+    Vector[] _previousDescriptionGradient;
+    public (float, float) Train((FeatureMap image, bool[] bools, float[] floats)[] input, float learningRate, float momentum)
     {
         Forward(input);
-        float[,] matrix = Score();
-        float loss = Loss(matrix);
-        (Vector[] imageGradient, Vector[] descriptionGradient) gradients = CalculateGradient(matrix, loss);
+        float[,] score = Score();
+        float loss = Loss(score);
+        _previousDescriptionGradient = _descriptionGradient;
+        _previousImageGradient = _imageGradient;
+        (_imageGradient, _descriptionGradient) = CalculateGradient(score, loss);
+        float[,] crossScore = CrossDescriptionScore();
+        float crossLoss = CrossDescriptionLoss(crossScore);
+        //Vector[] crossGradient = CrossDescriptionGradient(crossLoss, crossScore);
+        if (_previousImageGradient != null)
+        {
+            for (int i = 0; i < _batchSize; i++)
+            {
+                _descriptionGradient[i] += /*crossGradient[i] + */_previousDescriptionGradient[i] * momentum;
+                _imageGradient[i] += _previousImageGradient[i] * momentum;
+            }
+        }
 
-        Backwards(gradients, input, learningRate);
-        return loss;
+        Backwards((_imageGradient, _descriptionGradient), input, learningRate);
+        return (loss, crossLoss);
     }
 
     private static Vector[] CalculateGradient(float[,] matrix, Vector[] gradientVectors, Vector[] dotVectors, float loss)
