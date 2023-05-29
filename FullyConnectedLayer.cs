@@ -1,21 +1,28 @@
 ﻿using ILGPU;
 using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
+using System.Linq.Expressions;
 
 public class FullyConnectedLayer : Layer
 {
-    private FeatureMap _matrix;
+    private FeatureMap _redMatrix;
+    private FeatureMap _greenMatrix;
+    private FeatureMap _blueMatrix;
 
     public FullyConnectedLayer(ref FeatureMap[,] input, int outputDimensions) : base(1, 1, ref input, -input.GetLength(0) / outputDimensions)
     {
         float variance = 0.666f / (_inputDimensions + _outputDimensions);
         float stdDev = MathF.Sqrt(variance);
-        _matrix = new FeatureMap(_inputDimensions, _outputDimensions);
+        _redMatrix = new FeatureMap(_inputDimensions, _outputDimensions);
+        _greenMatrix = new FeatureMap(_inputDimensions, _outputDimensions);
+        _blueMatrix = new FeatureMap(_inputDimensions, _outputDimensions);
         for (int i = 0; i < _inputDimensions; i++)
         {
             for (int j = 0; j < _outputDimensions; j++)
             {
-                _matrix[i, j] = Color.RandomGauss(0, stdDev);
+                _redMatrix[i, j] = Color.RandomGauss(0, stdDev);
+                _greenMatrix[i, j] = Color.RandomGauss(0, stdDev);
+                _blueMatrix[i, j] = Color.RandomGauss(0, stdDev);
             }
         }
     }
@@ -52,19 +59,18 @@ public class FullyConnectedLayer : Layer
                 Index3D index = new Index3D(_layerInfos[i].InputWidth, _layerInfos[i].InputLength, 3);
                 for (int j = 0; j < _outputDimensions; j++)
                 {
-                    Color multiplier = _matrix[i, j];
-                    using MemoryBuffer1D<float, Stride1D.Dense> deviceMultiplier = accelerator.Allocate1D(multiplier.ToArray());
-                    deviceMultiplierGradients[i,j] = accelerator.Allocate1D<float>(3);
+                    using MemoryBuffer1D<Color, Stride1D.Dense> deviceMultiplier = accelerator.Allocate1D(new Color[] { _redMatrix[i, j], _greenMatrix[i,j], _blueMatrix[i, j] });
+                    deviceMultiplierGradients[i,j] = accelerator.Allocate1D<float>(9);
                     for (int k = 0; k < _batchSize; k++)
                     {
-                        using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = inputs[i, k].Allocate(accelerator);
-                        Action<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<SingleLayerInfo>> backwardsOutKernal =
-                            accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<SingleLayerInfo>>(BackwardsOutKernal);
+                        Action<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>> backwardsOutKernal =
+                            accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(BackwardsOutKernal);
 
                         Action<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>> backwardsGradientKernal =
                             accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(BackwardsGradientKernal);
 
-                        backwardsOutKernal(index, deviceInput.View, deviceOutGradients[j, k].View, deviceMultiplier.View, deviceLayerInfo.View);
+                        backwardsOutKernal(index, deviceInGradients[j, k].View, deviceMultiplier.View, deviceOutGradients[i, k].View, deviceLayerInfo.View);
+                        backwardsGradientKernal(index, deviceInGradients[j, k].View, deviceInputs[i, k].View, deviceMultiplierGradients[i, j].View, deviceLayerInfo.View);
                     }
                 }
             }
@@ -86,11 +92,16 @@ public class FullyConnectedLayer : Layer
                 }
             }
 
+            float[] multiplierGradients = new float[9];
+
             for(int i = 0; i < _inputDimensions; i++)
             {
                 for(int j = 0; j < _outputDimensions; j++)
                 {
-                    _matrix[i, j] += (Color)deviceMultiplierGradients[i, j];
+                    deviceMultiplierGradients[i, j].CopyToCPU(multiplierGradients);
+                    _redMatrix[i, j] -= new Color(multiplierGradients[0], multiplierGradients[1], multiplierGradients[2]) * learningRate;
+                    _greenMatrix[i, j] -= new Color(multiplierGradients[3], multiplierGradients[4], multiplierGradients[5]) * learningRate;
+                    _blueMatrix[i, j] -= new Color(multiplierGradients[6], multiplierGradients[7], multiplierGradients[8]) * learningRate;
                 }
             }
         }
@@ -127,13 +138,12 @@ public class FullyConnectedLayer : Layer
                 Index3D index = new Index3D(_layerInfos[i].InputWidth, _layerInfos[i].InputLength, 3);
                 for (int j = 0; j < _outputDimensions; j++)
                 {
-                    Color multiplier = _matrix[i, j];
-                    using MemoryBuffer1D<float, Stride1D.Dense> deviceMultiplier = accelerator.Allocate1D(multiplier.ToArray());
+                    using MemoryBuffer1D<Color, Stride1D.Dense> deviceMultiplier = accelerator.Allocate1D(new Color[] { _redMatrix[i, j], _greenMatrix[i, j], _blueMatrix[i, j] });
 
                     for (int k = 0; k < _batchSize; k++)
                     {
-                        Action<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<SingleLayerInfo>> forwardKernal =
-                            accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<SingleLayerInfo>>(ForwardKernal);
+                        Action<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<SingleLayerInfo>> forwardKernal =
+                            accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);
 
                         forwardKernal(index, deviceInputs[i,k].View, deviceOutputs[j, k].View, deviceMultiplier.View, deviceLayerInfo.View);
                     }
@@ -160,16 +170,24 @@ public class FullyConnectedLayer : Layer
         return _outputs;
     }
 
-    private static void BackwardsOutKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<float> multiplier, ArrayView<float> outGradient, ArrayView<SingleLayerInfo> info)
+    private static void BackwardsOutKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> multiplier, ArrayView<float> outGradient, ArrayView<SingleLayerInfo> info)
     {
         int mapsIndex = info[0].Index(index.X, index.Y);
-        Atomic.Add(ref outGradient[mapsIndex * 3 + index.Z], inGradient[mapsIndex][index.Z] * multiplier[index.Z]);
+        float transposeDot = 0;
+        for(int i = 0; i < 3; i++)
+        {
+            transposeDot += inGradient[mapsIndex][i] * multiplier[i][index.Z];
+        }
+        Atomic.Add(ref outGradient[mapsIndex * 3 + index.Z], transposeDot);
     }
 
     private static void BackwardsGradientKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> input, ArrayView<float> multiplierGradient, ArrayView<SingleLayerInfo> info)
     {
         int mapsIndex = info[0].Index(index.X, index.Y);
-        Atomic.Add(ref multiplierGradient[index.Z], inGradient[mapsIndex][index.Z] * input[mapsIndex][index.Z]);
+        for (int i = 0; i < 3; i++)
+        {
+            Atomic.Add(ref multiplierGradient[index.Z * 3 + i], inGradient[mapsIndex][index.Z] * input[mapsIndex][i]);
+        }
     }
 
     private SingleLayerInfo Infos(int index)
@@ -177,9 +195,9 @@ public class FullyConnectedLayer : Layer
         return (SingleLayerInfo)_layerInfos[index];
     }
 
-    private static void ForwardKernal(Index3D index, ArrayView<Color> input, ArrayView<float> output, ArrayView<float> multiplier, ArrayView<SingleLayerInfo> info)
+    private static void ForwardKernal(Index3D index, ArrayView<Color> input, ArrayView<float> output, ArrayView<Color> multiplier, ArrayView<SingleLayerInfo> info)
     {
         int mapsIndex = info[0].Index(index.X, index.Y);
-        Atomic.Add(ref output[mapsIndex * 3 + index.Z], input[mapsIndex][index.Z] * multiplier[index.Z]);
+        Atomic.Add(ref output[mapsIndex * 3 + index.Z], Color.Dot(input[mapsIndex], multiplier[index.Z]));
     }
 }

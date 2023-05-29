@@ -185,9 +185,10 @@ public class CLIP
 
         for (int j = Depth - 1; j > 0; j--)
         {
-            StopWatch(() => currentGradient = _layers[j].Backwards(_featureMaps[j - 1], currentGradient, learningRate), $"Backwards {_layers[j].Name} {j}");
+            StopWatch(() => currentGradient = _layers[j].Backwards(_featureMaps[j - 1], currentGradient, learningRate), $"Backwards {j} {_layers[j].Name}");
         }
-        StopWatch(() => currentGradient = _layers[0].Backwards(_initialFeatureMaps, currentGradient, learningRate), $"Backwards {_layers[0].Name} {0}");
+        if(_layers.Count > 0)
+            StopWatch(() => currentGradient = _layers[0].Backwards(_initialFeatureMaps, currentGradient, learningRate), $"Backwards {0} {_layers[0].Name}");
 
         StopWatch(() => _initialConvolutionLayer.BackwardsKernalOnly(images, currentGradient, learningRate), $"Backwards Initial {_initialConvolutionLayer.Name}");
     }
@@ -218,7 +219,7 @@ public class CLIP
 
         for (int j = 0; j < Depth; j++)
         {
-            StopWatch(() => current = _layers[j].Forward(current), $"Forwards {_layers[j].Name} {j}");
+            StopWatch(() => current = _layers[j].Forward(current), $"Forwards {j} {_layers[j].Name}");
             _featureMaps[j] = current;
         }
 
