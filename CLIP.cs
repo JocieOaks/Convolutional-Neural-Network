@@ -4,6 +4,7 @@ using Newtonsoft.Json;
 using System;
 using System.Buffers.Binary;
 using System.ComponentModel.DataAnnotations;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.Reflection;
 using System.Runtime.Serialization;
@@ -249,6 +250,37 @@ public class CLIP
         Console.WriteLine($"Vectorization Time: {elapsedMs / 1000f} s");
     }
 
+
+    public void Initialize((FeatureMap image, bool[] bools, float[] floats)[] input)
+    {
+        Vector unitary = new Vector(_vectorDimensions);
+        for(int i = 0; i < _vectorDimensions; i++)
+        {
+            unitary[i] = 0;
+        }
+
+        Forward(input);
+        bool changed;
+        do
+        {
+            changed = false;
+            for (int j = 0; j < _batchSize; j++)
+            {
+                float dot = Vector.Dot(_imageVectorsNorm[j], _descriptionVectorsNorm[j]);
+                if (dot > 0.3 || dot < -0.1)
+                {
+                    Vector gradient = dot * _imageVectorsNorm[j];
+                    changed = true;
+
+                    _transformer.Backwards(input[j].bools, input[j].floats, VectorNormalizationLayer.Backwards(_descriptionVectors[j], gradient), 0.001f);
+                    _descriptionVectors[j] = _transformer.Forward(input[j].bools, input[j].floats);
+                    _descriptionVectorsNorm[j] = VectorNormalizationLayer.Forward(_descriptionVectors[j]);
+                }
+            }
+        } while (changed);
+        
+    }
+
     public IEnumerable<(float, float)> GradientTest(int vectorCount, int vectorLength)
     {
         _imageVectorsNorm = new Vector[vectorCount];
@@ -398,7 +430,7 @@ public class CLIP
             {
                 if (score[i,j] > 0)
                 {
-                    gradients[i] += MathF.Max(mult / (1 - score[i, j] + ASYMPTOTEERRORFACTOR), 0.1f) * _descriptionVectorsNorm[j];
+                    gradients[i] += -2 * MathF.Max(mult / (1 - score[i, j] + ASYMPTOTEERRORFACTOR), 0.1f) * _descriptionVectorsNorm[j];
                 }
             }
         }
