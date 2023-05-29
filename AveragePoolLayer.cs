@@ -13,6 +13,8 @@ public class AveragePoolLayer : Layer
     {
     }
 
+    public override string Name => "Average Pool Layer";
+
     public override FeatureMap[,] Backwards(FeatureMap[,] input, FeatureMap[,] inGradient, float learningRate)
     {
         using (Context context = Context.Create(builder => builder.Cuda()))
@@ -28,7 +30,7 @@ public class AveragePoolLayer : Layer
                         deviceOutGradient[i, j] = _outGradients[i, j].AllocateEmpty(accelerator);
                         using MemoryBuffer1D<Color, Stride1D.Dense> deviceInGradient = inGradient[i, j].Allocate(accelerator);
                         using MemoryBuffer1D<LayerInfo, Stride1D.Dense> deviceLayerInfo =
-                            accelerator.Allocate1D(new LayerInfo[] { _layerInfos[i] });
+                            accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
 
                         Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>> forwardKernal =
                             accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(BackwardsKernal);
@@ -70,7 +72,7 @@ public class AveragePoolLayer : Layer
                         devicePooled[i, j] = Pooled[i, j].AllocateEmpty(accelerator);
                         using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = input[i,j].Allocate(accelerator);
                         using MemoryBuffer1D<LayerInfo, Stride1D.Dense> deviceLayerInfo =
-                            accelerator.Allocate1D(new LayerInfo[] { _layerInfos[i] });
+                            accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
 
                         Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>> forwardKernal =
                             accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(ForwardKernal);
@@ -101,6 +103,11 @@ public class AveragePoolLayer : Layer
     public void OnDeserialized(StreamingContext context)
     {
         _invK2 = 1f / (_kernalSize * _kernalSize);
+    }
+
+    private LayerInfo Infos(int index)
+    {
+        return (LayerInfo)_layerInfos[index];
     }
 
     private static void BackwardsKernal(Index2D index, ArrayView<Color> inGradient, ArrayView<Color> outGradient, ArrayView<LayerInfo> layer)

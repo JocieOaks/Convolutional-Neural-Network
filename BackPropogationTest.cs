@@ -33,9 +33,9 @@ public class BackPropogationTest
         }
 
         FeatureMap[,] current = _initialInput;
-        _layerGPU = new ConvolutionalLayer(3, 1, ref current);
+        _layerGPU = new ConvolutionalLayer(3, 1, ref current, 1);
         current = _initialInput;
-        _layer = new ConvolutionalLayer(3, 1, ref current);
+        _layer = new ConvolutionalLayer(3, 1, ref current, 1);
     }
 
     public float Test(float testLearningRate, float propLearningRate)

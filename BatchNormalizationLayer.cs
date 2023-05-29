@@ -21,6 +21,8 @@ public class BatchNormalizationLayer : Layer
     private readonly ColorVector _mean;
     private readonly ColorVector _sigma;
     private int _threadsWorking;
+
+    public override string Name => "Batch Normalization Layer";
     public BatchNormalizationLayer(ref FeatureMap[,] input) : base(1,1, ref input)
     {
         _weight = new ColorVector(_inputDimensions);
@@ -75,25 +77,25 @@ public class BatchNormalizationLayer : Layer
 
         Interlocked.Increment(ref _threadsWorking);
 
-        LayerInfo info = _layerInfos[dimension];
-        float m = info.InputArea * _batchSize;
+        SingleLayerInfo info = Infos(dimension);
+        float m = info.Area * _batchSize;
         float _m = 1 / m;
 
         AcceleratorStream stream = accelerator.CreateStream();
 
         MemoryBuffer1D<Color, Stride1D.Dense>[] deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_batchSize];
         MemoryBuffer1D<Color, Stride1D.Dense>[] deviceInGradients = new MemoryBuffer1D<Color, Stride1D.Dense>[_batchSize];
-        using MemoryBuffer1D<LayerInfo, Stride1D.Dense> deviceInfo = accelerator.Allocate1D(new LayerInfo[] { info });
+        using MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense> deviceInfo = accelerator.Allocate1D(new SingleLayerInfo[] { info });
         using MemoryBuffer1D<float, Stride1D.Dense> deviceGradients = accelerator.Allocate1D<float>(9);
-        Index3D index = new(info.InputWidth, info.InputLength, 3);
+        Index3D index = new(info.Width, info.Length, 3);
 
         for (int i = 0; i < _batchSize; i++)
         {
             deviceInputs[i] = input[dimension, i].Allocate(accelerator);
             deviceInGradients[i] = inGradient[dimension, i].Allocate(accelerator);
             using MemoryBuffer1D<Color, Stride1D.Dense> deviceNormalized = Normalized[dimension, i].Allocate(accelerator);
-            Action<AcceleratorStream, Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>> gradientKernal =
-                accelerator.LoadAutoGroupedKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(GradientsKernal);
+            Action<AcceleratorStream, Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>> gradientKernal =
+                accelerator.LoadAutoGroupedKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(GradientsKernal);
 
             gradientKernal(stream, index, deviceInputs[i].View, deviceInGradients[i].View, deviceNormalized.View, deviceGradients.View, deviceInfo.View);
         }
@@ -112,8 +114,8 @@ public class BatchNormalizationLayer : Layer
         for (int i = 0; i < _batchSize; i++)
         {
             deviceOutGradient[i] = _outGradients[dimension,i].AllocateFloat(accelerator);
-            Action<AcceleratorStream, Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<LayerInfo>> next =
-                accelerator.LoadAutoGroupedKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<LayerInfo>>(BackwardsKernal);
+            Action<AcceleratorStream, Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<SingleLayerInfo>> next =
+                accelerator.LoadAutoGroupedKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(BackwardsKernal);
 
             next(stream, index, deviceInputs[i].View, deviceInGradients[i].View, deviceOutGradient[i].View, deviceValues.View, deviceInfo.View);
 
@@ -135,9 +137,9 @@ public class BatchNormalizationLayer : Layer
         Interlocked.Decrement(ref _threadsWorking);
     }
 
-    private static void GradientsKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<Color> normalized, ArrayView<float> gradients, ArrayView<LayerInfo> layer)
+    private static void GradientsKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<Color> normalized, ArrayView<float> gradients, ArrayView<SingleLayerInfo> layer)
     {
-        int gradientIndex = layer[0].OutputIndex(index.X, index.Y);
+        int gradientIndex = layer[0].Index(index.X, index.Y);
         inGradient[gradientIndex] *= normalized[gradientIndex].ReLUPropogation();
         float gradient = inGradient[gradientIndex][index.Z];
         Atomic.Add(ref gradients[index.Z], gradient * normalized[gradientIndex][index.Z]);
@@ -145,13 +147,13 @@ public class BatchNormalizationLayer : Layer
         Atomic.Add(ref gradients[index.Z + 6], gradient * input[gradientIndex][index.Z]);
     }
 
-    private (MemoryBuffer1D<Color, Stride1D.Dense>, MemoryBuffer1D<Color, Stride1D.Dense>) InitializeGradientsKernal(Accelerator accelerator, Index3D index, AcceleratorStream stream, FeatureMap input, FeatureMap inGradient, FeatureMap normalized, MemoryBuffer1D<float, Stride1D.Dense> deviceGradients, MemoryBuffer1D<LayerInfo, Stride1D.Dense> deviceInfo)
+    private (MemoryBuffer1D<Color, Stride1D.Dense>, MemoryBuffer1D<Color, Stride1D.Dense>) InitializeGradientsKernal(Accelerator accelerator, Index3D index, AcceleratorStream stream, FeatureMap input, FeatureMap inGradient, FeatureMap normalized, MemoryBuffer1D<float, Stride1D.Dense> deviceGradients, MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense> deviceInfo)
     {
         MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = input.Allocate(accelerator);
         MemoryBuffer1D<Color, Stride1D.Dense> deviceInGradient = inGradient.Allocate(accelerator);
         using MemoryBuffer1D<Color,Stride1D.Dense> deviceNormalized = normalized.Allocate(accelerator);
-        Action<AcceleratorStream, Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>> gradientKernal =
-            accelerator.LoadAutoGroupedKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(GradientsKernal);
+        Action<AcceleratorStream, Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>> gradientKernal =
+            accelerator.LoadAutoGroupedKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(GradientsKernal);
 
         gradientKernal(stream, index, deviceInput.View, deviceInGradient.View, deviceNormalized.View, deviceGradients.View, deviceInfo.View);
 
@@ -191,16 +193,16 @@ public class BatchNormalizationLayer : Layer
 
         AcceleratorStream stream = accelerator.CreateStream();
 
-        LayerInfo info = _layerInfos[dimension];
-        float m = info.InputArea * _batchSize;
+        SingleLayerInfo info = Infos(dimension);
+        float m = info.Area * _batchSize;
         float _m = 1 / m;
 
         Color sum = new();
         for (int i = 0; i < _batchSize; i++)
         {
-            for (int j = 0; j < info.InputWidth; j++)
+            for (int j = 0; j < info.Width; j++)
             {
-                for (int k = 0; k < info.InputLength; k++)
+                for (int k = 0; k < info.Length; k++)
                 {
                     sum += input[dimension, i][j, k];
                 }
@@ -212,9 +214,9 @@ public class BatchNormalizationLayer : Layer
 
         for (int i = 0; i < _batchSize; i++)
         {
-            for (int j = 0; j < info.InputWidth; j++)
+            for (int j = 0; j < info.Width; j++)
             {
-                for (int k = 0; k < info.InputLength; k++)
+                for (int k = 0; k < info.Length; k++)
                 {
                     sigma2 += Color.Pow(input[dimension, i][j, k] - _mean[dimension], 2);
                 }
@@ -224,17 +226,17 @@ public class BatchNormalizationLayer : Layer
         sigma2 = _m * sigma2;
         _sigma[dimension] = Color.Pow(sigma2 + new Color(CLIP.ASYMPTOTEERRORFACTOR, CLIP.ASYMPTOTEERRORFACTOR, CLIP.ASYMPTOTEERRORFACTOR), 0.5f);
 
-        using MemoryBuffer1D<LayerInfo, Stride1D.Dense> deviceInfo = accelerator.Allocate1D(new LayerInfo[] { _layerInfos[dimension] });
+        using MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense> deviceInfo = accelerator.Allocate1D(new SingleLayerInfo[] { info });
         using MemoryBuffer1D<Color, Stride1D.Dense> deviceValues = accelerator.Allocate1D(new Color[] { _mean[dimension], _sigma[dimension], _weight[dimension], _bias[dimension] });
         MemoryBuffer1D<Color, Stride1D.Dense>[] deviceNormalized = new MemoryBuffer1D<Color, Stride1D.Dense>[_batchSize];
-        Index2D index = new Index2D(info.InputWidth, info.InputLength);
+        Index2D index = new(info.Width, info.Length);
         for (int i = 0; i < _batchSize; i++)
         {
             using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = input[dimension, i].Allocate(accelerator);
             deviceNormalized[i] = Normalized[dimension, i].AllocateEmpty(accelerator);
 
-            Action<AcceleratorStream, Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>> normalizeKernal =
-                accelerator.LoadAutoGroupedKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(ForwardKernal);
+            Action<AcceleratorStream, Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<SingleLayerInfo>> normalizeKernal =
+                accelerator.LoadAutoGroupedKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);
             
 
             normalizeKernal(stream, index, deviceInput.View, deviceNormalized[i].View, deviceValues.View, deviceInfo.View);
@@ -251,16 +253,21 @@ public class BatchNormalizationLayer : Layer
         Interlocked.Decrement(ref _threadsWorking);
     }
 
-    private static void BackwardsKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<float> outGradient, ArrayView<Color> values, ArrayView<LayerInfo> info)
+    private SingleLayerInfo Infos(int index)
     {
-        int position = info[0].OutputIndex(index.X, index.Y);
-        outGradient[position * 3 + index.Z] = (inGradient[position] / values[0] + values[1] * (input[position] - values[2]) + values[3]).Clamp(1)[index.Z];
+        return (SingleLayerInfo)_layerInfos[index];
     }
 
-    private static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> normalized, ArrayView<Color> values, ArrayView<LayerInfo> info)
+    private static void BackwardsKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<float> outGradient, ArrayView<Color> values, ArrayView<SingleLayerInfo> info)
     {
-        int position = info[0].OutputIndex(index.X, index.Y);
-        normalized[position] = ((input[position] - values[0]) / values[1]).ReLU() * values[2] + values[3];
+        int mapsIndex = info[0].Index(index.X, index.Y);
+        outGradient[mapsIndex * 3 + index.Z] = (inGradient[mapsIndex] / values[0] + values[1] * (input[mapsIndex] - values[2]) + values[3]).Clamp(1)[index.Z];
+    }
+
+    private static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> normalized, ArrayView<Color> values, ArrayView<SingleLayerInfo> info)
+    {
+        int mapsIndex = info[0].Index(index.X, index.Y);
+        normalized[mapsIndex] = ((input[mapsIndex] - values[0]) / values[1]).ReLU() * values[2] + values[3];
     }
 }
 

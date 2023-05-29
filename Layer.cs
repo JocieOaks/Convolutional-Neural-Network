@@ -22,7 +22,9 @@ public abstract class Layer
 
     protected FeatureMap[,] _outputs;
     protected FeatureMap[,] _outGradients;
-    protected LayerInfo[] _layerInfos;
+    protected ILayerInfo[] _layerInfos;
+
+    public abstract string Name { get; }
 
     public Layer(int kernalSize, int stride, ref FeatureMap[,] input, int outputDimensionFactor = 1)
     {
@@ -46,21 +48,33 @@ public abstract class Layer
         }
 
         _batchSize = input.GetLength(1);
-        _layerInfos = new LayerInfo[_inputDimensions];
+        _layerInfos = new ILayerInfo[_inputDimensions];
         _outGradients = new FeatureMap[_inputDimensions, _batchSize];
         _outputs = new FeatureMap[_outputDimensions, _batchSize];
         for(int i = 0; i < _inputDimensions; i++)
         {
-            LayerInfo layer = _layerInfos[i] = new LayerInfo()
+            ILayerInfo layer;
+            if (stride == 1 && kernalSize == 1)
             {
-                KernalSize = kernalSize,
-                Stride = stride,
-                InverseKSquared = 1f / (kernalSize * kernalSize),
-                InputWidth = input[i,0].Width,
-                InputLength = input[i,0].Length,
-                OutputWidth = 2 + (input[i,0].Width - kernalSize - 1) / stride,
-                OutputLength = 2 + (input[i, 0].Length - kernalSize - 1) / stride
-            };
+                layer = _layerInfos[i] = new SingleLayerInfo()
+                {
+                    Width = input[i, 0].Width,
+                    Length = input[i, 1].Length,
+                };
+            }
+            else
+            {
+                layer = _layerInfos[i] = new LayerInfo()
+                {
+                    KernalSize = kernalSize,
+                    Stride = stride,
+                    InverseKSquared = 1f / (kernalSize * kernalSize),
+                    InputWidth = input[i, 0].Width,
+                    InputLength = input[i, 0].Length,
+                    OutputWidth = 2 + (input[i, 0].Width - kernalSize - 1) / stride,
+                    OutputLength = 2 + (input[i, 0].Length - kernalSize - 1) / stride
+                };
+            }
 
             for (int j = 0; j < _batchSize; j++)
             {
@@ -70,7 +84,7 @@ public abstract class Layer
         }
         for(int i = 0; i < _outputDimensions; i++)
         {
-            LayerInfo layer;
+            ILayerInfo layer;
             if(outputDimensionFactor >= 1)
             {
                 layer = _layerInfos[i / outputDimensionFactor];

@@ -12,12 +12,13 @@ using System.Runtime.Serialization;
 [Serializable]
 public class CLIP
 {
+    //Used to avoid divide by zero or log of zero going to infinity.
     public const float ASYMPTOTEERRORFACTOR = 1e-6f; //Used to avoid divide by zero or log of zero going to infinity.
     [JsonProperty]
     readonly private int _batchSize;
 
     [JsonProperty]
-    readonly private InitialConvolutionLayer _initialConvolutionLayer;
+    readonly private ConvolutionalLayer _initialConvolutionLayer;
 
     [JsonProperty]
     readonly private List<Layer> _layers = new();
@@ -34,22 +35,19 @@ public class CLIP
     private FeatureMap[][,] _featureMaps;
     Vector[] _imageVectors;
     private Vector[] _imageVectorsNorm;
-    //Used to avoid divide by zero or log of zero going to infinity.
+    
     private FeatureMap[,] _initialFeatureMaps;
 
     private FeatureMap[,] _transposedFinalFeatureMap;
     public CLIP(int depth, int dimensions, int vectorDimensions, int batchSize, int descriptionBoolLength, int descriptionFloatLength, int width, int length)
     {
-        FeatureMap[,] input = new FeatureMap[dimensions, batchSize];
-        for (int i = 0; i < dimensions; i++)
+        FeatureMap[,] input = new FeatureMap[1, batchSize];
+        for (int j = 0; j < batchSize; j++)
         {
-            for (int j = 0; j < batchSize; j++)
-            {
-                input[i, j] = new FeatureMap(width, length);
-            }
+            input[0, j] = new FeatureMap(width, length);
         }
 
-        _initialConvolutionLayer = new InitialConvolutionLayer(3, 1, ref input);
+        _initialConvolutionLayer = new ConvolutionalLayer(3, 1, ref input, 8);
         _transformer = new Transformer(descriptionBoolLength, descriptionFloatLength, vectorDimensions);
         _batchSize = batchSize;
         _vectorDimensions = vectorDimensions;
@@ -61,11 +59,13 @@ public class CLIP
         _layers.Add(new BatchNormalizationLayer(ref input));
         for (int i = 0; i < depth; i++)
         {
-            _layers.Add(new ConvolutionalLayer(3, 1, ref input));
+            _layers.Add(new ConvolutionalLayer(3, 1, ref input, 2));
             _layers.Add(new BatchNormalizationLayer(ref input));
             if (i < 6 && i % 2 == 0)
                 _layers.Add(new AveragePoolLayer(2, ref input));
         }
+        _layers.Add(new FullyConnectedLayer(ref input, 8));
+
         _vectorizationLayer = new VectorizationLayer(vectorDimensions, input);
         _featureMaps = new FeatureMap[Depth][,];
     }
@@ -170,86 +170,67 @@ public class CLIP
 
     public void Backwards((Vector[] image, Vector[] description) gradients, (FeatureMap image, bool[] bools, float[] floats)[] input, float learningRate)
     {
-        FeatureMap[] images = new FeatureMap[_batchSize];
+        FeatureMap[,] images = new FeatureMap[1, _batchSize];
         for (int i = 0; i < _batchSize; i++)
         {
-            images[i] = input[i].image;
+            images[0, i] = input[i].image;
 
             _transformer.Backwards(input[i].bools, input[i].floats, VectorNormalizationLayer.Backwards(_descriptionVectors[i], gradients.description[i]), learningRate);
         }
 
-        var watch = System.Diagnostics.Stopwatch.StartNew();
-        FeatureMap[,] transposedGradient = _vectorizationLayer.Backwards(VectorNormalizationLayer.Backwards(_imageVectors, gradients.image), learningRate);
-        
-        watch.Stop();
-        var elapsedMs = watch.ElapsedMilliseconds;
-        Console.WriteLine($"Backwards Vectorization Time: {elapsedMs / 1000f} s");
+        FeatureMap[,] transposedGradient = new FeatureMap[0,0];
+        StopWatch(() => transposedGradient = _vectorizationLayer.Backwards(VectorNormalizationLayer.Backwards(_imageVectors, gradients.image), learningRate), $"Backwards {_vectorizationLayer.Name}");
 
         FeatureMap[,] currentGradient = TransposeArray(transposedGradient);
 
         for (int j = Depth - 1; j > 0; j--)
         {
-            watch = System.Diagnostics.Stopwatch.StartNew();
-            currentGradient = _layers[j].Backwards(_featureMaps[j - 1], currentGradient, learningRate);
-            watch.Stop();
-            elapsedMs = watch.ElapsedMilliseconds;
-            Console.WriteLine($"Backwards {j} Layer Time: {elapsedMs / 1000f} s");
+            StopWatch(() => currentGradient = _layers[j].Backwards(_featureMaps[j - 1], currentGradient, learningRate), $"Backwards {_layers[j].Name} {j}");
         }
-        watch = System.Diagnostics.Stopwatch.StartNew();
-        currentGradient = _layers[0].Backwards(_initialFeatureMaps, currentGradient, learningRate);
+        StopWatch(() => currentGradient = _layers[0].Backwards(_initialFeatureMaps, currentGradient, learningRate), $"Backwards {_layers[0].Name} {0}");
+
+        StopWatch(() => _initialConvolutionLayer.BackwardsKernalOnly(images, currentGradient, learningRate), $"Backwards Initial {_initialConvolutionLayer.Name}");
+    }
+
+    private static void StopWatch(Action func, string processName)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        func();
         watch.Stop();
-        elapsedMs = watch.ElapsedMilliseconds;
-        Console.WriteLine($"Backwards 0 Layer Time: {elapsedMs / 1000f} s");
-        watch = System.Diagnostics.Stopwatch.StartNew();
-        _initialConvolutionLayer.Backwards(images, currentGradient, learningRate);
-        watch.Stop();
-        elapsedMs = watch.ElapsedMilliseconds;
-        Console.WriteLine($"Backwards Initial Convolution Time: {elapsedMs / 1000f} s");
+        var elapsedMs = watch.ElapsedMilliseconds;
+        Console.WriteLine($"{processName} Time: {elapsedMs / 1000f} s");
     }
 
     public void Forward((FeatureMap image, bool[] bools, float[] floats)[] input)
     {
-        FeatureMap[,] current;
-        FeatureMap[] images = new FeatureMap[_batchSize];
+        FeatureMap[,] current = new FeatureMap[0,0];
+        FeatureMap[,] images = new FeatureMap[1,_batchSize];
         for (int i = 0; i < _batchSize; i++)
         {
-            images[i] = input[i].image;
+            images[0, i] = input[i].image;
             _descriptionVectors[i] = _transformer.Forward(input[i].bools, input[i].floats);
             _descriptionVectorsNorm[i] = VectorNormalizationLayer.Forward(_descriptionVectors[i]);
         }
 
-        var watch = System.Diagnostics.Stopwatch.StartNew();
-        current = _initialConvolutionLayer.Forward(images);
-        watch.Stop();
-        var elapsedMs = watch.ElapsedMilliseconds;
-        Console.WriteLine($"Initial Convolution Time: {elapsedMs / 1000f} s");
+        StopWatch(() => current = _initialConvolutionLayer.Forward(images), $"Forwards Initial {_initialConvolutionLayer.Name}");
 
         _initialFeatureMaps = current;
 
         for (int j = 0; j < Depth; j++)
         {
-            watch = System.Diagnostics.Stopwatch.StartNew();
-            current = _layers[j].Forward(current);
+            StopWatch(() => current = _layers[j].Forward(current), $"Forwards {_layers[j].Name} {j}");
             _featureMaps[j] = current;
-            watch.Stop();
-            elapsedMs = watch.ElapsedMilliseconds;
-            Console.WriteLine($"{j} Layer Time: {elapsedMs / 1000f} s");
         }
 
         //Normalization preferes featuremaps grouped by dimension first, while Vectorization prefers them to be grouped by batch member first.
         //This transposes the featuremaps to perform Vectorization.
 
         _transposedFinalFeatureMap = TransposeArray(current);
-        watch = System.Diagnostics.Stopwatch.StartNew();
-        _imageVectors = _vectorizationLayer.Forward(_transposedFinalFeatureMap);
+
+        StopWatch(() =>_imageVectors = _vectorizationLayer.Forward(_transposedFinalFeatureMap), $"Forwards {_vectorizationLayer.Name}");
 
         _imageVectorsNorm = VectorNormalizationLayer.Forward(_imageVectors);
-        
-        watch.Stop();
-        elapsedMs = watch.ElapsedMilliseconds;
-        Console.WriteLine($"Vectorization Time: {elapsedMs / 1000f} s");
     }
-
 
     public void Initialize((FeatureMap image, bool[] bools, float[] floats)[] input)
     {

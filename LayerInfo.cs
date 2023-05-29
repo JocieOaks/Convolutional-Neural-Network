@@ -1,7 +1,20 @@
 ﻿// See https://aka.ms/new-console-template for more information
 #nullable disable
 
-public readonly struct LayerInfo
+public interface ILayerInfo
+{
+    int InputWidth { get; }
+    int InputLength { get; }
+    int InputArea => InputWidth * InputLength;
+    float InverseKSquared { get; }
+    int KernalSize { get; }
+    int OutputWidth { get; }
+    int OutputLength { get; }
+    public int OutputArea => OutputWidth * OutputLength;
+    int Stride { get; }
+}
+
+public readonly struct LayerInfo : ILayerInfo
 {
     public LayerInfo() { }
 
@@ -31,5 +44,31 @@ public readonly struct LayerInfo
     public int KernalIndex(int x, int y)
     {
         return y * KernalSize + x;
+    }
+}
+
+public readonly struct SingleLayerInfo : ILayerInfo
+{
+    public int Width { get; init; }
+    public int Length { get; init; }
+    public int Area => Width * Length;
+
+    public int InputWidth => Width;
+
+    public int InputLength => Length;
+
+    public float InverseKSquared => 1;
+
+    public int KernalSize => 1;
+
+    public int OutputWidth => Width;
+
+    public int OutputLength => Length;
+
+    public int Stride => 1;
+
+    public int Index(int x, int y)
+    {
+        return y * Width + x;
     }
 }

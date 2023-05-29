@@ -39,6 +39,8 @@ public class VectorizationLayer
         }
     }
 
+    public string Name => "Vectorization Layer";
+
     public Vector[] Forward(FeatureMap[,] inputTransposed)
     {
         Vector[] vectors = new Vector[inputTransposed.GetLength(0)];
