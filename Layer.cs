@@ -58,8 +58,8 @@ public abstract class Layer
                 InverseKSquared = 1f / (kernalSize * kernalSize),
                 InputWidth = input[i,0].Width,
                 InputLength = input[i,0].Length,
-                OutputWidth = 2 + (input[i,0].Width - (kernalSize + stride)) / stride,
-                OutputLength = 2 + (input[i,0].Length - (kernalSize + stride)) / stride
+                OutputWidth = 2 + (input[i,0].Width - kernalSize - 1) / stride,
+                OutputLength = 2 + (input[i, 0].Length - kernalSize - 1) / stride
             };
 
             for (int j = 0; j < _batchSize; j++)

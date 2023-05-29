@@ -62,6 +62,11 @@ public class FeatureMap
         return accelerator.Allocate1D<Color>(Area);
     }
 
+    public MemoryBuffer1D<float, Stride1D.Dense> AllocateFloat(Accelerator accelerator)
+    {
+        return accelerator.Allocate1D<float>(FloatLength);
+    }
+
     public Color Average()
     {
         return Sum() / Area;
