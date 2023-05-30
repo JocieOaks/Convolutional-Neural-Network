@@ -59,7 +59,7 @@ public abstract class Layer
                 layer = _layerInfos[i] = new SingleLayerInfo()
                 {
                     Width = input[i, 0].Width,
-                    Length = input[i, 1].Length,
+                    Length = input[i, 0].Length,
                 };
             }
             else

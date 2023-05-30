@@ -15,43 +15,38 @@ public readonly struct Color
     [JsonConstructor]
     public Color(float r, float g, float b)
     {
-        R = r;
-        G = g;
-        B = b;
-    }
-
-    public Color(float[] values)
-    {
-        if (values.Length != 3)
-            throw new ArgumentException("Values are not correct length.");
-
-        R = values[0];
-        G = values[1];
-        B = values[2];
+        _1r = r;
+        _2g = g;
+        _3b = b;
     }
 
     public Color()
     {
-        R = 0;
-        G = 0;
-        B = 0;
+        _1r = 0;
+        _2g = 0;
+        _3b = 0;
     }
 
     public Color(System.Drawing.Color color)
     {
         int inverseAlpha = 255 - color.A;
-        R = (color.R + inverseAlpha) / 255f;
-        G = (color.G + inverseAlpha) / 255f;
-        B = (color.B + inverseAlpha) / 255f;
+        _1r = (color.R + inverseAlpha) / 255f;
+        _2g = (color.G + inverseAlpha) / 255f;
+        _3b = (color.B + inverseAlpha) / 255f;
     }
 
-    public float B { get; }
-    public float G { get; }
+    readonly float _1r;
+    readonly float _2g;
+    readonly float _3b;
+
+
+    public float B => _3b;
+    public float G => _2g;
 
     [JsonIgnore]
     public float Magnitude => MathF.Sqrt(R * R + G * G + B * B);
 
-    public float R { get; }
+    public float R => _1r;
 
     public float this[int index]
     {
