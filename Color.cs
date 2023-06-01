@@ -149,7 +149,7 @@ public readonly struct Color
 
     public Color ReLUPropogation()
     {
-        return new Color(R == 0 ? 0 : 1, G == 0 ? 0 : 1, B == 0 ? 0 : 1);
+        return new Color(R < 0 ? 0 : 1, G < 0 ? 0 : 1, B < 0 ? 0 : 1);
     }
 
     public override string ToString()
