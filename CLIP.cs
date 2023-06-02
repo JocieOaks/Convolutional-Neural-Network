@@ -168,14 +168,14 @@ public class CLIP
         return mean + stdDev * randStdNormal; //random normal(mean,stdDev^2)
     }
 
-    public void Backwards((Vector[] image, Vector[] description) gradients, (FeatureMap image, bool[] bools, float[] floats)[] input, float learningRate)
+    public void Backwards((Vector[] image, Vector[] description) gradients, (FeatureMap image, bool[] bools, float[] floats)[] input, float learningRate, float transformLearningRate)
     {
         FeatureMap[,] images = new FeatureMap[1, _batchSize];
         for (int i = 0; i < _batchSize; i++)
         {
             images[0, i] = input[i].image;
 
-            _transformer.Backwards(input[i].bools, input[i].floats, VectorNormalizationLayer.Backwards(_descriptionVectors[i], gradients.description[i]), learningRate);
+            _transformer.Backwards(input[i].bools, input[i].floats, VectorNormalizationLayer.Backwards(_descriptionVectors[i], gradients.description[i]), transformLearningRate);
         }
 
         FeatureMap[,] transposedGradient = new FeatureMap[0,0];
@@ -423,7 +423,7 @@ public class CLIP
     Vector[] _descriptionGradient;
     Vector[] _previousImageGradient;
     Vector[] _previousDescriptionGradient;
-    public (float, float) Train((FeatureMap image, bool[] bools, float[] floats)[] input, float learningRate, float momentum)
+    public (float, float) Train((FeatureMap image, bool[] bools, float[] floats)[] input, float learningRate, float transformLearningRate, float momentum)
     {
         Forward(input);
         float[,] score = Score();
@@ -443,7 +443,7 @@ public class CLIP
             }
         }
 
-        Backwards((_imageGradient, _descriptionGradient), input, learningRate);
+        Backwards((_imageGradient, _descriptionGradient), input, learningRate, transformLearningRate);
         return (loss, crossLoss);
     }
 
