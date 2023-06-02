@@ -1,4 +1,6 @@
-﻿using ILGPU.Runtime.Cuda;
+﻿using ILGPU.Runtime;
+using ILGPU;
+using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -23,6 +25,11 @@ public abstract class Layer
     protected FeatureMap[,] _outputs;
     protected FeatureMap[,] _outGradients;
     protected ILayerInfo[] _layerInfos;
+
+    protected MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInputs;
+    protected MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInGradients;
+    protected MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceOutputs;
+    protected MemoryBuffer1D<float, Stride1D.Dense>[,] _deviceOutGradients;
 
     public abstract string Name { get; }
 
@@ -99,6 +106,12 @@ public abstract class Layer
                 _outputs[i, j] = new FeatureMap(layer.OutputWidth, layer.OutputLength);
             }
         }
+
+        _deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
+        _deviceInGradients = new MemoryBuffer1D<Color, Stride1D.Dense>[_outputDimensions, _batchSize];
+        _deviceOutputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_outputDimensions, _batchSize];
+        _deviceOutGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions, _batchSize];
+
         input = _outputs;
     }
 

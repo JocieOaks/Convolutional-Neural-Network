@@ -4,11 +4,7 @@
 using ILGPU;
 using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
-using ILGPU.Runtime.OpenCL;
 using Newtonsoft.Json;
-using System;
-using System.Runtime.Serialization;
-using static System.Net.Mime.MediaTypeNames;
 
 [Serializable]
 public class ConvolutionalLayer : Layer
@@ -18,14 +14,18 @@ public class ConvolutionalLayer : Layer
     protected const float LEARNINGMULTIPLIER = 1f;
 
     protected float[][] _kernalGradient;
+
     [JsonProperty]
     protected Color[][] _kernals;
+
+    private MemoryBuffer1D<LayerInfo, Stride1D.Dense>[] _deviceInfos;
+    private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceKernals;
 
     public override string Name => "Convolutional Layer";
 
     public ConvolutionalLayer(int kernalSize, int stride, ref FeatureMap[,] input, int outputDimensionsMultiplier) : base(kernalSize, stride, ref input, outputDimensionsMultiplier)
     {
-        if(outputDimensionsMultiplier < 1)
+        if (outputDimensionsMultiplier < 1)
         {
             throw new ArgumentException("Output Dimension Multiplier must be greater than 0. To decrease dimensions, use Fully Connected Layer");
         }
@@ -37,7 +37,6 @@ public class ConvolutionalLayer : Layer
         float variance = 0.6666f / (_outputDimensions * kernalSize * kernalSize + _inputDimensions * kernalSize * kernalSize);
         float stdDev = MathF.Sqrt(variance);
 
-
         for (int i = 0; i < _outputDimensions; i++)
         {
             _kernals[i] = new Color[kernalSize * kernalSize];
@@ -47,133 +46,184 @@ public class ConvolutionalLayer : Layer
                 _kernals[i][j] = Color.RandomGauss(0, stdDev);
             }
         }
+
+        _deviceInfos = new MemoryBuffer1D<LayerInfo, Stride1D.Dense>[_inputDimensions];
+        _deviceKernals = new MemoryBuffer1D<Color, Stride1D.Dense>[_outputDimensions];
+        _deviceKernalGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_outputDimensions];
     }
 
     protected FeatureMap[,] Convoluted => _outputs;
+
     public override FeatureMap[,] Backwards(FeatureMap[,] inputs, FeatureMap[,] inGradients, float learningRate)
     {
-        using (Context context = Context.Create(builder => builder.Cuda()))
+        using Context context = Context.Create(builder => builder.Cuda());
+        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+
+        var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsOutKernal);
+        var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsGradientKernal);
+
+        for (int i = 0; i < _inputDimensions; i++)
         {
-            using Accelerator accelerator = context.CreateCudaAccelerator(0);
-            
-            MemoryBuffer1D<float, Stride1D.Dense>[,] deviceOutGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions, _batchSize];
-            MemoryBuffer1D<float, Stride1D.Dense>[] deviceKernalGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_outputDimensions];
-            MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
-            for (int i = 0; i < _inputDimensions; i++)
+            _deviceInfos[i] = accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
+            for (int j = 0; j < _batchSize; j++)
             {
-                for(int j = 0; j < _batchSize; j++)
-                {
-                    deviceInputs[i, j] = inputs[i, j].Allocate(accelerator);
-                    deviceOutGradients[i,j] = accelerator.Allocate1D<float>(Infos(i).InputArea * 3);
-                }
+                _deviceInputs[i, j] = inputs[i, j].Allocate(accelerator);
+                _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator);
+            }
+        }
+
+        for (int i = 0; i < _outputDimensions; i++)
+        {
+            _deviceKernals[i] = accelerator.Allocate1D(_kernals[i]);
+            _deviceKernalGradients[i] = accelerator.Allocate1D<float>(_kernalGradient[i].Length);
+            Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
+            for (int j = 0; j < _batchSize; j++)
+            {
+                _deviceInGradients[i, j] = inGradients[i, j].Allocate(accelerator);
+
+                backwardsOutKernal(index, _deviceInGradients[i, j].View, _deviceKernals[i].View, _deviceOutGradients[i % _inputDimensions, j].View, _deviceInfos[i % _inputDimensions].View);
+                backwardsGradientKernal(index, _deviceInGradients[i, j].View, _deviceInputs[i % _inputDimensions, j].View, _deviceKernalGradients[i].View, _deviceInfos[i % _inputDimensions].View);
+            }
+        }
+
+        accelerator.Synchronize();
+
+        for (int i = 0; i < _inputDimensions; i++)
+        {
+            for (int j = 0; j < _batchSize; j++)
+            {
+                _outGradients[i, j].CopyFromBuffer(_deviceOutGradients[i, j]);
+                _deviceOutGradients[i, j].Dispose();
+                _deviceInputs[i, j].Dispose();
+            }
+            _deviceInfos[i].Dispose();
+        }
+
+        for (int i = 0; i < _outputDimensions; i++)
+        {
+            _deviceKernalGradients[i].CopyToCPU(_kernalGradient[i]);
+            _deviceKernalGradients[i].Dispose();
+            _deviceKernals[i].Dispose();
+
+            for (int j = 0; j < _kernalSize * _kernalSize; j++)
+            {
+                _kernals[i][j] -= learningRate * LEARNINGMULTIPLIER * new Color(_kernalGradient[i][j * 3], _kernalGradient[i][j * 3 + 1], _kernalGradient[i][j * 3 + 2]).Clamp(CLAMP);
             }
 
-            for (int i = 0; i < _outputDimensions; i++)
+            for (int j = 0; j < _batchSize; j++)
             {
-                deviceKernalGradients[i] = accelerator.Allocate1D<float>(_kernalGradient[i].Length);
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    InitializeBackwardsKernal(i, deviceInputs[i % _inputDimensions, j], inGradients[i, j], accelerator, deviceOutGradients[i % _inputDimensions, j], deviceKernalGradients[i]);
-                }
-            }
-
-            accelerator.Synchronize();
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _outGradients[i, j].CopyFromBuffer(deviceOutGradients[i, j]);
-                    deviceOutGradients[i, j].Dispose();
-                    deviceInputs[i, j].Dispose();
-                }
-
-                deviceKernalGradients[i].CopyToCPU(_kernalGradient[i]);
-                deviceKernalGradients[i].Dispose();
-
-                for (int j = 0; j < _kernalSize * _kernalSize; j++)
-                {
-                    _kernals[i][j] -= learningRate * LEARNINGMULTIPLIER * new Color(_kernalGradient[i][j * 3], _kernalGradient[i][j * 3 + 1], _kernalGradient[i][j * 3 + 2]).Clamp(CLAMP);
-                }
+                _deviceInGradients[i, j].Dispose();
             }
         }
 
         return _outGradients;
     }
 
+    private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceKernalGradients;
+
     public void BackwardsKernalOnly(FeatureMap[,] inputs, FeatureMap[,] inGradients, float learningRate)
     {
-        using (Context context = Context.Create(builder => builder.Cuda()))
+        using Context context = Context.Create(builder => builder.Cuda());
+        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+
+        var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsGradientKernal);
+
+        for (int i = 0; i < _inputDimensions; i++)
         {
-            using Accelerator accelerator = context.CreateCudaAccelerator(0);
-
-            MemoryBuffer1D<float, Stride1D.Dense>[] deviceKernalGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_outputDimensions];
-            MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
-            for (int i = 0; i < _inputDimensions; i++)
+            _deviceInfos[i] = accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
+            for (int j = 0; j < _batchSize; j++)
             {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    deviceInputs[i, j] = inputs[i, j].Allocate(accelerator);
-                }
+                _deviceInputs[i, j] = inputs[i, j].Allocate(accelerator);
+            }
+        }
+
+        for (int i = 0; i < _outputDimensions; i++)
+        {
+            _deviceKernalGradients[i] = accelerator.Allocate1D<float>(_kernalGradient[i].Length);
+            Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
+            for (int j = 0; j < _batchSize; j++)
+            {
+                _deviceInGradients[i, j] = inGradients[i, j].Allocate(accelerator);
+
+                backwardsGradientKernal(index, _deviceInGradients[i, j].View, _deviceInputs[i % _inputDimensions, j].View, _deviceKernalGradients[i].View, _deviceInfos[i % _inputDimensions].View);
+            }
+        }
+
+        accelerator.Synchronize();
+
+        for (int i = 0; i < _inputDimensions; i++)
+        {
+            for (int j = 0; j < _batchSize; j++)
+            {
+                _deviceInputs[i, j].Dispose();
+            }
+            _deviceInfos[i].Dispose();
+        }
+
+        for (int i = 0; i < _outputDimensions; i++)
+        {
+            _deviceKernalGradients[i].CopyToCPU(_kernalGradient[i]);
+            _deviceKernalGradients[i].Dispose();
+
+            for (int j = 0; j < _kernalSize * _kernalSize; j++)
+            {
+                _kernals[i][j] -= learningRate * LEARNINGMULTIPLIER * new Color(_kernalGradient[i][j * 3], _kernalGradient[i][j * 3 + 1], _kernalGradient[i][j * 3 + 2]).Clamp(CLAMP);
             }
 
-            for (int i = 0; i < _outputDimensions; i++)
+            for (int j = 0; j < _batchSize; j++)
             {
-                deviceKernalGradients[i] = accelerator.Allocate1D<float>(_kernalGradient[i].Length);
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    InitializeBackwardsKernal(i, deviceInputs[i % _inputDimensions, j], inGradients[i, j], accelerator, deviceKernalGradients[i]);
-                }
-            }
-
-            accelerator.Synchronize();
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    deviceInputs[i, j].Dispose();
-                }
-
-                deviceKernalGradients[i].CopyToCPU(_kernalGradient[i]);
-                deviceKernalGradients[i].Dispose();
-
-                for (int j = 0; j < _kernalSize * _kernalSize; j++)
-                {
-                    _kernals[i][j] -= learningRate * LEARNINGMULTIPLIER * new Color(_kernalGradient[i][j * 3], _kernalGradient[i][j * 3 + 1], _kernalGradient[i][j * 3 + 2]).Clamp(CLAMP);
-                }
+                _deviceInGradients[i, j].Dispose();
             }
         }
     }
 
     public override FeatureMap[,] Forward(FeatureMap[,] inputs)
     {
-        using (Context context = Context.Create(builder => builder.Cuda()))
+        using Context context = Context.Create(builder => builder.Cuda());
+        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+
+        var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(ForwardKernal);
+
+        for (int i = 0; i < _inputDimensions; i++)
         {
-            using Accelerator accelerator = context.CreateCudaAccelerator(0);
-
-            MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceConvoluted = new MemoryBuffer1D<Color, Stride1D.Dense>[_outputDimensions, _batchSize];
-
-            for (int i = 0; i < _outputDimensions; i++)
+            _deviceInfos[i] = accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
+            for (int j = 0; j < _batchSize; j++)
             {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    using var deviceInput = inputs[i % _inputDimensions, j].Allocate(accelerator);
-                    deviceConvoluted[i, j] = InitializeForwardKernal(i, deviceInput, accelerator);
-
-                }
+                _deviceInputs[i, j] = inputs[i, j].Allocate(accelerator);
             }
+        }
 
-            accelerator.Synchronize();
-
-            for (int i = 0; i < _outputDimensions; i++)
+        for (int i = 0; i < _outputDimensions; i++)
+        {
+            _deviceKernals[i] = accelerator.Allocate1D(_kernals[i]);
+            Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
+            for (int j = 0; j < _batchSize; j++)
             {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    Convoluted[i, j].CopyFromBuffer(deviceConvoluted[i, j]);
-                    deviceConvoluted[i, j].Dispose();
-                }
+                _deviceOutputs[i, j] = _outputs[i, j].AllocateEmpty(accelerator);
+
+                forwardKernal(index, _deviceInputs[i % _inputDimensions, j].View, _deviceOutputs[i, j].View, _deviceKernals[i].View, _deviceInfos[i % _inputDimensions].View);
             }
+        }
+
+        accelerator.Synchronize();
+
+        for (int i = 0; i < _outputDimensions; i++)
+        {
+            for (int j = 0; j < _batchSize; j++)
+            {
+                Convoluted[i, j].CopyFromBuffer(_deviceOutputs[i, j]);
+                _deviceOutputs[i, j].Dispose();
+            }
+            _deviceKernals[i].Dispose();
+        }
+
+        for (int i = 0; i < _inputDimensions; i++)
+        {
+            for (int j = 0; j < _batchSize; j++)
+            {
+                _deviceInputs[i, j].Dispose();
+            }
+            _deviceInfos[i].Dispose();
         }
 
         return Convoluted;
@@ -246,38 +296,9 @@ public class ConvolutionalLayer : Layer
                 if (info[0].TryGetInputIndex(index.X, i, index.Y, j, out int inputIndex))
                     sum += kernal[info[0].KernalIndex(i, j)] * input[inputIndex];
             }
-
         }
 
         convoluted[info[0].OutputIndex(index.X, index.Y)] = sum * info[0].InverseKSquared;
-    }
-
-    private void InitializeBackwardsKernal(int dimension, MemoryBuffer1D<Color, Stride1D.Dense> deviceInput, FeatureMap inGradient, Accelerator accelerator, MemoryBuffer1D<float, Stride1D.Dense> deviceOutGradient, MemoryBuffer1D<float, Stride1D.Dense> deviceKernalGradient)
-    {
-        using var deviceKernal = accelerator.Allocate1D(_kernals[dimension]);
-        using var deviceInGradient = inGradient.Allocate(accelerator);
-        using var deviceLayerInfo = accelerator.Allocate1D(new LayerInfo[] { Infos(dimension) });
-
-        var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsOutKernal);
-
-        var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsGradientKernal);
-
-        Index3D index = new(inGradient.Width, inGradient.Length, 3);
-
-        backwardsOutKernal(index, deviceInGradient.View, deviceKernal.View, deviceOutGradient.View, deviceLayerInfo.View);
-        backwardsGradientKernal(index, deviceInGradient.View, deviceInput.View, deviceKernalGradient.View, deviceLayerInfo.View);
-    }
-
-    private void InitializeBackwardsKernal(int dimension, MemoryBuffer1D<Color, Stride1D.Dense> deviceInput, FeatureMap inGradient, Accelerator accelerator, MemoryBuffer1D<float, Stride1D.Dense> deviceKernalGradient)
-    {
-        using var deviceInGradient = inGradient.Allocate(accelerator);
-        using var deviceLayerInfo = accelerator.Allocate1D(new LayerInfo[] { Infos(dimension) });
-
-        var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsGradientKernal);
-
-        Index3D index = new(inGradient.Width, inGradient.Length, 3);
-
-        backwardsGradientKernal(index, deviceInGradient.View, deviceInput.View, deviceKernalGradient.View, deviceLayerInfo.View);
     }
 
     protected LayerInfo Infos(int index)
@@ -285,19 +306,6 @@ public class ConvolutionalLayer : Layer
         return (LayerInfo)_layerInfos[index % _inputDimensions];
     }
 
-    protected MemoryBuffer1D<Color, Stride1D.Dense> InitializeForwardKernal(int dimension, MemoryBuffer1D<Color, Stride1D.Dense> deviceInput, Accelerator accelerator)
-    {
-        var deviceConvoluted = accelerator.Allocate1D<Color>(Infos(dimension).OutputArea);
-        using var deviceKernal = accelerator.Allocate1D(_kernals[dimension]);
-        using var deviceLayerInfo = accelerator.Allocate1D(new LayerInfo[] { Infos(dimension) });
-
-        var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(ForwardKernal);
-
-        Index2D index = new(Infos(dimension).OutputWidth, Infos(dimension).OutputLength);
-
-        forwardKernal(index, deviceInput.View, deviceConvoluted.View, deviceKernal.View, deviceLayerInfo.View);
-        return deviceConvoluted;
-    }
     private static int FloatIndex(int index, int rgb)
     {
         return index * 3 + rgb;

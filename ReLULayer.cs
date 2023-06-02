@@ -4,7 +4,12 @@ using ILGPU.Runtime.Cuda;
 
 public class ReLULayer : Layer
 {
-    public ReLULayer(ref FeatureMap[,] input) : base(1, 1, ref input) { }
+    private MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] _deviceInfos;
+
+    public ReLULayer(ref FeatureMap[,] input) : base(1, 1, ref input)
+    {
+        _deviceInfos = new MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[_inputDimensions];
+    }
 
     public override string Name => "Activation Layer";
 
@@ -13,20 +18,19 @@ public class ReLULayer : Layer
         using Context context = Context.Create(builder => builder.Cuda());
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
 
-        MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceOutGradients = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
+        var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(BackwardsKernal);
+
         for (int i = 0; i < _inputDimensions; i++)
         {
-            using var deviceInfo = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
-            Index2D index = new(Infos(i).Width, Infos(i).Length);
+            _deviceInfos[i] = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
+            Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
             for (int j = 0; j < _batchSize; j++)
             {
-                deviceOutGradients[i, j] = input[i, j].AllocateEmpty(accelerator);
-                using var deviceInput = input[i, j].Allocate(accelerator);
-                using var deviceInGradient = inGradient[i, j].Allocate(accelerator);
+                _deviceOutGradients[i, j] = input[i, j].AllocateFloat(accelerator);
+                _deviceInputs[i, j] = input[i, j].Allocate(accelerator);
+                _deviceInGradients[i, j] = inGradient[i, j].Allocate(accelerator);
 
-                var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(BackwardsKernal);
-
-                forwardKernal(index, deviceInput.View, deviceInGradient.View, deviceOutGradients[i, j].View, deviceInfo.View);
+                forwardKernal(index, _deviceInputs[i, j].View, _deviceInGradients[i, j].View, _deviceOutGradients[i, j].View, _deviceInfos[i].View);
             }
         }
 
@@ -36,9 +40,14 @@ public class ReLULayer : Layer
         {
             for (int j = 0; j < _batchSize; j++)
             {
-                _outGradients[i, j].CopyFromBuffer(deviceOutGradients[i, j]);
-                deviceOutGradients[i, j].Dispose();
+                _outGradients[i, j].CopyFromBuffer(_deviceOutGradients[i, j]);
+
+                _deviceOutGradients[i, j].Dispose();
+                _deviceInputs[i, j].Dispose();
+                _deviceInGradients[i, j].Dispose();
             }
+
+            _deviceInfos[i].Dispose();
         }
 
         return _outGradients;
@@ -49,19 +58,19 @@ public class ReLULayer : Layer
         using Context context = Context.Create(builder => builder.Cuda());
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
 
-        MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceOutputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
+        var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);
+
         for (int i = 0; i < _inputDimensions; i++)
         {
-            using var deviceInfo = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
+            _deviceInfos[i] = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
             Index2D index = new(Infos(i).Width, Infos(i).Length);
+
             for (int j = 0; j < _batchSize; j++)
             {
-                deviceOutputs[i, j] = input[i, j].AllocateEmpty(accelerator);
-                using var deviceInput = input[i, j].Allocate(accelerator);
+                _deviceOutputs[i, j] = input[i, j].AllocateEmpty(accelerator);
+                _deviceInputs[i, j] = input[i, j].Allocate(accelerator);
 
-                var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);
-
-                forwardKernal(index, deviceInput.View, deviceOutputs[i,j].View, deviceInfo.View);
+                forwardKernal(index, _deviceInputs[i, j].View, _deviceOutputs[i, j].View, _deviceInfos[i].View);
             }
         }
 
@@ -71,18 +80,22 @@ public class ReLULayer : Layer
         {
             for (int j = 0; j < _batchSize; j++)
             {
-                _outputs[i, j].CopyFromBuffer(deviceOutputs[i,j]);
-                deviceOutputs[i, j].Dispose();
+                _outputs[i, j].CopyFromBuffer(_deviceOutputs[i, j]);
+
+                _deviceOutputs[i, j].Dispose();
+                _deviceInputs[i, j].Dispose();
             }
+
+            _deviceInfos[i].Dispose();
         }
 
         return _outputs;
     }
 
-    private static void BackwardsKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<Color> outGradient, ArrayView<SingleLayerInfo> info)
+    private static void BackwardsKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<float> outGradient, ArrayView<SingleLayerInfo> info)
     {
         int mapsIndex = info[0].Index(index.X, index.Y);
-        outGradient[mapsIndex] = input[mapsIndex].ReLUPropogation() * inGradient[mapsIndex];
+        outGradient[3 * mapsIndex + index.Z] = input[mapsIndex].ReLUPropogation()[index.Z] * inGradient[mapsIndex][index.Z];
     }
 
     private static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> output, ArrayView<SingleLayerInfo> info)
@@ -96,4 +109,3 @@ public class ReLULayer : Layer
         return (SingleLayerInfo)_layerInfos[index];
     }
 }
-

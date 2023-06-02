@@ -11,6 +11,14 @@ public class BatchNormalizationLayer : Layer
     [JsonProperty] private readonly ColorVector _bias;
     [JsonProperty] private readonly ColorVector _weight;
 
+    private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceMeans;
+
+    private MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] _deviceInfos;
+    private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceGradients;
+    private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceValues;
+    private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceSums;
+    private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceVariances;
+
     public BatchNormalizationLayer(ref FeatureMap[,] input) : base(1, 1, ref input)
     {
         _weight = new ColorVector(_inputDimensions);
@@ -23,6 +31,13 @@ public class BatchNormalizationLayer : Layer
 
         _mean = new ColorVector(_inputDimensions);
         _sigma = new ColorVector(_inputDimensions);
+
+        _deviceInfos = new MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[_inputDimensions];
+        _deviceMeans = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions];
+        _deviceGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
+        _deviceValues = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions];
+        _deviceSums = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
+        _deviceVariances = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
     }
 
     public override string Name => "Batch Normalization Layer";
@@ -34,31 +49,24 @@ public class BatchNormalizationLayer : Layer
         using Context context = Context.Create(builder => builder.Cuda());
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
 
-        MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
-        MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceInGradients = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
-        MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] deviceInfos = new MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[_inputDimensions];
-
-        MemoryBuffer1D<float, Stride1D.Dense>[] deviceGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
-        MemoryBuffer1D<float, Stride1D.Dense>[,] deviceOutGradient = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions, _batchSize];
-
         Gradients[] gradients = new Gradients[_inputDimensions];
 
         var gradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(GradientsKernal);
-        
+
         for (int i = 0; i < _inputDimensions; i++)
         {
-            deviceInfos[i] = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
-            deviceGradients[i] = accelerator.Allocate1D<float>(9);
-            using var deviceMean = accelerator.Allocate1D(new Color[] { _mean[i] });
+            _deviceInfos[i] = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
+            _deviceGradients[i] = accelerator.Allocate1D<float>(9);
+            _deviceMeans[i] = accelerator.Allocate1D(new Color[] { _mean[i] });
             Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
 
             for (int j = 0; j < _batchSize; j++)
             {
-                deviceInputs[i, j] = inputs[i, j].Allocate(accelerator);
-                deviceInGradients[i, j] = inGradients[i, j].Allocate(accelerator);
-                using var deviceNormalized = Normalized[i, j].Allocate(accelerator);
+                _deviceInputs[i, j] = inputs[i, j].Allocate(accelerator);
+                _deviceInGradients[i, j] = inGradients[i, j].Allocate(accelerator);
+                _deviceOutputs[i, j] = Normalized[i, j].Allocate(accelerator);
 
-                gradientKernal(index, deviceInputs[i, j].View, deviceInGradients[i, j].View, deviceNormalized.View, deviceMean.View, deviceGradients[i].View, deviceInfos[i].View);
+                gradientKernal(index, _deviceInputs[i, j].View, _deviceInGradients[i, j].View, _deviceOutputs[i, j].View, _deviceMeans[i].View, _deviceGradients[i].View, _deviceInfos[i].View);
             }
         }
 
@@ -69,23 +77,23 @@ public class BatchNormalizationLayer : Layer
         for (int i = 0; i < _inputDimensions; i++)
         {
             gradients[i] = new();
-            gradients[i].CopyFromBuffer(deviceGradients[i]);
-            deviceGradients[i].Dispose();
+            gradients[i].CopyFromBuffer(_deviceGradients[i]);
+            _deviceGradients[i].Dispose();
 
             gradients[i].SigmaGradient *= Color.Pow(_sigma[i], -1.5f) * _weight[i] * -0.5f;
             gradients[i].MeanGradient = -gradients[i].BiasGradient * _weight[i] / _sigma[i];
 
             float invM = 1f / (Infos(i).Area * _batchSize);
 
-            using var deviceValues = accelerator.Allocate1D(new Color[] { _weight[i] / _sigma[i], 2 * invM * gradients[i].SigmaGradient, _mean[i], invM * gradients[i].MeanGradient });
+            _deviceValues[i] = accelerator.Allocate1D(new Color[] { _weight[i] / _sigma[i], 2 * invM * gradients[i].SigmaGradient, _mean[i], invM * gradients[i].MeanGradient });
 
             Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
 
             for (int j = 0; j < _batchSize; j++)
             {
-                deviceOutGradient[i, j] = _outGradients[i, j].AllocateFloat(accelerator);
+                _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator);
 
-                backwardsKernal(index, deviceInputs[i, j].View, deviceInGradients[i, j].View, deviceOutGradient[i, j].View, deviceValues.View, deviceInfos[i].View);
+                backwardsKernal(index, _deviceInputs[i, j].View, _deviceInGradients[i, j].View, _deviceOutGradients[i, j].View, _deviceValues[i].View, _deviceInfos[i].View);
             }
         }
 
@@ -95,16 +103,19 @@ public class BatchNormalizationLayer : Layer
         {
             for (int j = 0; j < _batchSize; j++)
             {
-                _outGradients[i, j].CopyFromBuffer(deviceOutGradient[i, j]);
-                deviceOutGradient[i, j].Dispose();
-                deviceInputs[i, j].Dispose();
-                deviceInGradients[i, j].Dispose();
+                _outGradients[i, j].CopyFromBuffer(_deviceOutGradients[i, j]);
+                _deviceOutGradients[i, j].Dispose();
+                _deviceInputs[i, j].Dispose();
+                _deviceInGradients[i, j].Dispose();
+                _deviceOutputs[i, j].Dispose();
             }
 
             _weight[i] -= learningRate * gradients[i].WeightGradient.Clamp(1);
             _bias[i] -= learningRate * gradients[i].BiasGradient.Clamp(1);
 
-            deviceInfos[i].Dispose();
+            _deviceInfos[i].Dispose();
+            _deviceMeans[i].Dispose();
+            _deviceValues[i].Dispose();
         }
 
         return _outGradients;
@@ -115,29 +126,20 @@ public class BatchNormalizationLayer : Layer
         using Context context = Context.Create(builder => builder.Cuda());
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
 
-        MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
-        MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] deviceInfos = new MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[_inputDimensions];
-
-        MemoryBuffer1D<float, Stride1D.Dense>[] deviceSums = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
-        MemoryBuffer1D<Color, Stride1D.Dense>[] deviceMeans = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions];
-        MemoryBuffer1D<float, Stride1D.Dense>[] deviceVariances = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
-        MemoryBuffer1D<Color, Stride1D.Dense>[] deviceValues = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions];
-        MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceNormalized = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
-
         var sumKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(MeanKernal);
 
         for (int i = 0; i < _inputDimensions; i++)
         {
-            deviceInfos[i] = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
-            deviceSums[i] = accelerator.Allocate1D<float>(3);
+            _deviceInfos[i] = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
+            _deviceSums[i] = accelerator.Allocate1D<float>(3);
 
             Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
 
             for (int j = 0; j < _batchSize; j++)
             {
-                deviceInputs[i, j] = input[i, j].Allocate(accelerator);
+                _deviceInputs[i, j] = input[i, j].Allocate(accelerator);
 
-                sumKernal(index, deviceInputs[i, j].View, deviceSums[i].View, deviceInfos[i].View);
+                sumKernal(index, _deviceInputs[i, j].View, _deviceSums[i].View, _deviceInfos[i].View);
             }
         }
 
@@ -147,16 +149,16 @@ public class BatchNormalizationLayer : Layer
 
         for (int i = 0; i < _inputDimensions; i++)
         {
-            _mean[i] = (Color)deviceSums[i] / (Infos(i).Area * _batchSize);
+            _mean[i] = (Color)_deviceSums[i] / (Infos(i).Area * _batchSize);
 
-            deviceMeans[i] = accelerator.Allocate1D(new Color[] { _mean[i] });
-            deviceVariances[i] = accelerator.Allocate1D<float>(3);
+            _deviceMeans[i] = accelerator.Allocate1D(new Color[] { _mean[i] });
+            _deviceVariances[i] = accelerator.Allocate1D<float>(3);
 
             Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
 
             for (int j = 0; j < _batchSize; j++)
             {
-                varianceKernal(index, deviceInputs[i, j].View, deviceMeans[i].View, deviceVariances[i].View, deviceInfos[i].View);
+                varianceKernal(index, _deviceInputs[i, j].View, _deviceMeans[i].View, _deviceVariances[i].View, _deviceInfos[i].View);
             }
         }
 
@@ -166,16 +168,16 @@ public class BatchNormalizationLayer : Layer
 
         for (int i = 0; i < _inputDimensions; i++)
         {
-            _sigma[i] = Color.Pow((Color)deviceVariances[i] / (Infos(i).Area * _batchSize) + new Color(CLIP.ASYMPTOTEERRORFACTOR, CLIP.ASYMPTOTEERRORFACTOR, CLIP.ASYMPTOTEERRORFACTOR), 0.5f);
+            _sigma[i] = Color.Pow((Color)_deviceVariances[i] / (Infos(i).Area * _batchSize) + new Color(CLIP.ASYMPTOTEERRORFACTOR, CLIP.ASYMPTOTEERRORFACTOR, CLIP.ASYMPTOTEERRORFACTOR), 0.5f);
 
             Index2D index = new(Infos(i).Width, Infos(i).Length);
-            deviceValues[i] = accelerator.Allocate1D(new Color[] { _mean[i], _weight[i] / _sigma[i], _bias[i] });
+            _deviceValues[i] = accelerator.Allocate1D(new Color[] { _mean[i], _weight[i] / _sigma[i], _bias[i] });
 
             for (int j = 0; j < _batchSize; j++)
             {
-                deviceNormalized[i, j] = Normalized[i, j].AllocateEmpty(accelerator);
+                _deviceOutputs[i, j] = Normalized[i, j].AllocateEmpty(accelerator);
 
-                normalizeKernal(index, deviceInputs[i, j].View, deviceNormalized[i, j].View, deviceValues[i].View, deviceInfos[i].View);
+                normalizeKernal(index, _deviceInputs[i, j].View, _deviceOutputs[i, j].View, _deviceValues[i].View, _deviceInfos[i].View);
             }
         }
 
@@ -184,15 +186,15 @@ public class BatchNormalizationLayer : Layer
         {
             for (int j = 0; j < _batchSize; j++)
             {
-                Normalized[i, j].CopyFromBuffer(deviceNormalized[i, j]);
-                deviceNormalized[i, j].Dispose();
-                deviceInputs[i, j].Dispose();
+                Normalized[i, j].CopyFromBuffer(_deviceOutputs[i, j]);
+                _deviceOutputs[i, j].Dispose();
+                _deviceInputs[i, j].Dispose();
             }
-            deviceInfos[i].Dispose();
-            deviceSums[i].Dispose();
-            deviceMeans[i].Dispose();
-            deviceVariances[i].Dispose();
-            deviceValues[i].Dispose();
+            _deviceInfos[i].Dispose();
+            _deviceSums[i].Dispose();
+            _deviceMeans[i].Dispose();
+            _deviceVariances[i].Dispose();
+            _deviceValues[i].Dispose();
         }
 
         return Normalized;
