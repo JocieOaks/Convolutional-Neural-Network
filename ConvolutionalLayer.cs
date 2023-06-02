@@ -158,7 +158,7 @@ public class ConvolutionalLayer : Layer
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = inputs[i % _inputDimensions, j].Allocate(accelerator);
+                    using var deviceInput = inputs[i % _inputDimensions, j].Allocate(accelerator);
                     deviceConvoluted[i, j] = InitializeForwardKernal(i, deviceInput, accelerator);
 
                 }
@@ -254,15 +254,13 @@ public class ConvolutionalLayer : Layer
 
     private void InitializeBackwardsKernal(int dimension, MemoryBuffer1D<Color, Stride1D.Dense> deviceInput, FeatureMap inGradient, Accelerator accelerator, MemoryBuffer1D<float, Stride1D.Dense> deviceOutGradient, MemoryBuffer1D<float, Stride1D.Dense> deviceKernalGradient)
     {
-        using MemoryBuffer1D<Color, Stride1D.Dense> deviceKernal = accelerator.Allocate1D(_kernals[dimension]);
-        using MemoryBuffer1D<Color, Stride1D.Dense> deviceInGradient = inGradient.Allocate(accelerator);
-        using MemoryBuffer1D<LayerInfo, Stride1D.Dense> deviceLayerInfo = accelerator.Allocate1D(new LayerInfo[] { Infos(dimension) });
+        using var deviceKernal = accelerator.Allocate1D(_kernals[dimension]);
+        using var deviceInGradient = inGradient.Allocate(accelerator);
+        using var deviceLayerInfo = accelerator.Allocate1D(new LayerInfo[] { Infos(dimension) });
 
-        Action<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>> backwardsOutKernal =
-            accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsOutKernal);
+        var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsOutKernal);
 
-        Action<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>> backwardsGradientKernal =
-            accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsGradientKernal);
+        var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsGradientKernal);
 
         Index3D index = new(inGradient.Width, inGradient.Length, 3);
 
@@ -272,11 +270,10 @@ public class ConvolutionalLayer : Layer
 
     private void InitializeBackwardsKernal(int dimension, MemoryBuffer1D<Color, Stride1D.Dense> deviceInput, FeatureMap inGradient, Accelerator accelerator, MemoryBuffer1D<float, Stride1D.Dense> deviceKernalGradient)
     {
-        using MemoryBuffer1D<Color, Stride1D.Dense> deviceInGradient = inGradient.Allocate(accelerator);
-        using MemoryBuffer1D<LayerInfo, Stride1D.Dense> deviceLayerInfo = accelerator.Allocate1D(new LayerInfo[] { Infos(dimension) });
+        using var deviceInGradient = inGradient.Allocate(accelerator);
+        using var deviceLayerInfo = accelerator.Allocate1D(new LayerInfo[] { Infos(dimension) });
 
-        Action<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>> backwardsGradientKernal =
-            accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsGradientKernal);
+        var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsGradientKernal);
 
         Index3D index = new(inGradient.Width, inGradient.Length, 3);
 
@@ -290,12 +287,11 @@ public class ConvolutionalLayer : Layer
 
     protected MemoryBuffer1D<Color, Stride1D.Dense> InitializeForwardKernal(int dimension, MemoryBuffer1D<Color, Stride1D.Dense> deviceInput, Accelerator accelerator)
     {
-        MemoryBuffer1D<Color, Stride1D.Dense> deviceConvoluted = accelerator.Allocate1D<Color>(Infos(dimension).OutputArea);
-        using MemoryBuffer1D<Color, Stride1D.Dense> deviceKernal = accelerator.Allocate1D(_kernals[dimension]);
-        using MemoryBuffer1D<LayerInfo, Stride1D.Dense> deviceLayerInfo = accelerator.Allocate1D(new LayerInfo[] { Infos(dimension) });
+        var deviceConvoluted = accelerator.Allocate1D<Color>(Infos(dimension).OutputArea);
+        using var deviceKernal = accelerator.Allocate1D(_kernals[dimension]);
+        using var deviceLayerInfo = accelerator.Allocate1D(new LayerInfo[] { Infos(dimension) });
 
-        Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>> forwardKernal =
-            accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(ForwardKernal);
+        var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(ForwardKernal);
 
         Index2D index = new(Infos(dimension).OutputWidth, Infos(dimension).OutputLength);
 

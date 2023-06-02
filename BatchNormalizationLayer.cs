@@ -120,18 +120,17 @@ public class BatchNormalizationLayer : Layer
 
         MemoryBuffer1D<Color, Stride1D.Dense>[] deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_batchSize];
         MemoryBuffer1D<Color, Stride1D.Dense>[] deviceInGradients = new MemoryBuffer1D<Color, Stride1D.Dense>[_batchSize];
-        using MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense> deviceInfo = accelerator.Allocate1D(new SingleLayerInfo[] { info });
-        using MemoryBuffer1D<float, Stride1D.Dense> deviceGradients = accelerator.Allocate1D<float>(9);
-        using MemoryBuffer1D<Color, Stride1D.Dense> deviceMean = accelerator.Allocate1D(new Color[] { _mean[dimension] });
+        using var deviceInfo = accelerator.Allocate1D(new SingleLayerInfo[] { info });
+        using var deviceGradients = accelerator.Allocate1D<float>(9);
+        using var deviceMean = accelerator.Allocate1D(new Color[] { _mean[dimension] });
         Index3D index = new(info.Width, info.Length, 3);
 
         for (int i = 0; i < _batchSize; i++)
         {
             deviceInputs[i] = input[dimension, i].Allocate(accelerator);
             deviceInGradients[i] = inGradient[dimension, i].Allocate(accelerator);
-            using MemoryBuffer1D<Color, Stride1D.Dense> deviceNormalized = Normalized[dimension, i].Allocate(accelerator);
-            Action<AcceleratorStream, Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>> gradientKernal =
-                accelerator.LoadAutoGroupedKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(GradientsKernal);
+            using var deviceNormalized = Normalized[dimension, i].Allocate(accelerator);
+            var gradientKernal = accelerator.LoadAutoGroupedKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(GradientsKernal);
 
             gradientKernal(stream, index, deviceInputs[i].View, deviceInGradients[i].View, deviceNormalized.View, deviceMean.View, deviceGradients.View, deviceInfo.View);
         }
@@ -144,13 +143,12 @@ public class BatchNormalizationLayer : Layer
         gradients.SigmaGradient *= Color.Pow(_sigma[dimension], -1.5f) * _weight[dimension] * -0.5f;
         gradients.MeanGradient = -gradients.BiasGradient * _weight[dimension] / _sigma[dimension];
 
-        using MemoryBuffer1D<Color, Stride1D.Dense> deviceValues = accelerator.Allocate1D(new Color[] {_weight[dimension] / _sigma[dimension], 2 * _m * gradients.SigmaGradient, _mean[dimension], _m * gradients.MeanGradient });
+        using var deviceValues = accelerator.Allocate1D(new Color[] {_weight[dimension] / _sigma[dimension], 2 * _m * gradients.SigmaGradient, _mean[dimension], _m * gradients.MeanGradient });
         MemoryBuffer1D<float, Stride1D.Dense>[] deviceOutGradient = new MemoryBuffer1D<float, Stride1D.Dense>[_batchSize];
         for (int i = 0; i < _batchSize; i++)
         {
             deviceOutGradient[i] = _outGradients[dimension,i].AllocateFloat(accelerator);
-            Action<AcceleratorStream, Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<SingleLayerInfo>> next =
-                accelerator.LoadAutoGroupedKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(BackwardsKernal);
+            var next = accelerator.LoadAutoGroupedKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(BackwardsKernal);
 
             next(stream, index, deviceInputs[i].View, deviceInGradients[i].View, deviceOutGradient[i].View, deviceValues.View, deviceInfo.View);
 
@@ -185,16 +183,15 @@ public class BatchNormalizationLayer : Layer
         float m = info.Area * _batchSize;
         float invM = 1 / m;
 
-        using MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense> deviceInfo = accelerator.Allocate1D(new SingleLayerInfo[] { info });
-        using MemoryBuffer1D<float, Stride1D.Dense> deviceSum = accelerator.Allocate1D<float>(3);
+        using var deviceInfo = accelerator.Allocate1D(new SingleLayerInfo[] { info });
+        using var deviceSum = accelerator.Allocate1D<float>(3);
         MemoryBuffer1D<Color, Stride1D.Dense>[] deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_batchSize];
         Index3D index3 = new(info.Width, info.Length, 3);
 
         for (int i = 0; i < _batchSize; i++)
         {
             deviceInputs[i] = input[dimension, i].Allocate(accelerator);
-            Action<AcceleratorStream, Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>> sumKernal =
-                        accelerator.LoadAutoGroupedKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(MeanKernal);
+            var sumKernal = accelerator.LoadAutoGroupedKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(MeanKernal);
 
             sumKernal(stream, index3, deviceInputs[i].View, deviceSum.View, deviceInfo.View);
         }
@@ -203,13 +200,12 @@ public class BatchNormalizationLayer : Layer
 
         _mean[dimension] = invM * (Color)deviceSum;
 
-        using MemoryBuffer1D<Color, Stride1D.Dense> deviceMean = accelerator.Allocate1D(new Color[] { _mean[dimension] });
-        using MemoryBuffer1D<float, Stride1D.Dense> deviceSigma2 = accelerator.Allocate1D<float>(3);
+        using var deviceMean = accelerator.Allocate1D(new Color[] { _mean[dimension] });
+        using var deviceSigma2 = accelerator.Allocate1D<float>(3);
 
         for (int i = 0; i < _batchSize; i++)
         {
-            Action<AcceleratorStream, Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>> sigmaKernal =
-                accelerator.LoadAutoGroupedKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(SigmaKernal);
+            var sigmaKernal = accelerator.LoadAutoGroupedKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(SigmaKernal);
 
             sigmaKernal(stream, index3, deviceInputs[i].View, deviceMean.View, deviceSigma2.View, deviceInfo.View);
         }
@@ -219,7 +215,7 @@ public class BatchNormalizationLayer : Layer
         _sigma[dimension] = Color.Pow(invM * (Color)deviceSigma2 + new Color(CLIP.ASYMPTOTEERRORFACTOR, CLIP.ASYMPTOTEERRORFACTOR, CLIP.ASYMPTOTEERRORFACTOR), 0.5f);
 
         Index2D index2 = new(info.Width, info.Length);
-        using MemoryBuffer1D<Color, Stride1D.Dense> deviceValues = accelerator.Allocate1D(new Color[] { _mean[dimension], _sigma[dimension], _weight[dimension], _bias[dimension] });
+        using var deviceValues = accelerator.Allocate1D(new Color[] { _mean[dimension], _sigma[dimension], _weight[dimension], _bias[dimension] });
         MemoryBuffer1D<Color, Stride1D.Dense>[] deviceNormalized = new MemoryBuffer1D<Color, Stride1D.Dense>[_batchSize];
         
 
@@ -227,8 +223,7 @@ public class BatchNormalizationLayer : Layer
         {
             deviceNormalized[i] = Normalized[dimension, i].AllocateEmpty(accelerator);
 
-            Action<AcceleratorStream, Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<SingleLayerInfo>> normalizeKernal =
-                accelerator.LoadAutoGroupedKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);
+            var normalizeKernal = accelerator.LoadAutoGroupedKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);
 
             normalizeKernal(stream, index2, deviceInputs[i].View, deviceNormalized[i].View, deviceValues.View, deviceInfo.View);
         }

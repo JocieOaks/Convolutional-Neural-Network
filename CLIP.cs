@@ -14,6 +14,7 @@ public class CLIP
 {
     //Used to avoid divide by zero or log of zero going to infinity.
     public const float ASYMPTOTEERRORFACTOR = 1e-6f; //Used to avoid divide by zero or log of zero going to infinity.
+    private const bool PRINTSTOPWATCH = false;
     [JsonProperty]
     readonly private int _batchSize;
 
@@ -199,7 +200,8 @@ public class CLIP
         func();
         watch.Stop();
         var elapsedMs = watch.ElapsedMilliseconds;
-        Console.WriteLine($"{processName} Time: {elapsedMs / 1000f} s");
+        if(PRINTSTOPWATCH)
+            Console.WriteLine($"{processName} Time: {elapsedMs / 1000f} s");
     }
 
     public void Forward((FeatureMap image, bool[] bools, float[] floats)[] input)

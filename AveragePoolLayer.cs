@@ -17,85 +17,77 @@ public class AveragePoolLayer : Layer
 
     public override FeatureMap[,] Backwards(FeatureMap[,] input, FeatureMap[,] inGradient, float learningRate)
     {
-        using (Context context = Context.Create(builder => builder.Cuda()))
+        using Context context = Context.Create(builder => builder.Cuda());
+        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+        MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceOutGradient = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, inGradient.GetLength(1)];
+
+        for (int i = 0; i < _inputDimensions; i++)
         {
-            using (Accelerator accelerator = context.CreateCudaAccelerator(0))
+            for (int j = 0; j < inGradient.GetLength(1); j++)
             {
-                MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceOutGradient = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, inGradient.GetLength(1)];
+                deviceOutGradient[i, j] = _outGradients[i, j].AllocateEmpty(accelerator);
+                using var deviceInGradient = inGradient[i, j].Allocate(accelerator);
+                using var deviceLayerInfo =
+                    accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
 
-                for (int i = 0; i < _inputDimensions; i++)
-                {
-                    for (int j = 0; j < inGradient.GetLength(1); j++)
-                    {
-                        deviceOutGradient[i, j] = _outGradients[i, j].AllocateEmpty(accelerator);
-                        using MemoryBuffer1D<Color, Stride1D.Dense> deviceInGradient = inGradient[i, j].Allocate(accelerator);
-                        using MemoryBuffer1D<LayerInfo, Stride1D.Dense> deviceLayerInfo =
-                            accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
+                var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(BackwardsKernal);
 
-                        Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>> forwardKernal =
-                            accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(BackwardsKernal);
+                Index2D index = new(_outGradients[i, j].Width, _outGradients[i, j].Length);
 
-                        Index2D index = new(_outGradients[i,j].Width, _outGradients[i,j].Length);
+                forwardKernal(index, deviceInGradient.View, deviceOutGradient[i, j].View, deviceLayerInfo.View);
 
-                        forwardKernal(index, deviceInGradient.View, deviceOutGradient[i, j].View, deviceLayerInfo.View);
-
-                    }
-                }
-
-                accelerator.Synchronize();
-
-                for (int i = 0; i < _inputDimensions; i++)
-                {
-                    for (int j = 0; j < input.GetLength(1); j++)
-                    {
-                        _outGradients[i,j].CopyFromBuffer(deviceOutGradient[i, j]);
-                        deviceOutGradient[i, j].Dispose();
-                    }
-                }
             }
         }
+
+        accelerator.Synchronize();
+
+        for (int i = 0; i < _inputDimensions; i++)
+        {
+            for (int j = 0; j < input.GetLength(1); j++)
+            {
+                _outGradients[i, j].CopyFromBuffer(deviceOutGradient[i, j]);
+                deviceOutGradient[i, j].Dispose();
+            }
+        }
+
         return _outGradients;
     }
 
     public override FeatureMap[,] Forward(FeatureMap[,] input)
     {
-        using (Context context = Context.Create(builder => builder.Cuda()))
+        using Context context = Context.Create(builder => builder.Cuda());
+        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+        MemoryBuffer1D<Color, Stride1D.Dense>[,] devicePooled = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, input.GetLength(1)];
+
+        for (int i = 0; i < _inputDimensions; i++)
         {
-            using (Accelerator accelerator = context.CreateCudaAccelerator(0))
+            for (int j = 0; j < input.GetLength(1); j++)
             {
-                MemoryBuffer1D<Color, Stride1D.Dense>[,] devicePooled = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, input.GetLength(1)];
+                devicePooled[i, j] = Pooled[i, j].AllocateEmpty(accelerator);
+                using var deviceInput = input[i, j].Allocate(accelerator);
+                using var deviceLayerInfo =
+                    accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
 
-                for (int i = 0; i < _inputDimensions; i++)
-                {
-                    for (int j = 0; j < input.GetLength(1); j++)
-                    {
-                        devicePooled[i, j] = Pooled[i, j].AllocateEmpty(accelerator);
-                        using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = input[i,j].Allocate(accelerator);
-                        using MemoryBuffer1D<LayerInfo, Stride1D.Dense> deviceLayerInfo =
-                            accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
+                var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(ForwardKernal);
 
-                        Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>> forwardKernal =
-                            accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(ForwardKernal);
+                Index2D index = new(Pooled[i, j].Width, Pooled[i, j].Length);
 
-                        Index2D index = new(Pooled[i,j].Width, Pooled[i,j].Length);
+                forwardKernal(index, deviceInput.View, devicePooled[i, j].View, deviceLayerInfo.View);
 
-                        forwardKernal(index, deviceInput.View, devicePooled[i, j].View, deviceLayerInfo.View);
-
-                    }
-                }
-
-                accelerator.Synchronize();
-
-                for (int i = 0; i < _inputDimensions; i++)
-                {
-                    for (int j = 0; j < input.GetLength(1); j++)
-                    {
-                        Pooled[i,j].CopyFromBuffer(devicePooled[i, j]);
-                        devicePooled[i, j].Dispose();
-                    }
-                }
             }
         }
+
+        accelerator.Synchronize();
+
+        for (int i = 0; i < _inputDimensions; i++)
+        {
+            for (int j = 0; j < input.GetLength(1); j++)
+            {
+                Pooled[i, j].CopyFromBuffer(devicePooled[i, j]);
+                devicePooled[i, j].Dispose();
+            }
+        }
+        
         return Pooled;
     }
 

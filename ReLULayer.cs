@@ -16,16 +16,15 @@ public class ReLULayer : Layer
         MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceOutGradients = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
         for (int i = 0; i < _inputDimensions; i++)
         {
-            using MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense> deviceInfo = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
-            Index2D index = new Index2D(Infos(i).Width, Infos(i).Length);
+            using var deviceInfo = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
+            Index2D index = new(Infos(i).Width, Infos(i).Length);
             for (int j = 0; j < _batchSize; j++)
             {
                 deviceOutGradients[i, j] = input[i, j].AllocateEmpty(accelerator);
-                using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = input[i, j].Allocate(accelerator);
-                using MemoryBuffer1D<Color, Stride1D.Dense> deviceInGradient = inGradient[i, j].Allocate(accelerator);
+                using var deviceInput = input[i, j].Allocate(accelerator);
+                using var deviceInGradient = inGradient[i, j].Allocate(accelerator);
 
-                Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<SingleLayerInfo>> forwardKernal =
-                    accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(BackwardsKernal);
+                var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(BackwardsKernal);
 
                 forwardKernal(index, deviceInput.View, deviceInGradient.View, deviceOutGradients[i, j].View, deviceInfo.View);
             }
@@ -53,15 +52,14 @@ public class ReLULayer : Layer
         MemoryBuffer1D<Color, Stride1D.Dense>[,] deviceOutputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
         for (int i = 0; i < _inputDimensions; i++)
         {
-            using MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense> deviceInfo = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
-            Index2D index = new Index2D(Infos(i).Width, Infos(i).Length);
+            using var deviceInfo = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
+            Index2D index = new(Infos(i).Width, Infos(i).Length);
             for (int j = 0; j < _batchSize; j++)
             {
                 deviceOutputs[i, j] = input[i, j].AllocateEmpty(accelerator);
-                using MemoryBuffer1D<Color, Stride1D.Dense> deviceInput = input[i, j].Allocate(accelerator);
+                using var deviceInput = input[i, j].Allocate(accelerator);
 
-                Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<SingleLayerInfo>> forwardKernal =
-                    accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);
+                var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);
 
                 forwardKernal(index, deviceInput.View, deviceOutputs[i,j].View, deviceInfo.View);
             }

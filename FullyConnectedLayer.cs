@@ -55,19 +55,17 @@ public class FullyConnectedLayer : Layer
 
             for (int i = 0; i < _inputDimensions; i++)
             {
-                using MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense> deviceLayerInfo = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
-                Index3D index = new Index3D(_layerInfos[i].InputWidth, _layerInfos[i].InputLength, 3);
+                using var deviceLayerInfo = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
+                Index3D index = new(_layerInfos[i].InputWidth, _layerInfos[i].InputLength, 3);
                 for (int j = 0; j < _outputDimensions; j++)
                 {
-                    using MemoryBuffer1D<Color, Stride1D.Dense> deviceMultiplier = accelerator.Allocate1D(new Color[] { _redMatrix[i, j], _greenMatrix[i,j], _blueMatrix[i, j] });
+                    using var deviceMultiplier = accelerator.Allocate1D(new Color[] { _redMatrix[i, j], _greenMatrix[i,j], _blueMatrix[i, j] });
                     deviceMultiplierGradients[i,j] = accelerator.Allocate1D<float>(9);
                     for (int k = 0; k < _batchSize; k++)
                     {
-                        Action<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>> backwardsOutKernal =
-                            accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(BackwardsOutKernal);
+                        var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(BackwardsOutKernal);
 
-                        Action<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>> backwardsGradientKernal =
-                            accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(BackwardsGradientKernal);
+                        var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(BackwardsGradientKernal);
 
                         backwardsOutKernal(index, deviceInGradients[j, k].View, deviceMultiplier.View, deviceOutGradients[i, k].View, deviceLayerInfo.View);
                         backwardsGradientKernal(index, deviceInGradients[j, k].View, deviceInputs[i, k].View, deviceMultiplierGradients[i, j].View, deviceLayerInfo.View);
@@ -134,16 +132,15 @@ public class FullyConnectedLayer : Layer
 
             for (int i = 0; i < _inputDimensions; i++)
             {
-                using MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense> deviceLayerInfo = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
+                using var deviceLayerInfo = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
                 Index3D index = new Index3D(_layerInfos[i].InputWidth, _layerInfos[i].InputLength, 3);
                 for (int j = 0; j < _outputDimensions; j++)
                 {
-                    using MemoryBuffer1D<Color, Stride1D.Dense> deviceMultiplier = accelerator.Allocate1D(new Color[] { _redMatrix[i, j], _greenMatrix[i, j], _blueMatrix[i, j] });
+                    using var deviceMultiplier = accelerator.Allocate1D(new Color[] { _redMatrix[i, j], _greenMatrix[i, j], _blueMatrix[i, j] });
 
                     for (int k = 0; k < _batchSize; k++)
                     {
-                        Action<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<SingleLayerInfo>> forwardKernal =
-                            accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);
+                        var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);
 
                         forwardKernal(index, deviceInputs[i,k].View, deviceOutputs[j, k].View, deviceMultiplier.View, deviceLayerInfo.View);
                     }
