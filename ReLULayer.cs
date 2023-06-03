@@ -1,14 +1,27 @@
 ﻿using ILGPU;
 using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
+using Newtonsoft.Json;
 
+#nullable disable
+
+[Serializable]
 public class ReLULayer : Layer
 {
     private MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] _deviceInfos;
 
-    public ReLULayer(ref FeatureMap[,] input) : base(1, 1, ref input)
+    public ReLULayer(ref FeatureMap[,] input) : base(1, 1)
     {
+        input = Startup(input);
+    }
+
+    [JsonConstructor] private ReLULayer() : base() { }
+
+    public override FeatureMap[,] Startup(FeatureMap[,] input, int outputDimensionFactor = 0)
+    {
+        BaseStartup(input);
         _deviceInfos = new MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[_inputDimensions];
+        return _outputs;
     }
 
     public override string Name => "Activation Layer";

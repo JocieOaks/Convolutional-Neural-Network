@@ -1,24 +1,13 @@
-﻿using ILGPU.Runtime;
-using ILGPU;
-using ILGPU.Runtime.Cuda;
+﻿using ILGPU;
+using ILGPU.Runtime;
 using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection.Emit;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
 
+[Serializable]
 public abstract class Layer
 {
-    [JsonProperty]
-    protected int _kernalSize;
-    [JsonProperty]
-    protected int _stride;
-    [JsonProperty]
+    [JsonProperty] protected int _filterSize;
+    [JsonProperty] protected int _stride;
     protected int _inputDimensions;
-    [JsonProperty]
     protected int _outputDimensions;
     protected int _batchSize;
 
@@ -31,20 +20,31 @@ public abstract class Layer
     protected MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceOutputs;
     protected MemoryBuffer1D<float, Stride1D.Dense>[,] _deviceOutGradients;
 
-    public abstract string Name { get; }
+    [JsonIgnore] public abstract string Name { get; }
 
-    public Layer(int kernalSize, int stride, ref FeatureMap[,] input, int outputDimensionFactor = 1)
+    public Layer(int filterSize, int stride)
     {
-        _kernalSize = kernalSize;
+        _filterSize = filterSize;
         _stride = stride;
+    }
+
+    [JsonConstructor]
+    protected Layer()
+    {
+    }
+
+    public abstract FeatureMap[,] Startup(FeatureMap[,] input, int outputDimensionFactor = 1);
+
+    protected FeatureMap[,] BaseStartup(FeatureMap[,] input, int outputDimensionFactor = 1)
+    {
         _inputDimensions = input.GetLength(0);
-        if(outputDimensionFactor >= 1)
+        if (outputDimensionFactor >= 1)
         {
             _outputDimensions = outputDimensionFactor * _inputDimensions;
         }
         else
         {
-            if(outputDimensionFactor == 0 || _inputDimensions % outputDimensionFactor != 0)
+            if (outputDimensionFactor == 0 || _inputDimensions % outputDimensionFactor != 0)
             {
                 throw new ArgumentException("outputDimensionFactor does not divide evenly with input dimensions.");
             }
@@ -58,10 +58,10 @@ public abstract class Layer
         _layerInfos = new ILayerInfo[_inputDimensions];
         _outGradients = new FeatureMap[_inputDimensions, _batchSize];
         _outputs = new FeatureMap[_outputDimensions, _batchSize];
-        for(int i = 0; i < _inputDimensions; i++)
+        for (int i = 0; i < _inputDimensions; i++)
         {
             ILayerInfo layer;
-            if (stride == 1 && kernalSize == 1)
+            if (_stride == 1 && _filterSize == 1)
             {
                 layer = _layerInfos[i] = new SingleLayerInfo()
                 {
@@ -73,13 +73,13 @@ public abstract class Layer
             {
                 layer = _layerInfos[i] = new LayerInfo()
                 {
-                    KernalSize = kernalSize,
-                    Stride = stride,
-                    InverseKSquared = 1f / (kernalSize * kernalSize),
+                    FilterSize = _filterSize,
+                    Stride = _stride,
+                    InverseKSquared = 1f / (_filterSize * _filterSize),
                     InputWidth = input[i, 0].Width,
                     InputLength = input[i, 0].Length,
-                    OutputWidth = 2 + (input[i, 0].Width - kernalSize - 1) / stride,
-                    OutputLength = 2 + (input[i, 0].Length - kernalSize - 1) / stride
+                    OutputWidth = 2 + (input[i, 0].Width - _filterSize - 1) / _stride,
+                    OutputLength = 2 + (input[i, 0].Length - _filterSize - 1) / _stride
                 };
             }
 
@@ -87,12 +87,11 @@ public abstract class Layer
             {
                 _outGradients[i, j] = new FeatureMap(layer.InputWidth, layer.InputLength);
             }
-
         }
-        for(int i = 0; i < _outputDimensions; i++)
+        for (int i = 0; i < _outputDimensions; i++)
         {
             ILayerInfo layer;
-            if(outputDimensionFactor >= 1)
+            if (outputDimensionFactor >= 1)
             {
                 layer = _layerInfos[i / outputDimensionFactor];
             }
@@ -112,11 +111,10 @@ public abstract class Layer
         _deviceOutputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_outputDimensions, _batchSize];
         _deviceOutGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions, _batchSize];
 
-        input = _outputs;
+        return _outputs;
     }
 
     public abstract FeatureMap[,] Forward(FeatureMap[,] input);
 
     public abstract FeatureMap[,] Backwards(FeatureMap[,] input, FeatureMap[,] inGradient, float learningRate);
 }
-

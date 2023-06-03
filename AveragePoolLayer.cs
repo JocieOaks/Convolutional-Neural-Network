@@ -2,22 +2,32 @@
 using ILGPU;
 using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
-using System.Runtime.Serialization;
+using Newtonsoft.Json;
+
+#nullable disable
 
 [Serializable]
 public class AveragePoolLayer : Layer
 {
-    private float _invK2;
     private FeatureMap[,] Pooled => _outputs;
 
     private MemoryBuffer1D<LayerInfo, Stride1D.Dense>[] _deviceInfos;
 
-    public AveragePoolLayer(int kernalSize, ref FeatureMap[,] input) : base(kernalSize, kernalSize, ref input)
+    public AveragePoolLayer(int filterSize, ref FeatureMap[,] input) : base(filterSize, filterSize)
     {
-        _deviceInfos = new MemoryBuffer1D<LayerInfo, Stride1D.Dense>[_inputDimensions];
+        input = Startup(input);
     }
 
-    public override string Name => "Average Pool Layer";
+    [JsonConstructor] private AveragePoolLayer() : base() { }
+
+    public override FeatureMap[,] Startup(FeatureMap[,] input, int outputDimensionFactor = 0)
+    {
+        BaseStartup(input);
+        _deviceInfos = new MemoryBuffer1D<LayerInfo, Stride1D.Dense>[_inputDimensions];
+        return _outputs;
+    }
+
+    [JsonIgnore] public override string Name => "Average Pool Layer";
 
     public override FeatureMap[,] Backwards(FeatureMap[,] input, FeatureMap[,] inGradient, float learningRate)
     {
@@ -92,12 +102,6 @@ public class AveragePoolLayer : Layer
         return Pooled;
     }
 
-    [OnDeserialized]
-    public void OnDeserialized(StreamingContext context)
-    {
-        _invK2 = 1f / (_kernalSize * _kernalSize);
-    }
-
     private LayerInfo Infos(int index)
     {
         return (LayerInfo)_layerInfos[index];
@@ -106,7 +110,7 @@ public class AveragePoolLayer : Layer
     private static void BackwardsKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<float> outGradient, ArrayView<LayerInfo> layer)
     {
         //Unlike other Backwards Kernals, this kernal indexes by the outGradient rather than the inGradient, so the equations for index are inverted.
-        int inGradientIndex = (index.Y / layer[0].KernalSize) * layer[0].OutputWidth + index.X / layer[0].KernalSize;
+        int inGradientIndex = (index.Y / layer[0].FilterSize) * layer[0].OutputWidth + index.X / layer[0].FilterSize;
         int outGradientIndex = index.Y * layer[0].InputWidth + index.X;
         outGradient[3 * outGradientIndex + index.Z] = inGradient[inGradientIndex][index.Z] * layer[0].InverseKSquared;
     }
@@ -114,9 +118,9 @@ public class AveragePoolLayer : Layer
     private static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> pooled, ArrayView<LayerInfo> info)
     {
         Color sum = new();
-        for (int j = 0; j < info[0].KernalSize; j++)
+        for (int j = 0; j < info[0].FilterSize; j++)
         {
-            for (int i = 0; i < info[0].KernalSize; i++)
+            for (int i = 0; i < info[0].FilterSize; i++)
             {
                 if (info[0].TryGetInputIndex(index.X, i, index.Y, j, out int inputIndex))
                     sum += input[inputIndex];

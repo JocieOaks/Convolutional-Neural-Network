@@ -1,37 +1,53 @@
 ﻿using ILGPU;
 using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
-using System.Linq.Expressions;
+using Newtonsoft.Json;
 
+#nullable disable
+
+[Serializable]
 public class FullyConnectedLayer : Layer
 {
-    private FeatureMap _blueMatrix;
     private MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] _deviceInfos;
     private MemoryBuffer1D<float, Stride1D.Dense>[,] _deviceMultiplierGradients;
     private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceMultipliers;
     private new MemoryBuffer1D<float, Stride1D.Dense>[,] _deviceOutputs;
-    private FeatureMap _greenMatrix;
-    private FeatureMap _redMatrix;
-    public FullyConnectedLayer(ref FeatureMap[,] input, int outputDimensions) : base(1, 1, ref input, -input.GetLength(0) / outputDimensions)
+    
+    [JsonProperty] private FeatureMap _matrixBlue;
+    [JsonProperty] private FeatureMap _matrixGreen;
+    [JsonProperty] private FeatureMap _matrixRed;
+
+    public FullyConnectedLayer(ref FeatureMap[,] input, int outputDimensions) : base(1, 1)
     {
+        input = Startup(input, -input.GetLength(0) / outputDimensions);
+
         float variance = 0.666f / (_inputDimensions + _outputDimensions);
         float stdDev = MathF.Sqrt(variance);
-        _redMatrix = new FeatureMap(_inputDimensions, _outputDimensions);
-        _greenMatrix = new FeatureMap(_inputDimensions, _outputDimensions);
-        _blueMatrix = new FeatureMap(_inputDimensions, _outputDimensions);
+        _matrixRed = new FeatureMap(_inputDimensions, _outputDimensions);
+        _matrixGreen = new FeatureMap(_inputDimensions, _outputDimensions);
+        _matrixBlue = new FeatureMap(_inputDimensions, _outputDimensions);
         for (int i = 0; i < _inputDimensions; i++)
         {
             for (int j = 0; j < _outputDimensions; j++)
             {
-                _redMatrix[i, j] = Color.RandomGauss(0, stdDev);
-                _greenMatrix[i, j] = Color.RandomGauss(0, stdDev);
-                _blueMatrix[i, j] = Color.RandomGauss(0, stdDev);
+                _matrixRed[i, j] = Color.RandomGauss(0, stdDev);
+                _matrixGreen[i, j] = Color.RandomGauss(0, stdDev);
+                _matrixBlue[i, j] = Color.RandomGauss(0, stdDev);
             }
         }
+
+    }
+
+    [JsonConstructor] private FullyConnectedLayer() : base() { }
+
+    public override FeatureMap[,] Startup(FeatureMap[,] input, int outputDimensionFactor)
+    {
+        BaseStartup(input, outputDimensionFactor);
         _deviceInfos = new MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[_inputDimensions];
         _deviceMultiplierGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions, _outputDimensions];
         _deviceMultipliers = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _outputDimensions];
         _deviceOutputs = new MemoryBuffer1D<float, Stride1D.Dense>[_outputDimensions, _batchSize];
+        return _outputs;
     }
 
     public override string Name => "Fully Connected Layer";
@@ -68,11 +84,11 @@ public class FullyConnectedLayer : Layer
             Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
             for (int j = 0; j < _outputDimensions; j++)
             {
-                _deviceMultipliers[i, j] = accelerator.Allocate1D(new Color[] { _redMatrix[i, j], _greenMatrix[i, j], _blueMatrix[i, j] });
+                _deviceMultipliers[i, j] = accelerator.Allocate1D(new Color[] { _matrixRed[i, j], _matrixGreen[i, j], _matrixBlue[i, j] });
                 _deviceMultiplierGradients[i, j] = accelerator.Allocate1D<float>(9);
                 for (int k = 0; k < _batchSize; k++)
                 {
-                    backwardsOutKernal(index, _deviceInGradients[j, k].View, _deviceMultipliers[i,j].View, _deviceOutGradients[i, k].View, _deviceInfos[i].View);
+                    backwardsOutKernal(index, _deviceInGradients[j, k].View, _deviceMultipliers[i, j].View, _deviceOutGradients[i, k].View, _deviceInfos[i].View);
                     backwardsGradientKernal(index, _deviceInGradients[j, k].View, _deviceInputs[i, k].View, _deviceMultiplierGradients[i, j].View, _deviceInfos[i].View);
                 }
             }
@@ -102,12 +118,12 @@ public class FullyConnectedLayer : Layer
             for (int j = 0; j < _outputDimensions; j++)
             {
                 _deviceMultiplierGradients[i, j].CopyToCPU(multiplierGradients);
-                _deviceMultiplierGradients[i,j].Dispose();
+                _deviceMultiplierGradients[i, j].Dispose();
                 _deviceMultipliers[i, j].Dispose();
 
-                _redMatrix[i, j] -= new Color(multiplierGradients[0], multiplierGradients[1], multiplierGradients[2]) * learningRate;
-                _greenMatrix[i, j] -= new Color(multiplierGradients[3], multiplierGradients[4], multiplierGradients[5]) * learningRate;
-                _blueMatrix[i, j] -= new Color(multiplierGradients[6], multiplierGradients[7], multiplierGradients[8]) * learningRate;
+                _matrixRed[i, j] -= new Color(multiplierGradients[0], multiplierGradients[1], multiplierGradients[2]) * learningRate;
+                _matrixGreen[i, j] -= new Color(multiplierGradients[3], multiplierGradients[4], multiplierGradients[5]) * learningRate;
+                _matrixBlue[i, j] -= new Color(multiplierGradients[6], multiplierGradients[7], multiplierGradients[8]) * learningRate;
             }
 
             _deviceInfos[i].Dispose();
@@ -122,7 +138,6 @@ public class FullyConnectedLayer : Layer
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
 
         var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);
-
 
         for (int i = 0; i < _outputDimensions; i++)
         {
@@ -147,7 +162,7 @@ public class FullyConnectedLayer : Layer
             Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
             for (int j = 0; j < _outputDimensions; j++)
             {
-                _deviceMultipliers[i, j] = accelerator.Allocate1D(new Color[] { _redMatrix[i, j], _greenMatrix[i, j], _blueMatrix[i, j] });
+                _deviceMultipliers[i, j] = accelerator.Allocate1D(new Color[] { _matrixRed[i, j], _matrixGreen[i, j], _matrixBlue[i, j] });
 
                 for (int k = 0; k < _batchSize; k++)
                 {
@@ -163,7 +178,7 @@ public class FullyConnectedLayer : Layer
             for (int i = 0; i < _outputDimensions; i++)
             {
                 _outputs[i, j].CopyFromBuffer(_deviceOutputs[i, j]);
-                
+
                 _deviceOutputs[i, j].Dispose();
             }
 
@@ -173,9 +188,9 @@ public class FullyConnectedLayer : Layer
             }
         }
 
-        for(int i = 0; i < _inputDimensions; i++)
+        for (int i = 0; i < _inputDimensions; i++)
         {
-            for(int j = 0; j < _outputDimensions; j++)
+            for (int j = 0; j < _outputDimensions; j++)
             {
                 _deviceMultipliers[i, j].Dispose();
             }
@@ -198,12 +213,13 @@ public class FullyConnectedLayer : Layer
     {
         int mapsIndex = info[0].Index(index.X, index.Y);
         float transposeDot = 0;
-        for(int i = 0; i < 3; i++)
+        for (int i = 0; i < 3; i++)
         {
             transposeDot += inGradient[mapsIndex][i] * multiplier[i][index.Z];
         }
         Atomic.Add(ref outGradient[mapsIndex * 3 + index.Z], transposeDot);
     }
+
     private static void ForwardKernal(Index3D index, ArrayView<Color> input, ArrayView<float> output, ArrayView<Color> multiplier, ArrayView<SingleLayerInfo> info)
     {
         int mapsIndex = info[0].Index(index.X, index.Y);

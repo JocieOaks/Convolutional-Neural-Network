@@ -13,44 +13,37 @@ public class ConvolutionalLayer : Layer
 
     protected const float LEARNINGMULTIPLIER = 1f;
 
-    protected float[][] _kernalGradient;
+    protected float[][] _filterGradient;
 
-    [JsonProperty]
-    protected Color[][] _kernals;
+    [JsonProperty] protected Color[][] _filters;
 
+    private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceFilterGradients;
+    private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceFilters;
     private MemoryBuffer1D<LayerInfo, Stride1D.Dense>[] _deviceInfos;
-    private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceKernals;
 
-    public override string Name => "Convolutional Layer";
-
-    public ConvolutionalLayer(int kernalSize, int stride, ref FeatureMap[,] input, int outputDimensionsMultiplier) : base(kernalSize, stride, ref input, outputDimensionsMultiplier)
+    public ConvolutionalLayer(int filterSize, int stride, ref FeatureMap[,] input, int outputDimensionsMultiplier) : base(filterSize, stride)
     {
-        if (outputDimensionsMultiplier < 1)
-        {
-            throw new ArgumentException("Output Dimension Multiplier must be greater than 0. To decrease dimensions, use Fully Connected Layer");
-        }
+        input = Startup(input, outputDimensionsMultiplier);
 
-        //Setup kernals and kernal gradients
-        _kernals = new Color[_outputDimensions][];
-        _kernalGradient = new float[_outputDimensions][];
+        //Setup filters and filter gradients
+        _filters = new Color[_outputDimensions][];
 
-        float variance = 0.6666f / (_outputDimensions * kernalSize * kernalSize + _inputDimensions * kernalSize * kernalSize);
+        float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize + _inputDimensions * _filterSize * _filterSize);
         float stdDev = MathF.Sqrt(variance);
 
         for (int i = 0; i < _outputDimensions; i++)
         {
-            _kernals[i] = new Color[kernalSize * kernalSize];
-            _kernalGradient[i] = new float[kernalSize * kernalSize * 3];
-            for (int j = 0; j < kernalSize * kernalSize; j++)
+            _filters[i] = new Color[_filterSize * _filterSize];
+            for (int j = 0; j < _filterSize * _filterSize; j++)
             {
-                _kernals[i][j] = Color.RandomGauss(0, stdDev);
+                _filters[i][j] = Color.RandomGauss(0, stdDev);
             }
         }
-
-        _deviceInfos = new MemoryBuffer1D<LayerInfo, Stride1D.Dense>[_inputDimensions];
-        _deviceKernals = new MemoryBuffer1D<Color, Stride1D.Dense>[_outputDimensions];
-        _deviceKernalGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_outputDimensions];
     }
+
+    [JsonConstructor] private ConvolutionalLayer() : base() { }
+
+    public override string Name => "Convolutional Layer";
 
     protected FeatureMap[,] Convoluted => _outputs;
 
@@ -74,15 +67,15 @@ public class ConvolutionalLayer : Layer
 
         for (int i = 0; i < _outputDimensions; i++)
         {
-            _deviceKernals[i] = accelerator.Allocate1D(_kernals[i]);
-            _deviceKernalGradients[i] = accelerator.Allocate1D<float>(_kernalGradient[i].Length);
+            _deviceFilters[i] = accelerator.Allocate1D(_filters[i]);
+            _deviceFilterGradients[i] = accelerator.Allocate1D<float>(_filterGradient[i].Length);
             Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
             for (int j = 0; j < _batchSize; j++)
             {
                 _deviceInGradients[i, j] = inGradients[i, j].Allocate(accelerator);
 
-                backwardsOutKernal(index, _deviceInGradients[i, j].View, _deviceKernals[i].View, _deviceOutGradients[i % _inputDimensions, j].View, _deviceInfos[i % _inputDimensions].View);
-                backwardsGradientKernal(index, _deviceInGradients[i, j].View, _deviceInputs[i % _inputDimensions, j].View, _deviceKernalGradients[i].View, _deviceInfos[i % _inputDimensions].View);
+                backwardsOutKernal(index, _deviceInGradients[i, j].View, _deviceFilters[i].View, _deviceOutGradients[i % _inputDimensions, j].View, _deviceInfos[i % _inputDimensions].View);
+                backwardsGradientKernal(index, _deviceInGradients[i, j].View, _deviceInputs[i % _inputDimensions, j].View, _deviceFilterGradients[i].View, _deviceInfos[i % _inputDimensions].View);
             }
         }
 
@@ -101,13 +94,13 @@ public class ConvolutionalLayer : Layer
 
         for (int i = 0; i < _outputDimensions; i++)
         {
-            _deviceKernalGradients[i].CopyToCPU(_kernalGradient[i]);
-            _deviceKernalGradients[i].Dispose();
-            _deviceKernals[i].Dispose();
+            _deviceFilterGradients[i].CopyToCPU(_filterGradient[i]);
+            _deviceFilterGradients[i].Dispose();
+            _deviceFilters[i].Dispose();
 
-            for (int j = 0; j < _kernalSize * _kernalSize; j++)
+            for (int j = 0; j < _filterSize * _filterSize; j++)
             {
-                _kernals[i][j] -= learningRate * LEARNINGMULTIPLIER * new Color(_kernalGradient[i][j * 3], _kernalGradient[i][j * 3 + 1], _kernalGradient[i][j * 3 + 2]).Clamp(CLAMP);
+                _filters[i][j] -= learningRate * LEARNINGMULTIPLIER * new Color(_filterGradient[i][j * 3], _filterGradient[i][j * 3 + 1], _filterGradient[i][j * 3 + 2]).Clamp(CLAMP);
             }
 
             for (int j = 0; j < _batchSize; j++)
@@ -119,9 +112,7 @@ public class ConvolutionalLayer : Layer
         return _outGradients;
     }
 
-    private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceKernalGradients;
-
-    public void BackwardsKernalOnly(FeatureMap[,] inputs, FeatureMap[,] inGradients, float learningRate)
+    public void BackwardsFilterOnly(FeatureMap[,] inputs, FeatureMap[,] inGradients, float learningRate)
     {
         using Context context = Context.Create(builder => builder.Cuda());
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
@@ -139,13 +130,13 @@ public class ConvolutionalLayer : Layer
 
         for (int i = 0; i < _outputDimensions; i++)
         {
-            _deviceKernalGradients[i] = accelerator.Allocate1D<float>(_kernalGradient[i].Length);
+            _deviceFilterGradients[i] = accelerator.Allocate1D<float>(_filterGradient[i].Length);
             Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
             for (int j = 0; j < _batchSize; j++)
             {
                 _deviceInGradients[i, j] = inGradients[i, j].Allocate(accelerator);
 
-                backwardsGradientKernal(index, _deviceInGradients[i, j].View, _deviceInputs[i % _inputDimensions, j].View, _deviceKernalGradients[i].View, _deviceInfos[i % _inputDimensions].View);
+                backwardsGradientKernal(index, _deviceInGradients[i, j].View, _deviceInputs[i % _inputDimensions, j].View, _deviceFilterGradients[i].View, _deviceInfos[i % _inputDimensions].View);
             }
         }
 
@@ -162,12 +153,12 @@ public class ConvolutionalLayer : Layer
 
         for (int i = 0; i < _outputDimensions; i++)
         {
-            _deviceKernalGradients[i].CopyToCPU(_kernalGradient[i]);
-            _deviceKernalGradients[i].Dispose();
+            _deviceFilterGradients[i].CopyToCPU(_filterGradient[i]);
+            _deviceFilterGradients[i].Dispose();
 
-            for (int j = 0; j < _kernalSize * _kernalSize; j++)
+            for (int j = 0; j < _filterSize * _filterSize; j++)
             {
-                _kernals[i][j] -= learningRate * LEARNINGMULTIPLIER * new Color(_kernalGradient[i][j * 3], _kernalGradient[i][j * 3 + 1], _kernalGradient[i][j * 3 + 2]).Clamp(CLAMP);
+                _filters[i][j] -= learningRate * LEARNINGMULTIPLIER * new Color(_filterGradient[i][j * 3], _filterGradient[i][j * 3 + 1], _filterGradient[i][j * 3 + 2]).Clamp(CLAMP);
             }
 
             for (int j = 0; j < _batchSize; j++)
@@ -195,13 +186,13 @@ public class ConvolutionalLayer : Layer
 
         for (int i = 0; i < _outputDimensions; i++)
         {
-            _deviceKernals[i] = accelerator.Allocate1D(_kernals[i]);
+            _deviceFilters[i] = accelerator.Allocate1D(_filters[i]);
             Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
             for (int j = 0; j < _batchSize; j++)
             {
                 _deviceOutputs[i, j] = _outputs[i, j].AllocateEmpty(accelerator);
 
-                forwardKernal(index, _deviceInputs[i % _inputDimensions, j].View, _deviceOutputs[i, j].View, _deviceKernals[i].View, _deviceInfos[i % _inputDimensions].View);
+                forwardKernal(index, _deviceInputs[i % _inputDimensions, j].View, _deviceOutputs[i, j].View, _deviceFilters[i].View, _deviceInfos[i % _inputDimensions].View);
             }
         }
 
@@ -214,7 +205,7 @@ public class ConvolutionalLayer : Layer
                 Convoluted[i, j].CopyFromBuffer(_deviceOutputs[i, j]);
                 _deviceOutputs[i, j].Dispose();
             }
-            _deviceKernals[i].Dispose();
+            _deviceFilters[i].Dispose();
         }
 
         for (int i = 0; i < _inputDimensions; i++)
@@ -229,72 +220,88 @@ public class ConvolutionalLayer : Layer
         return Convoluted;
     }
 
-    protected static void BackwardsKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> kernal, ArrayView<Color> inGradient, ArrayView<float> outGradient, ArrayView<float> kernalGradient, ArrayView<LayerInfo> info)
+    public override FeatureMap[,] Startup(FeatureMap[,] input, int outputDimensionFactor = 0)
+    {
+        BaseStartup(input, _filters == null ? outputDimensionFactor : _filters.Length  / input.GetLength(0));
+
+        _filterGradient = new float[_outputDimensions][];
+
+        for (int i = 0; i < _outputDimensions; i++)
+        {
+            _filterGradient[i] = new float[_filterSize * _filterSize * 3];
+        }
+
+        _deviceInfos = new MemoryBuffer1D<LayerInfo, Stride1D.Dense>[_inputDimensions];
+        _deviceFilters = new MemoryBuffer1D<Color, Stride1D.Dense>[_outputDimensions];
+        _deviceFilterGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_outputDimensions];
+
+        return _outputs;
+    }
+    protected static void BackwardsGradientKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> input, ArrayView<float> filterGradient, ArrayView<LayerInfo> info)
     {
         float dL = inGradient[info[0].OutputIndex(index.X, index.Y)][index.Z] * info[0].InverseKSquared;
 
-        for (int j = 0; j < info[0].KernalSize; j++)
+        for (int j = 0; j < info[0].FilterSize; j++)
         {
-            for (int i = 0; i < info[0].KernalSize; i++)
+            for (int i = 0; i < info[0].FilterSize; i++)
             {
                 if (info[0].TryGetInputIndex(index.X, i, index.Y, j, out int inputIndex))
                 {
-                    int kernalIndex = info[0].KernalIndex(i, j);
+                    int filterIndex = info[0].FilterIndex(i, j);
                     float dK = dL * input[inputIndex][index.Z];
-                    Atomic.Add(ref kernalGradient[FloatIndex(kernalIndex, index.Z)], dK);
-                    float dP = dL * kernal[kernalIndex][index.Z];
+                    Atomic.Add(ref filterGradient[FloatIndex(filterIndex, index.Z)], dK);
+                }
+            }
+        }
+    }
+
+    protected static void BackwardsKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> filter, ArrayView<Color> inGradient, ArrayView<float> outGradient, ArrayView<float> filterGradient, ArrayView<LayerInfo> info)
+    {
+        float dL = inGradient[info[0].OutputIndex(index.X, index.Y)][index.Z] * info[0].InverseKSquared;
+
+        for (int j = 0; j < info[0].FilterSize; j++)
+        {
+            for (int i = 0; i < info[0].FilterSize; i++)
+            {
+                if (info[0].TryGetInputIndex(index.X, i, index.Y, j, out int inputIndex))
+                {
+                    int filterIndex = info[0].FilterIndex(i, j);
+                    float dF = dL * input[inputIndex][index.Z];
+                    Atomic.Add(ref filterGradient[FloatIndex(filterIndex, index.Z)], dF);
+                    float dP = dL * filter[filterIndex][index.Z];
                     Atomic.Add(ref outGradient[FloatIndex(inputIndex, index.Z)], dP);
                 }
             }
         }
     }
 
-    protected static void BackwardsOutKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> kernal, ArrayView<float> outGradient, ArrayView<LayerInfo> info)
+    protected static void BackwardsOutKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> filter, ArrayView<float> outGradient, ArrayView<LayerInfo> info)
     {
         float dL = inGradient[info[0].OutputIndex(index.X, index.Y)][index.Z] * info[0].InverseKSquared;
 
-        for (int j = 0; j < info[0].KernalSize; j++)
+        for (int j = 0; j < info[0].FilterSize; j++)
         {
-            for (int i = 0; i < info[0].KernalSize; i++)
+            for (int i = 0; i < info[0].FilterSize; i++)
             {
                 if (info[0].TryGetInputIndex(index.X, i, index.Y, j, out int inputIndex))
                 {
-                    int kernalIndex = info[0].KernalIndex(i, j);
-                    float dP = dL * kernal[kernalIndex][index.Z];
+                    int filterIndex = info[0].FilterIndex(i, j);
+                    float dP = dL * filter[filterIndex][index.Z];
                     Atomic.Add(ref outGradient[FloatIndex(inputIndex, index.Z)], dP);
                 }
             }
         }
     }
-
-    protected static void BackwardsGradientKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> input, ArrayView<float> kernalGradient, ArrayView<LayerInfo> info)
-    {
-        float dL = inGradient[info[0].OutputIndex(index.X, index.Y)][index.Z] * info[0].InverseKSquared;
-
-        for (int j = 0; j < info[0].KernalSize; j++)
-        {
-            for (int i = 0; i < info[0].KernalSize; i++)
-            {
-                if (info[0].TryGetInputIndex(index.X, i, index.Y, j, out int inputIndex))
-                {
-                    int kernalIndex = info[0].KernalIndex(i, j);
-                    float dK = dL * input[inputIndex][index.Z];
-                    Atomic.Add(ref kernalGradient[FloatIndex(kernalIndex, index.Z)], dK);
-                }
-            }
-        }
-    }
-
-    protected static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> convoluted, ArrayView<Color> kernal, ArrayView<LayerInfo> info)
+    protected static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> convoluted, ArrayView<Color> filter, ArrayView<LayerInfo> info)
     {
         Color sum = new();
 
-        for (int j = 0; j < info[0].KernalSize; j++)
+        for (int j = 0; j < info[0].FilterSize; j++)
         {
-            for (int i = 0; i < info[0].KernalSize; i++)
+            for (int i = 0; i < info[0].FilterSize; i++)
             {
                 if (info[0].TryGetInputIndex(index.X, i, index.Y, j, out int inputIndex))
-                    sum += kernal[info[0].KernalIndex(i, j)] * input[inputIndex];
+                    sum += filter[info[0].FilterIndex(i, j)] * input[inputIndex];
             }
         }
 

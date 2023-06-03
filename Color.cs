@@ -1,11 +1,8 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
 using ILGPU;
-using ILGPU.AtomicOperations;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
-using System.Data.Common;
-using System.Diagnostics.Contracts;
 using System.Runtime.InteropServices;
 
 [Serializable]
@@ -35,16 +32,14 @@ public readonly struct Color
         _3b = (color.B + inverseAlpha) / 255f;
     }
 
-    readonly float _1r;
-    readonly float _2g;
-    readonly float _3b;
-
+    private readonly float _1r;
+    private readonly float _2g;
+    private readonly float _3b;
 
     public float B => _3b;
     public float G => _2g;
 
-    [JsonIgnore]
-    public float Magnitude => MathF.Sqrt(R * R + G * G + B * B);
+    [JsonIgnore] public float Magnitude => MathF.Sqrt(R * R + G * G + B * B);
 
     public float R => _1r;
 
@@ -61,8 +56,8 @@ public readonly struct Color
         }
     }
 
-    [JsonIgnore]
-    public float SquareMagnitude => R * R + G * G + B * B;
+    [JsonIgnore] public float SquareMagnitude => R * R + G * G + B * B;
+
     public static float Dot(Color color1, Color color2)
     {
         return color1.R * color2.R + color1.G * color2.G + color1.B * color2.B;
@@ -127,6 +122,7 @@ public readonly struct Color
         Atomic.Add(ref array[2], color.B);
         return array;
     }
+
     public static Color Pow(Color color, float power)
     {
         return new Color(MathF.Pow(color.R, power), MathF.Pow(color.G, power), MathF.Pow(color.B, power));

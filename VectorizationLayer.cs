@@ -12,29 +12,37 @@ public class VectorizationLayer
     FeatureMap[,] _transposedGradient;
     public VectorizationLayer(int vectorDimensions, FeatureMap[,] input)
     {
+        StartUp(input);
+
         int featureMapDimensions = input.GetLength(0);
-        int batchSize = input.GetLength(1);
+        
         float variance = 2f / (3 * featureMapDimensions + vectorDimensions);
         float stdDev = MathF.Sqrt(variance);
         _matrix = new FeatureMap(vectorDimensions, featureMapDimensions);
-
-        _vectors = new ColorVector[batchSize];
-        _transposedGradient = new FeatureMap[batchSize, featureMapDimensions];
-
-        for(int i = 0; i < batchSize; i++)
-        {
-            _vectors[i] = new ColorVector(featureMapDimensions);
-            for(int j = 0; j < featureMapDimensions; j++)
-            {
-                _transposedGradient[i,j] = new FeatureMap(input[j, i].Width, input[j, i].Length);
-            }
-        }
 
         for (int j = 0; j < featureMapDimensions; j++)
         {
             for (int i = 0; i < vectorDimensions; i++)
             {
                 _matrix[i, j] = Color.RandomGauss(0, stdDev);
+            }
+        }
+    }
+
+    public void StartUp(FeatureMap[,] input)
+    {
+        int featureMapDimensions = input.GetLength(0);
+        int batchSize = input.GetLength(1);
+
+        _vectors = new ColorVector[batchSize];
+        _transposedGradient = new FeatureMap[batchSize, featureMapDimensions];
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            _vectors[i] = new ColorVector(featureMapDimensions);
+            for (int j = 0; j < featureMapDimensions; j++)
+            {
+                _transposedGradient[i, j] = new FeatureMap(input[j, i].Width, input[j, i].Length);
             }
         }
     }

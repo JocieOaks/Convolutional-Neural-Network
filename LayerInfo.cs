@@ -7,7 +7,7 @@ public interface ILayerInfo
     int InputLength { get; }
     int InputArea => InputWidth * InputLength;
     float InverseKSquared { get; }
-    int KernalSize { get; }
+    int FilterSize { get; }
     int OutputWidth { get; }
     int OutputLength { get; }
     public int OutputArea => OutputWidth * OutputLength;
@@ -22,7 +22,7 @@ public readonly struct LayerInfo : ILayerInfo
     public int InputLength { get; init; }
     public int InputArea => InputWidth * InputLength;
     public float InverseKSquared { get; init; }
-    public int KernalSize { get; init; }
+    public int FilterSize { get; init; }
     public int OutputWidth { get; init; }
     public int OutputLength { get; init; }
     public int OutputArea => OutputWidth * OutputLength;
@@ -41,9 +41,9 @@ public readonly struct LayerInfo : ILayerInfo
         return x < InputWidth && y < InputLength;
     }
 
-    public int KernalIndex(int x, int y)
+    public int FilterIndex(int x, int y)
     {
-        return y * KernalSize + x;
+        return y * FilterSize + x;
     }
 }
 
@@ -59,7 +59,7 @@ public readonly struct SingleLayerInfo : ILayerInfo
 
     public float InverseKSquared => 1;
 
-    public int KernalSize => 1;
+    public int FilterSize => 1;
 
     public int OutputWidth => Width;
 

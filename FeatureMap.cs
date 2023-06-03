@@ -1,21 +1,11 @@
 ﻿using ILGPU;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
-using System.Xml.Serialization;
 
-[System.Serializable]
+[Serializable]
 public class FeatureMap
 {
-
-    [JsonProperty] Color[] _map;
+    [JsonProperty] private Color[] _map;
 
     public FeatureMap(int width, int length)
     {
@@ -43,15 +33,16 @@ public class FeatureMap
 
     [JsonIgnore] public int FloatLength => _map.Length * 3;
 
-    [JsonIgnore] public int Length { get; }
+    [JsonProperty] public int Length { get; }
 
-    [JsonIgnore] public int Width { get; }
+    [JsonProperty] public int Width { get; }
 
     public Color this[int x, int y]
     {
         get => _map[y * Width + x];
         set => _map[y * Width + x] = value;
     }
+
     public MemoryBuffer1D<Color, Stride1D.Dense> Allocate(Accelerator accelerator)
     {
         return accelerator.Allocate1D(_map);
@@ -85,9 +76,9 @@ public class FeatureMap
     public Color Sum()
     {
         Color color = new();
-        for(int i = 0; i < Length; i++)
+        for (int i = 0; i < Length; i++)
         {
-            for(int j = 0; j < Width; j++)
+            for (int j = 0; j < Width; j++)
             {
                 color += _map[i * Width + j];
             }
@@ -95,6 +86,7 @@ public class FeatureMap
 
         return color;
     }
+
     public float SumMagnitude()
     {
         float sum = 0;
@@ -117,7 +109,7 @@ public class FeatureMap
             {
                 Span<float> span = new Span<float>(ptr, Area * 3);
                 buffer.AsArrayView<float>(0, Area * 3).CopyToCPU(span);
-            } 
+            }
         }
     }
 }

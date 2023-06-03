@@ -1,46 +1,40 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
 using Newtonsoft.Json;
-using System;
-using System.Buffers.Binary;
-using System.ComponentModel.DataAnnotations;
-using System.Drawing.Drawing2D;
-using System.IO;
-using System.Reflection;
-using System.Runtime.Serialization;
+
+#nullable disable
 
 [Serializable]
 public class ConvolutionalNeuralNetwork
 {
     //Used to avoid divide by zero or log of zero going to infinity.
     public const float ASYMPTOTEERRORFACTOR = 1e-6f; //Used to avoid divide by zero or log of zero going to infinity.
-    private const bool PRINTSTOPWATCH = true;
-    [JsonProperty]
-    readonly private int _batchSize;
+    private const bool PRINTSTOPWATCH = false;
+    
+    [JsonProperty] readonly private int _batchSize;
 
-    [JsonProperty]
-    readonly private ConvolutionalLayer _initialConvolutionLayer;
+    [JsonProperty] readonly private ConvolutionalLayer _initialConvolutionLayer;
 
-    [JsonProperty]
-    readonly private List<Layer> _layers = new();
+    [JsonProperty] readonly private List<Layer> _layers = new();
 
-    [JsonProperty]
-    readonly private Transformer _transformer;
+    [JsonProperty] readonly private Transformer _transformer;
 
-    readonly private int _vectorDimensions;
-    [JsonProperty]
-    readonly private VectorizationLayer _vectorizationLayer;
+    [JsonProperty] readonly private VectorizationLayer _vectorizationLayer;
 
+    private Vector[] _descriptionGradient;
     Vector[] _descriptionVectors;
     private Vector[] _descriptionVectorsNorm;
     private FeatureMap[][,] _featureMaps;
+    private Vector[] _imageGradient;
     Vector[] _imageVectors;
     private Vector[] _imageVectorsNorm;
     
     private FeatureMap[,] _initialFeatureMaps;
 
+    private Vector[] _previousDescriptionGradient;
+    private Vector[] _previousImageGradient;
     private FeatureMap[,] _transposedFinalFeatureMap;
-    public ConvolutionalNeuralNetwork(int depth, int dimensions, int vectorDimensions, int batchSize, int descriptionBoolLength, int descriptionFloatLength, int width, int length)
+    public ConvolutionalNeuralNetwork(int depth, int vectorDimensions, int batchSize, int descriptionBoolLength, int descriptionFloatLength, int width, int length)
     {
         FeatureMap[,] input = new FeatureMap[1, batchSize];
         for (int j = 0; j < batchSize; j++)
@@ -51,12 +45,10 @@ public class ConvolutionalNeuralNetwork
         _initialConvolutionLayer = new ConvolutionalLayer(3, 1, ref input, 8);
         _transformer = new Transformer(descriptionBoolLength, descriptionFloatLength, vectorDimensions);
         _batchSize = batchSize;
-        _vectorDimensions = vectorDimensions;
 
-        _imageVectors = new Vector[batchSize];
         _descriptionVectors = new Vector[batchSize];
-        _imageVectorsNorm = new Vector[batchSize];
         _descriptionVectorsNorm = new Vector[batchSize];
+
         _layers.Add(new ReLULayer(ref input));
         _layers.Add(new BatchNormalizationLayer(ref input));
         for (int i = 0; i < depth; i++)
@@ -81,10 +73,12 @@ public class ConvolutionalNeuralNetwork
         _featureMaps = new FeatureMap[Depth][,];
     }
 
-    public ConvolutionalNeuralNetwork() { }
+    [JsonConstructor] private ConvolutionalNeuralNetwork() { }
 
     public static Random Random { get; } = new Random();
+
     private int Depth => _layers.Count;
+
     public static float Accuracy(float[,] matrix)
     {
         int correct = 0;
@@ -189,7 +183,7 @@ public class ConvolutionalNeuralNetwork
             _transformer.Backwards(input[i].bools, input[i].floats, VectorNormalizationLayer.Backwards(_descriptionVectors[i], gradients.description[i]), transformLearningRate);
         }
 
-        FeatureMap[,] transposedGradient = new FeatureMap[0,0];
+        FeatureMap[,] transposedGradient = new FeatureMap[0, 0];
         StopWatch(() => transposedGradient = _vectorizationLayer.Backwards(VectorNormalizationLayer.Backwards(_imageVectors, gradients.image), learningRate), $"Backwards {_vectorizationLayer.Name}");
 
         FeatureMap[,] currentGradient = TransposeArray(transposedGradient);
@@ -198,26 +192,50 @@ public class ConvolutionalNeuralNetwork
         {
             StopWatch(() => currentGradient = _layers[j].Backwards(_featureMaps[j - 1], currentGradient, learningRate), $"Backwards {j} {_layers[j].Name}");
         }
-        if(_layers.Count > 0)
+        if (_layers.Count > 0)
             StopWatch(() => currentGradient = _layers[0].Backwards(_initialFeatureMaps, currentGradient, learningRate), $"Backwards {0} {_layers[0].Name}");
 
-        StopWatch(() => _initialConvolutionLayer.BackwardsKernalOnly(images, currentGradient, learningRate), $"Backwards Initial {_initialConvolutionLayer.Name}");
+        StopWatch(() => _initialConvolutionLayer.BackwardsFilterOnly(images, currentGradient, learningRate), $"Backwards Initial {_initialConvolutionLayer.Name}");
     }
 
-    private static void StopWatch(Action func, string processName)
+    public float CrossDescriptionLoss(float[,] score)
     {
-        var watch = System.Diagnostics.Stopwatch.StartNew();
-        func();
-        watch.Stop();
-        var elapsedMs = watch.ElapsedMilliseconds;
-        if(!PRINTSTOPWATCH)
-            Console.WriteLine($"Time: {elapsedMs / 1000f:F3} s {processName}");
+        float loss = 0;
+        for (int i = 0; i < _batchSize; i++)
+        {
+            for (int j = i + 1; j < _batchSize; j++)
+            {
+                if (score[i, j] > 0)
+                {
+                    loss += -2 * MathF.Log(1 - score[i, j] + ASYMPTOTEERRORFACTOR);
+                }
+            }
+        }
+        return loss / (_batchSize * _batchSize);
+    }
+
+    public float[,] CrossDescriptionScore()
+    {
+        float[,] score = new float[_batchSize, _batchSize];
+        for (int i = 0; i < _batchSize; i++)
+        {
+            for (int j = i + 1; j < _batchSize; j++)
+            {
+                float loss = Vector.Dot(_descriptionVectorsNorm[i], _descriptionVectorsNorm[j]);
+                if (loss > 0)
+                {
+                    score[i, j] = loss;
+                    score[j, i] = loss;
+                }
+            }
+        }
+        return score;
     }
 
     public void Forward((FeatureMap image, bool[] bools, float[] floats)[] input)
     {
-        FeatureMap[,] current = new FeatureMap[0,0];
-        FeatureMap[,] images = new FeatureMap[1,_batchSize];
+        FeatureMap[,] current = new FeatureMap[0, 0];
+        FeatureMap[,] images = new FeatureMap[1, _batchSize];
         for (int i = 0; i < _batchSize; i++)
         {
             images[0, i] = input[i].image;
@@ -240,39 +258,9 @@ public class ConvolutionalNeuralNetwork
 
         _transposedFinalFeatureMap = TransposeArray(current);
 
-        StopWatch(() =>_imageVectors = _vectorizationLayer.Forward(_transposedFinalFeatureMap), $"Forwards {_vectorizationLayer.Name}");
+        StopWatch(() => _imageVectors = _vectorizationLayer.Forward(_transposedFinalFeatureMap), $"Forwards {_vectorizationLayer.Name}");
 
         _imageVectorsNorm = VectorNormalizationLayer.Forward(_imageVectors);
-    }
-
-    public void Initialize((FeatureMap image, bool[] bools, float[] floats)[] input)
-    {
-        Vector unitary = new Vector(_vectorDimensions);
-        for(int i = 0; i < _vectorDimensions; i++)
-        {
-            unitary[i] = 0;
-        }
-
-        Forward(input);
-        bool changed;
-        do
-        {
-            changed = false;
-            for (int j = 0; j < _batchSize; j++)
-            {
-                float dot = Vector.Dot(_imageVectorsNorm[j], _descriptionVectorsNorm[j]);
-                if (dot > 0.3 || dot < -0.1)
-                {
-                    Vector gradient = dot * _imageVectorsNorm[j];
-                    changed = true;
-
-                    _transformer.Backwards(input[j].bools, input[j].floats, VectorNormalizationLayer.Backwards(_descriptionVectors[j], gradient), 0.001f);
-                    _descriptionVectors[j] = _transformer.Forward(input[j].bools, input[j].floats);
-                    _descriptionVectorsNorm[j] = VectorNormalizationLayer.Forward(_descriptionVectors[j]);
-                }
-            }
-        } while (changed);
-        
     }
 
     public IEnumerable<(float, float)> GradientTest(int vectorCount, int vectorLength)
@@ -313,12 +301,28 @@ public class ConvolutionalNeuralNetwork
         }
     }
 
-    [OnDeserialized]
-    public void OnDeserialized(StreamingContext context)
+    public void Initialize((FeatureMap image, bool[] bools, float[] floats)[] input)
     {
-        _imageVectorsNorm = new Vector[_batchSize];
-        _descriptionVectorsNorm = new Vector[_batchSize];
-        _featureMaps = new FeatureMap[Depth][,];
+        Forward(input);
+        bool changed;
+        do
+        {
+            changed = false;
+            for (int j = 0; j < _batchSize; j++)
+            {
+                float dot = Vector.Dot(_imageVectorsNorm[j], _descriptionVectorsNorm[j]);
+                if (dot > 0.3 || dot < -0.1)
+                {
+                    Vector gradient = dot * _imageVectorsNorm[j];
+                    changed = true;
+
+                    _transformer.Backwards(input[j].bools, input[j].floats, VectorNormalizationLayer.Backwards(_descriptionVectors[j], gradient), 0.001f);
+                    _descriptionVectors[j] = _transformer.Forward(input[j].bools, input[j].floats);
+                    _descriptionVectorsNorm[j] = VectorNormalizationLayer.Forward(_descriptionVectors[j]);
+                }
+            }
+        } while (changed);
+
     }
 
     public void SaveToFile(string file)
@@ -365,6 +369,27 @@ public class ConvolutionalNeuralNetwork
         return cosScores;
     }
 
+    public void StartUp(int batchSize, int width, int length)
+    {
+        FeatureMap[,] input = new FeatureMap[1, batchSize];
+        for (int j = 0; j < batchSize; j++)
+        {
+            input[0, j] = new FeatureMap(width, length);
+        }
+
+        FeatureMap[,] current = _initialConvolutionLayer.Startup(input);
+        foreach(var layer in _layers)
+        {
+            current = layer.Startup(current);
+        }
+
+        _vectorizationLayer.StartUp(current);
+
+        _descriptionVectors = new Vector[batchSize];
+        _descriptionVectorsNorm = new Vector[batchSize];
+
+        _featureMaps = new FeatureMap[Depth][,];
+    }
     public (float, float) Test((FeatureMap image, bool[] bools, float[] floats)[] input)
     {
         Forward(input);
@@ -374,68 +399,7 @@ public class ConvolutionalNeuralNetwork
         return (loss, accuracy);
     }
 
-    public float[,] CrossDescriptionScore()
-    {
-        float[,] score = new float[_batchSize, _batchSize];
-        for(int i = 0; i < _batchSize; i++)
-        {
-            for(int j = i + 1; j < _batchSize; j++)
-            {
-                float loss = Vector.Dot(_descriptionVectorsNorm[i], _descriptionVectorsNorm[j]);
-                if(loss > 0)
-                {
-                    score[i, j] = loss;
-                    score[j, i] = loss;
-                }
-            }
-        }
-        return score;
-    }
-
-    public float CrossDescriptionLoss(float[,] score)
-    {
-        float loss = 0;
-        for(int i = 0; i < _batchSize; i++)
-        {
-            for(int j = i + 1; j < _batchSize; j++)
-            {
-                if (score[i, j] > 0)
-                {
-                    loss += -2 * MathF.Log(1 - score[i, j] + ASYMPTOTEERRORFACTOR);
-                }
-            }
-        }
-        return loss / (_batchSize * _batchSize);
-    }
-
-    public Vector[] CrossDescriptionGradient(float loss, float[,] score)
-    {
-        Vector[] gradients = new Vector[_batchSize];
-        for(int i = 0; i < _batchSize; i++)
-        {
-            gradients[i] = new Vector(_vectorDimensions);
-        }
-
-        float mult = loss / (_batchSize * _batchSize); 
-
-        for(int i = 0; i < _batchSize; i++)
-        {
-            for(int j = 0; j < _batchSize; j++)
-            {
-                if (score[i,j] > 0)
-                {
-                    gradients[i] += -2 * MathF.Max(mult / (1 - score[i, j] + ASYMPTOTEERRORFACTOR), 0.1f) * _descriptionVectorsNorm[j];
-                }
-            }
-        }
-
-        return gradients;
-    }
-    Vector[] _imageGradient;
-    Vector[] _descriptionGradient;
-    Vector[] _previousImageGradient;
-    Vector[] _previousDescriptionGradient;
-    public (float, float) Train((FeatureMap image, bool[] bools, float[] floats)[] input, float learningRate, float transformLearningRate, float momentum)
+    public float Train((FeatureMap image, bool[] bools, float[] floats)[] input, float learningRate, float transformLearningRate, float momentum)
     {
         Forward(input);
         float[,] score = Score();
@@ -443,20 +407,17 @@ public class ConvolutionalNeuralNetwork
         _previousDescriptionGradient = _descriptionGradient;
         _previousImageGradient = _imageGradient;
         (_imageGradient, _descriptionGradient) = CalculateGradient(score, loss);
-        float[,] crossScore = CrossDescriptionScore();
-        float crossLoss = CrossDescriptionLoss(crossScore);
-        //Vector[] crossGradient = CrossDescriptionGradient(crossLoss, crossScore);
         if (_previousImageGradient != null)
         {
             for (int i = 0; i < _batchSize; i++)
             {
-                _descriptionGradient[i] += /*crossGradient[i] + */_previousDescriptionGradient[i] * momentum;
+                _descriptionGradient[i] += _previousDescriptionGradient[i] * momentum;
                 _imageGradient[i] += _previousImageGradient[i] * momentum;
             }
         }
 
         Backwards((_imageGradient, _descriptionGradient), input, learningRate, transformLearningRate);
-        return (loss, crossLoss);
+        return loss;
     }
 
     private static Vector[] CalculateGradient(float[,] matrix, Vector[] gradientVectors, Vector[] dotVectors, float loss)
@@ -565,6 +526,16 @@ public class ConvolutionalNeuralNetwork
         }
 
         return gradients;
+    }
+
+    private static void StopWatch(Action func, string processName)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        func();
+        watch.Stop();
+        var elapsedMs = watch.ElapsedMilliseconds;
+        if(PRINTSTOPWATCH)
+            Console.WriteLine($"Time: {elapsedMs / 1000f:F3} s {processName}");
     }
 
     private static T[][] TransposeArray<T>(T[][] array)

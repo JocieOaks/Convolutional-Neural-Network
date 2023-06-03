@@ -4,23 +4,28 @@ using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
 using System.Runtime.InteropServices;
 
+#nullable disable
+
+[Serializable]
 public class BatchNormalizationLayer : Layer
 {
-    private readonly ColorVector _mean;
-    private readonly ColorVector _sigma;
     [JsonProperty] private readonly ColorVector _bias;
     [JsonProperty] private readonly ColorVector _weight;
-
-    private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceMeans;
-
-    private MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] _deviceInfos;
+    
     private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceGradients;
-    private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceValues;
+    private MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] _deviceInfos;
+    private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceMeans;
     private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceSums;
+    private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceValues;
     private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceVariances;
+    
+    private ColorVector _mean;
+    private ColorVector _sigma;
 
-    public BatchNormalizationLayer(ref FeatureMap[,] input) : base(1, 1, ref input)
+    public BatchNormalizationLayer(ref FeatureMap[,] input) : base(1, 1)
     {
+        input = Startup(input);
+
         _weight = new ColorVector(_inputDimensions);
         _bias = new ColorVector(_inputDimensions);
         for (int i = 0; i < _inputDimensions; i++)
@@ -28,19 +33,11 @@ public class BatchNormalizationLayer : Layer
             _weight[i] = new Color(1, 1, 1);
             _bias[i] = new Color();
         }
-
-        _mean = new ColorVector(_inputDimensions);
-        _sigma = new ColorVector(_inputDimensions);
-
-        _deviceInfos = new MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[_inputDimensions];
-        _deviceMeans = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions];
-        _deviceGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
-        _deviceValues = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions];
-        _deviceSums = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
-        _deviceVariances = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
     }
 
-    public override string Name => "Batch Normalization Layer";
+    [JsonConstructor] private BatchNormalizationLayer() : base() { }
+
+    [JsonIgnore] public override string Name => "Batch Normalization Layer";
 
     private FeatureMap[,] Normalized => _outputs;
 
@@ -200,6 +197,21 @@ public class BatchNormalizationLayer : Layer
         return Normalized;
     }
 
+    public override FeatureMap[,] Startup(FeatureMap[,] input, int outputDimensionFactor = 0)
+    {
+        BaseStartup(input);
+        _mean = new ColorVector(_inputDimensions);
+        _sigma = new ColorVector(_inputDimensions);
+
+        _deviceInfos = new MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[_inputDimensions];
+        _deviceMeans = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions];
+        _deviceGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
+        _deviceValues = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions];
+        _deviceSums = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
+        _deviceVariances = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
+
+        return _outputs;
+    }
     private static void BackwardsKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<float> outGradient, ArrayView<Color> values, ArrayView<SingleLayerInfo> info)
     {
         int mapsIndex = info[0].Index(index.X, index.Y);
