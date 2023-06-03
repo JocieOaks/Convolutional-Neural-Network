@@ -168,7 +168,7 @@ public class BatchNormalizationLayer : Layer
 
         for (int i = 0; i < _inputDimensions; i++)
         {
-            _sigma[i] = Color.Pow((Color)_deviceVariances[i] / (Infos(i).Area * _batchSize) + new Color(CLIP.ASYMPTOTEERRORFACTOR, CLIP.ASYMPTOTEERRORFACTOR, CLIP.ASYMPTOTEERRORFACTOR), 0.5f);
+            _sigma[i] = Color.Pow((Color)_deviceVariances[i] / (Infos(i).Area * _batchSize) + new Color(ConvolutionalNeuralNetwork.ASYMPTOTEERRORFACTOR, ConvolutionalNeuralNetwork.ASYMPTOTEERRORFACTOR, ConvolutionalNeuralNetwork.ASYMPTOTEERRORFACTOR), 0.5f);
 
             Index2D index = new(Infos(i).Width, Infos(i).Length);
             _deviceValues[i] = accelerator.Allocate1D(new Color[] { _mean[i], _weight[i] / _sigma[i], _bias[i] });

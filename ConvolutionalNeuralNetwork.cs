@@ -10,11 +10,11 @@ using System.Reflection;
 using System.Runtime.Serialization;
 
 [Serializable]
-public class CLIP
+public class ConvolutionalNeuralNetwork
 {
     //Used to avoid divide by zero or log of zero going to infinity.
     public const float ASYMPTOTEERRORFACTOR = 1e-6f; //Used to avoid divide by zero or log of zero going to infinity.
-    private const bool PRINTSTOPWATCH = false;
+    private const bool PRINTSTOPWATCH = true;
     [JsonProperty]
     readonly private int _batchSize;
 
@@ -40,7 +40,7 @@ public class CLIP
     private FeatureMap[,] _initialFeatureMaps;
 
     private FeatureMap[,] _transposedFinalFeatureMap;
-    public CLIP(int depth, int dimensions, int vectorDimensions, int batchSize, int descriptionBoolLength, int descriptionFloatLength, int width, int length)
+    public ConvolutionalNeuralNetwork(int depth, int dimensions, int vectorDimensions, int batchSize, int descriptionBoolLength, int descriptionFloatLength, int width, int length)
     {
         FeatureMap[,] input = new FeatureMap[1, batchSize];
         for (int j = 0; j < batchSize; j++)
@@ -57,21 +57,31 @@ public class CLIP
         _descriptionVectors = new Vector[batchSize];
         _imageVectorsNorm = new Vector[batchSize];
         _descriptionVectorsNorm = new Vector[batchSize];
+        _layers.Add(new ReLULayer(ref input));
         _layers.Add(new BatchNormalizationLayer(ref input));
         for (int i = 0; i < depth; i++)
         {
             _layers.Add(new ConvolutionalLayer(3, 1, ref input, 2));
+            _layers.Add(new ReLULayer(ref input));
             _layers.Add(new BatchNormalizationLayer(ref input));
             if (i < 6 && i % 2 == 0)
                 _layers.Add(new AveragePoolLayer(2, ref input));
         }
-        _layers.Add(new FullyConnectedLayer(ref input, 8));
+        _layers.Add(new FullyConnectedLayer(ref input, 2));
+        for (int i = 0; i < depth + 1; i++)
+        {
+            _layers.Add(new ConvolutionalLayer(3, 1, ref input, 2));
+            _layers.Add(new ReLULayer(ref input));
+            _layers.Add(new BatchNormalizationLayer(ref input));
+            if (i < 6 && i % 2 == 1)
+                _layers.Add(new AveragePoolLayer(2, ref input));
+        }
 
         _vectorizationLayer = new VectorizationLayer(vectorDimensions, input);
         _featureMaps = new FeatureMap[Depth][,];
     }
 
-    public CLIP() { }
+    public ConvolutionalNeuralNetwork() { }
 
     public static Random Random { get; } = new Random();
     private int Depth => _layers.Count;
@@ -106,9 +116,9 @@ public class CLIP
         return correct / (2f * matrix.GetLength(0));
     }
 
-    public static CLIP? LoadFromFile(string file)
+    public static ConvolutionalNeuralNetwork? LoadFromFile(string file)
     {
-        CLIP? clip = null;
+        ConvolutionalNeuralNetwork? clip = null;
 
         if (File.Exists(file))
         {
@@ -122,7 +132,7 @@ public class CLIP
                         dataToLoad = read.ReadToEnd();
                     }
                 }
-                clip = JsonConvert.DeserializeObject<CLIP>(dataToLoad, new JsonSerializerSettings
+                clip = JsonConvert.DeserializeObject<ConvolutionalNeuralNetwork>(dataToLoad, new JsonSerializerSettings
                 {
                     TypeNameHandling = TypeNameHandling.Auto
                 });
@@ -200,8 +210,8 @@ public class CLIP
         func();
         watch.Stop();
         var elapsedMs = watch.ElapsedMilliseconds;
-        if(PRINTSTOPWATCH)
-            Console.WriteLine($"{processName} Time: {elapsedMs / 1000f} s");
+        if(!PRINTSTOPWATCH)
+            Console.WriteLine($"Time: {elapsedMs / 1000f:F3} s {processName}");
     }
 
     public void Forward((FeatureMap image, bool[] bools, float[] floats)[] input)

@@ -17,7 +17,7 @@ public class Transformer
         {
             for(int j = 0; j < bools; j++)
             {
-                _boolMatrix[i, j] = (float)CLIP.RandomGauss(0, stdDev);
+                _boolMatrix[i, j] = (float)ConvolutionalNeuralNetwork.RandomGauss(0, stdDev);
             }
         }
 
@@ -26,7 +26,7 @@ public class Transformer
         {
             for (int j = 0; j < floats; j++)
             {
-                _floatMatrix[i, j] = (float)CLIP.Random.NextDouble() - 0.5f;
+                _floatMatrix[i, j] = (float)ConvolutionalNeuralNetwork.Random.NextDouble() - 0.5f;
             }
         }
     }

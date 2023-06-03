@@ -134,7 +134,7 @@ public readonly struct Color
 
     public static Color RandomGauss(float mean, float stdDev)
     {
-        return new Color(CLIP.RandomGauss(mean, stdDev), CLIP.RandomGauss(mean, stdDev), CLIP.RandomGauss(mean, stdDev));
+        return new Color(ConvolutionalNeuralNetwork.RandomGauss(mean, stdDev), ConvolutionalNeuralNetwork.RandomGauss(mean, stdDev), ConvolutionalNeuralNetwork.RandomGauss(mean, stdDev));
     }
 
     public Color Clamp(float val)
