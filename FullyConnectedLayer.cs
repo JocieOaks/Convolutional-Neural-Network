@@ -3,7 +3,6 @@ using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
 
-#nullable disable
 
 [Serializable]
 public class FullyConnectedLayer : Layer
@@ -40,9 +39,9 @@ public class FullyConnectedLayer : Layer
 
     [JsonConstructor] private FullyConnectedLayer() : base() { }
 
-    public override FeatureMap[,] Startup(FeatureMap[,] input, int outputDimensionFactor)
+    public override FeatureMap[,] Startup(FeatureMap[,] input, int outputDimensionFactor = 1)
     {
-        BaseStartup(input, outputDimensionFactor);
+        BaseStartup(input, _matrixRed == null ? outputDimensionFactor : -_matrixRed.Width / _matrixRed.Length);
         _deviceInfos = new MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[_inputDimensions];
         _deviceMultiplierGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions, _outputDimensions];
         _deviceMultipliers = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _outputDimensions];

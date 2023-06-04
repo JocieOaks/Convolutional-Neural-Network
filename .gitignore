@@ -402,3 +402,6 @@ Program.cs
 ImageData.cs
 ImageTags.cs
 ClassifiedImage.cs
+Form1.cs
+Form1.Designer.cs
+Form1.resx

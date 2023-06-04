@@ -47,6 +47,8 @@ public class VectorizationLayer
         }
     }
 
+    [JsonConstructor] private VectorizationLayer() { }
+
     public string Name => "Vectorization Layer";
 
     public Vector[] Forward(FeatureMap[,] inputTransposed)

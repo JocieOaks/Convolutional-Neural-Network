@@ -1,8 +1,8 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
 using Newtonsoft.Json;
-
-#nullable disable
+using System.Diagnostics.CodeAnalysis;
+using System.Drawing;
 
 [Serializable]
 public class ConvolutionalNeuralNetwork
@@ -11,9 +11,7 @@ public class ConvolutionalNeuralNetwork
     public const float ASYMPTOTEERRORFACTOR = 1e-6f; //Used to avoid divide by zero or log of zero going to infinity.
     private const bool PRINTSTOPWATCH = false;
     
-    [JsonProperty] readonly private int _batchSize;
-
-    [JsonProperty] readonly private ConvolutionalLayer _initialConvolutionLayer;
+    private int _batchSize;
 
     [JsonProperty] readonly private List<Layer> _layers = new();
 
@@ -28,8 +26,6 @@ public class ConvolutionalNeuralNetwork
     private Vector[] _imageGradient;
     Vector[] _imageVectors;
     private Vector[] _imageVectorsNorm;
-    
-    private FeatureMap[,] _initialFeatureMaps;
 
     private Vector[] _previousDescriptionGradient;
     private Vector[] _previousImageGradient;
@@ -42,31 +38,35 @@ public class ConvolutionalNeuralNetwork
             input[0, j] = new FeatureMap(width, length);
         }
 
-        _initialConvolutionLayer = new ConvolutionalLayer(3, 1, ref input, 8);
+
         _transformer = new Transformer(descriptionBoolLength, descriptionFloatLength, vectorDimensions);
         _batchSize = batchSize;
 
         _descriptionVectors = new Vector[batchSize];
         _descriptionVectorsNorm = new Vector[batchSize];
 
+        _layers.Add(new ConvolutionalLayer(3, 1, ref input, 8));
         _layers.Add(new ReLULayer(ref input));
         _layers.Add(new BatchNormalizationLayer(ref input));
-        for (int i = 0; i < depth; i++)
+        for (int i = 1; i < depth; i++)
         {
             _layers.Add(new ConvolutionalLayer(3, 1, ref input, 2));
             _layers.Add(new ReLULayer(ref input));
             _layers.Add(new BatchNormalizationLayer(ref input));
-            if (i < 6 && i % 2 == 0)
+            if (i % 2 == 0)
                 _layers.Add(new AveragePoolLayer(2, ref input));
         }
-        _layers.Add(new FullyConnectedLayer(ref input, 2));
-        for (int i = 0; i < depth + 1; i++)
+        for (int j = 0; j < 5; j++)
         {
-            _layers.Add(new ConvolutionalLayer(3, 1, ref input, 2));
-            _layers.Add(new ReLULayer(ref input));
-            _layers.Add(new BatchNormalizationLayer(ref input));
-            if (i < 6 && i % 2 == 1)
-                _layers.Add(new AveragePoolLayer(2, ref input));
+            _layers.Add(new FullyConnectedLayer(ref input, 4));
+            for (int i = 0; i < depth; i++)
+            {
+                _layers.Add(new ConvolutionalLayer(3, 1, ref input, 2));
+                _layers.Add(new ReLULayer(ref input));
+                _layers.Add(new BatchNormalizationLayer(ref input));
+                if (j < 3 && i % 2 == 1)
+                    _layers.Add(new AveragePoolLayer(2, ref input));
+            }
         }
 
         _vectorizationLayer = new VectorizationLayer(vectorDimensions, input);
@@ -110,9 +110,9 @@ public class ConvolutionalNeuralNetwork
         return correct / (2f * matrix.GetLength(0));
     }
 
-    public static ConvolutionalNeuralNetwork? LoadFromFile(string file)
+    public static ConvolutionalNeuralNetwork LoadFromFile(string file)
     {
-        ConvolutionalNeuralNetwork? clip = null;
+        ConvolutionalNeuralNetwork cnn = null;
 
         if (File.Exists(file))
         {
@@ -126,7 +126,7 @@ public class ConvolutionalNeuralNetwork
                         dataToLoad = read.ReadToEnd();
                     }
                 }
-                clip = JsonConvert.DeserializeObject<ConvolutionalNeuralNetwork>(dataToLoad, new JsonSerializerSettings
+                cnn = JsonConvert.DeserializeObject<ConvolutionalNeuralNetwork>(dataToLoad, new JsonSerializerSettings
                 {
                     TypeNameHandling = TypeNameHandling.Auto
                 });
@@ -137,7 +137,7 @@ public class ConvolutionalNeuralNetwork
             }
         }
 
-        return clip;
+        return cnn;
     }
 
     public static float Loss(float[,] matrix)
@@ -173,14 +173,14 @@ public class ConvolutionalNeuralNetwork
         return mean + stdDev * randStdNormal; //random normal(mean,stdDev^2)
     }
 
-    public void Backwards((Vector[] image, Vector[] description) gradients, (FeatureMap image, bool[] bools, float[] floats)[] input, float learningRate, float transformLearningRate)
+    public void Backwards((Vector[] image, Vector[] description) gradients, ImageInput[] input, float learningRate, float transformLearningRate)
     {
         FeatureMap[,] images = new FeatureMap[1, _batchSize];
         for (int i = 0; i < _batchSize; i++)
         {
-            images[0, i] = input[i].image;
+            images[0, i] = input[i].Image;
 
-            _transformer.Backwards(input[i].bools, input[i].floats, VectorNormalizationLayer.Backwards(_descriptionVectors[i], gradients.description[i]), transformLearningRate);
+            _transformer.Backwards(input[i].Bools, input[i].Floats, VectorNormalizationLayer.Backwards(_descriptionVectors[i], gradients.description[i]), transformLearningRate);
         }
 
         FeatureMap[,] transposedGradient = new FeatureMap[0, 0];
@@ -193,9 +193,7 @@ public class ConvolutionalNeuralNetwork
             StopWatch(() => currentGradient = _layers[j].Backwards(_featureMaps[j - 1], currentGradient, learningRate), $"Backwards {j} {_layers[j].Name}");
         }
         if (_layers.Count > 0)
-            StopWatch(() => currentGradient = _layers[0].Backwards(_initialFeatureMaps, currentGradient, learningRate), $"Backwards {0} {_layers[0].Name}");
-
-        StopWatch(() => _initialConvolutionLayer.BackwardsFilterOnly(images, currentGradient, learningRate), $"Backwards Initial {_initialConvolutionLayer.Name}");
+            StopWatch(() => (_layers[0] as ConvolutionalLayer).BackwardsFilterOnly(images, currentGradient, learningRate), $"Backwards {0} {_layers[0].Name}");
     }
 
     public float CrossDescriptionLoss(float[,] score)
@@ -232,20 +230,18 @@ public class ConvolutionalNeuralNetwork
         return score;
     }
 
-    public void Forward((FeatureMap image, bool[] bools, float[] floats)[] input)
+    public void Forward(ImageInput[] input)
     {
         FeatureMap[,] current = new FeatureMap[0, 0];
         FeatureMap[,] images = new FeatureMap[1, _batchSize];
         for (int i = 0; i < _batchSize; i++)
         {
-            images[0, i] = input[i].image;
-            _descriptionVectors[i] = _transformer.Forward(input[i].bools, input[i].floats);
+            images[0, i] = input[i].Image;
+            _descriptionVectors[i] = _transformer.Forward(input[i].Bools, input[i].Floats);
             _descriptionVectorsNorm[i] = VectorNormalizationLayer.Forward(_descriptionVectors[i]);
         }
 
-        StopWatch(() => current = _initialConvolutionLayer.Forward(images), $"Forwards Initial {_initialConvolutionLayer.Name}");
-
-        _initialFeatureMaps = current;
+        current = images;
 
         for (int j = 0; j < Depth; j++)
         {
@@ -301,7 +297,7 @@ public class ConvolutionalNeuralNetwork
         }
     }
 
-    public void Initialize((FeatureMap image, bool[] bools, float[] floats)[] input)
+    public void Initialize(ImageInput[] input)
     {
         Forward(input);
         bool changed;
@@ -316,8 +312,8 @@ public class ConvolutionalNeuralNetwork
                     Vector gradient = dot * _imageVectorsNorm[j];
                     changed = true;
 
-                    _transformer.Backwards(input[j].bools, input[j].floats, VectorNormalizationLayer.Backwards(_descriptionVectors[j], gradient), 0.001f);
-                    _descriptionVectors[j] = _transformer.Forward(input[j].bools, input[j].floats);
+                    _transformer.Backwards(input[j].Bools, input[j].Floats, VectorNormalizationLayer.Backwards(_descriptionVectors[j], gradient), 0.001f);
+                    _descriptionVectors[j] = _transformer.Forward(input[j].Bools, input[j].Floats);
                     _descriptionVectorsNorm[j] = VectorNormalizationLayer.Forward(_descriptionVectors[j]);
                 }
             }
@@ -354,6 +350,46 @@ public class ConvolutionalNeuralNetwork
         }
     }
 
+    public void PrintFeatureMaps(string directory, string name, int batchIndex)
+    {
+        directory = Path.Combine(directory, name);
+        try
+        {
+            // create the directory the file will be written to if it doesn't already exist
+            Directory.CreateDirectory(directory);
+        }
+        catch (System.Exception e)
+        {
+            Console.WriteLine("Error occured when trying to create director: " + directory + "\n" + e.ToString());
+        }
+
+        string layerDirectory;
+        for (int i = 0; i < Depth; i++)
+        {
+            if (_layers[i] is BatchNormalizationLayer || _layers[i] is ReLULayer || _layers[i] is AveragePoolLayer)
+                continue;
+            layerDirectory = Path.Combine(directory, $"{i} {_layers[i].Name}");
+            Directory.CreateDirectory(layerDirectory);
+            for (int j = 0; j < _featureMaps[i].GetLength(0); j++)
+            {
+                PrintFeatureMap(_featureMaps[i][j, batchIndex], Path.Combine(layerDirectory, $"{name} {j}.png"));
+            }
+        }
+    }
+
+    private void PrintFeatureMap(FeatureMap map, string file)
+    {
+        Bitmap image = map.ConstructBitmap();
+        try
+        {
+            image.Save(file, System.Drawing.Imaging.ImageFormat.Png);
+        }
+        catch (System.Exception e)
+        {
+            Console.WriteLine("Error occured when trying to save image: " + file + "\n" + e.ToString());
+        }
+    }
+
     public float[,] Score()
     {
         float[,] cosScores = new float[_batchSize, _batchSize];
@@ -371,13 +407,14 @@ public class ConvolutionalNeuralNetwork
 
     public void StartUp(int batchSize, int width, int length)
     {
+        _batchSize = batchSize;
         FeatureMap[,] input = new FeatureMap[1, batchSize];
         for (int j = 0; j < batchSize; j++)
         {
             input[0, j] = new FeatureMap(width, length);
         }
 
-        FeatureMap[,] current = _initialConvolutionLayer.Startup(input);
+        FeatureMap[,] current = input;
         foreach(var layer in _layers)
         {
             current = layer.Startup(current);
@@ -390,7 +427,7 @@ public class ConvolutionalNeuralNetwork
 
         _featureMaps = new FeatureMap[Depth][,];
     }
-    public (float, float) Test((FeatureMap image, bool[] bools, float[] floats)[] input)
+    public (float, float) Test(ImageInput[] input)
     {
         Forward(input);
         float[,] matrix = Score();
@@ -399,7 +436,7 @@ public class ConvolutionalNeuralNetwork
         return (loss, accuracy);
     }
 
-    public float Train((FeatureMap image, bool[] bools, float[] floats)[] input, float learningRate, float transformLearningRate, float momentum)
+    public float Train(ImageInput[] input, float learningRate, float transformLearningRate, float momentum)
     {
         Forward(input);
         float[,] score = Score();

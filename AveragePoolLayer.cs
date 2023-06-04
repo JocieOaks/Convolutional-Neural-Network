@@ -4,7 +4,6 @@ using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
 
-#nullable disable
 
 [Serializable]
 public class AveragePoolLayer : Layer

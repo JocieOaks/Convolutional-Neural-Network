@@ -1,5 +1,4 @@
 ﻿// See https://aka.ms/new-console-template for more information
-#nullable disable
 
 using ILGPU;
 using ILGPU.Runtime;
@@ -220,7 +219,7 @@ public class ConvolutionalLayer : Layer
         return Convoluted;
     }
 
-    public override FeatureMap[,] Startup(FeatureMap[,] input, int outputDimensionFactor = 0)
+    public override FeatureMap[,] Startup(FeatureMap[,] input, int outputDimensionFactor = 1)
     {
         BaseStartup(input, _filters == null ? outputDimensionFactor : _filters.Length  / input.GetLength(0));
 

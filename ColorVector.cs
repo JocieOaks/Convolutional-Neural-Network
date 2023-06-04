@@ -1,23 +1,9 @@
-﻿using Newtonsoft.Json.Linq;
-using System;
-using System.Collections.Generic;
-using System.Data.Common;
-using System.Drawing.Drawing2D;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Newtonsoft.Json;
 
+[Serializable]
 public class ColorVector
 {
-    readonly Color[] _values;
-
-    public int Length => _values.Length;
-
-    public Color this[int index]
-    {
-        get => _values[index];
-        set => _values[index] = value;
-    }
+    [JsonProperty] private readonly Color[] _values;
 
     public ColorVector(Color[] values)
     {
@@ -27,6 +13,16 @@ public class ColorVector
     public ColorVector(int length)
     {
         _values = new Color[length];
+    }
+
+    [JsonConstructor] private ColorVector() { }
+
+    [JsonIgnore] public int Length => _values.Length;
+
+    public Color this[int index]
+    {
+        get => _values[index];
+        set => _values[index] = value;
     }
 
     public static Vector operator *(FeatureMap matrix, ColorVector vector)
@@ -72,4 +68,3 @@ public class ColorVector
         return vector;
     }
 }
-

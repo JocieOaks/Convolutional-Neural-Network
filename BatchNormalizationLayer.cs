@@ -4,7 +4,6 @@ using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
 using System.Runtime.InteropServices;
 
-#nullable disable
 
 [Serializable]
 public class BatchNormalizationLayer : Layer
@@ -30,8 +29,8 @@ public class BatchNormalizationLayer : Layer
         _bias = new ColorVector(_inputDimensions);
         for (int i = 0; i < _inputDimensions; i++)
         {
-            _weight[i] = new Color(1, 1, 1);
-            _bias[i] = new Color();
+            _weight[i] = new Color(1);
+            _bias[i] = new Color(0);
         }
     }
 
@@ -165,7 +164,7 @@ public class BatchNormalizationLayer : Layer
 
         for (int i = 0; i < _inputDimensions; i++)
         {
-            _sigma[i] = Color.Pow((Color)_deviceVariances[i] / (Infos(i).Area * _batchSize) + new Color(ConvolutionalNeuralNetwork.ASYMPTOTEERRORFACTOR, ConvolutionalNeuralNetwork.ASYMPTOTEERRORFACTOR, ConvolutionalNeuralNetwork.ASYMPTOTEERRORFACTOR), 0.5f);
+            _sigma[i] = Color.Pow((Color)_deviceVariances[i] / (Infos(i).Area * _batchSize) + new Color(ConvolutionalNeuralNetwork.ASYMPTOTEERRORFACTOR), 0.5f);
 
             Index2D index = new(Infos(i).Width, Infos(i).Length);
             _deviceValues[i] = accelerator.Allocate1D(new Color[] { _mean[i], _weight[i] / _sigma[i], _bias[i] });

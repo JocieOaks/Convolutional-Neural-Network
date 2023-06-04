@@ -24,13 +24,14 @@ public readonly struct Color
         _3b = 0;
     }
 
-    public Color(System.Drawing.Color color)
+    public Color(float unit)
     {
-        int inverseAlpha = 255 - color.A;
-        _1r = (color.R + inverseAlpha) / 255f;
-        _2g = (color.G + inverseAlpha) / 255f;
-        _3b = (color.B + inverseAlpha) / 255f;
+        _1r = unit;
+        _2g = unit;
+        _3b = unit;
     }
+
+
 
     private readonly float _1r;
     private readonly float _2g;
@@ -68,6 +69,20 @@ public readonly struct Color
         float[] values = new float[3];
         array.CopyToCPU(values);
         return new Color(values[0], values[1], values[2]);
+    }
+
+    public static explicit operator Color(System.Drawing.Color color)
+    {
+        int inverseAlpha = 255 - color.A;
+        return new Color((color.R + inverseAlpha) / 255f, (color.G + inverseAlpha) / 255f, (color.B + inverseAlpha) / 255f);
+    }
+
+    public static explicit operator System.Drawing.Color(Color color)
+    {
+        int r = Math.Max(Math.Min((int)color.R, 255), 0);
+        int g = Math.Max(Math.Min((int)color.G, 255), 0);
+        int b = Math.Max(Math.Min((int)color.B, 255), 0);
+        return System.Drawing.Color.FromArgb(r, g, b);
     }
 
     public static Color operator -(Color color1, Color color2)
