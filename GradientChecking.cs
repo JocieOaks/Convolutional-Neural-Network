@@ -19,7 +19,7 @@ public static class GradientChecking
             }
         }
         FeatureMap[,] testOutput = testInput;
-        ConvolutionalLayer layer = new ConvolutionalLayer(3, 1, ref testOutput, 1);
+        ConvolutionalLayer layer = new ConvolutionalLayer(3, 1, 1);
         FeatureMap[,] gradient = new FeatureMap[,] { { new FeatureMap(1, 1, new Color(1)) } };
         testOutput = layer.Forward(testInput);
         Color output = testOutput[0, 0][0, 0];
@@ -60,7 +60,7 @@ public static class GradientChecking
             }
         }
         FeatureMap[,] testOutput = testInput;
-        BatchNormalizationLayer layer = new BatchNormalizationLayer(ref testOutput);
+        BatchNormalizationLayer layer = new BatchNormalizationLayer();
         FeatureMap[,] gradient = new FeatureMap[,] { { new FeatureMap(3, 3, new Color(1)) } };
         testOutput = layer.Forward(testInput);
 
@@ -121,7 +121,7 @@ public static class GradientChecking
             }
         }
         FeatureMap[,] testOutput = testInput;
-        FullyConnectedLayer layer = new FullyConnectedLayer(ref testOutput, 1);
+        FullyConnectedLayer layer = new FullyConnectedLayer(1);
         FeatureMap[,] gradient = new FeatureMap[,] { { new FeatureMap(3, 3, new Color(1)) } };
         testOutput = layer.Forward(testInput);
 
@@ -174,7 +174,7 @@ public static class GradientChecking
             }
         }
         FeatureMap[,] testOutput = testInput;
-        FullyConnectedLayer layer = new FullyConnectedLayer(ref testOutput, 1);
+        FullyConnectedLayer layer = new FullyConnectedLayer(1);
         FeatureMap[,] gradient = new FeatureMap[,] { { new FeatureMap(3, 3, new Color(1)) } };
         testOutput = layer.Forward(testInput);
 

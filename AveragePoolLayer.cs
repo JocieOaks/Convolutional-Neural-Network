@@ -12,14 +12,11 @@ public class AveragePoolLayer : Layer
 
     private MemoryBuffer1D<LayerInfo, Stride1D.Dense>[] _deviceInfos;
 
-    public AveragePoolLayer(int filterSize, ref FeatureMap[,] input) : base(filterSize, filterSize)
-    {
-        input = Startup(input);
-    }
+    public AveragePoolLayer(int filterSize) : base(filterSize, filterSize) { }
 
     [JsonConstructor] private AveragePoolLayer() : base() { }
 
-    public override FeatureMap[,] Startup(FeatureMap[,] input, int outputDimensionFactor = 0)
+    public override FeatureMap[,] Startup(FeatureMap[,] input)
     {
         BaseStartup(input);
         _deviceInfos = new MemoryBuffer1D<LayerInfo, Stride1D.Dense>[_inputDimensions];

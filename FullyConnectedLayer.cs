@@ -16,32 +16,37 @@ public class FullyConnectedLayer : Layer
     [JsonProperty] private FeatureMap _matrixGreen;
     [JsonProperty] private FeatureMap _matrixRed;
 
-    public FullyConnectedLayer(ref FeatureMap[,] input, int outputDimensions) : base(1, 1)
+    public FullyConnectedLayer(int outputDimensions) : base(1, 1)
     {
-        input = Startup(input, -input.GetLength(0) / outputDimensions);
-
-        float variance = 0.666f / (_inputDimensions + _outputDimensions);
-        float stdDev = MathF.Sqrt(variance);
-        _matrixRed = new FeatureMap(_inputDimensions, _outputDimensions);
-        _matrixGreen = new FeatureMap(_inputDimensions, _outputDimensions);
-        _matrixBlue = new FeatureMap(_inputDimensions, _outputDimensions);
-        for (int i = 0; i < _inputDimensions; i++)
-        {
-            for (int j = 0; j < _outputDimensions; j++)
-            {
-                _matrixRed[i, j] = Color.RandomGauss(0, stdDev);
-                _matrixGreen[i, j] = Color.RandomGauss(0, stdDev);
-                _matrixBlue[i, j] = Color.RandomGauss(0, stdDev);
-            }
-        }
-
+        _outputDimensions = outputDimensions;
     }
 
     [JsonConstructor] private FullyConnectedLayer() : base() { }
 
-    public override FeatureMap[,] Startup(FeatureMap[,] input, int outputDimensionFactor = 1)
+    public override FeatureMap[,] Startup(FeatureMap[,] input)
     {
-        BaseStartup(input, _matrixRed == null ? outputDimensionFactor : -_matrixRed.Width / _matrixRed.Length);
+        if (_matrixRed == null)
+        {
+            BaseStartup(input, -input.GetLength(0) / _outputDimensions);
+            float variance = 0.666f / (_inputDimensions + _outputDimensions);
+            float stdDev = MathF.Sqrt(variance);
+            _matrixRed = new FeatureMap(_inputDimensions, _outputDimensions);
+            _matrixGreen = new FeatureMap(_inputDimensions, _outputDimensions);
+            _matrixBlue = new FeatureMap(_inputDimensions, _outputDimensions);
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                for (int j = 0; j < _outputDimensions; j++)
+                {
+                    _matrixRed[i, j] = Color.RandomGauss(0, stdDev);
+                    _matrixGreen[i, j] = Color.RandomGauss(0, stdDev);
+                    _matrixBlue[i, j] = Color.RandomGauss(0, stdDev);
+                }
+            }
+        }
+        else
+        {
+            BaseStartup(input, -_matrixRed.Width / _matrixRed.Length);
+        }
         _deviceInfos = new MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[_inputDimensions];
         _deviceMultiplierGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions, _outputDimensions];
         _deviceMultipliers = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _outputDimensions];

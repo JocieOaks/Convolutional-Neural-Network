@@ -1,8 +1,12 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
+using ILGPU;
+using ILGPU.Runtime;
+using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
 using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
+using System.Security.Policy;
 
 [Serializable]
 public class ConvolutionalNeuralNetwork
@@ -30,46 +34,39 @@ public class ConvolutionalNeuralNetwork
     private Vector[] _previousDescriptionGradient;
     private Vector[] _previousImageGradient;
     private FeatureMap[,] _transposedFinalFeatureMap;
-    public ConvolutionalNeuralNetwork(int depth, int vectorDimensions, int batchSize, int descriptionBoolLength, int descriptionFloatLength, int width, int length)
+    public ConvolutionalNeuralNetwork(int depth, int vectorDimensions, int batchSize, int descriptionBoolLength, int descriptionFloatLength)
     {
-        FeatureMap[,] input = new FeatureMap[1, batchSize];
-        for (int j = 0; j < batchSize; j++)
-        {
-            input[0, j] = new FeatureMap(width, length);
-        }
-
-
         _transformer = new Transformer(descriptionBoolLength, descriptionFloatLength, vectorDimensions);
         _batchSize = batchSize;
 
         _descriptionVectors = new Vector[batchSize];
         _descriptionVectorsNorm = new Vector[batchSize];
 
-        _layers.Add(new ConvolutionalLayer(3, 1, ref input, 8));
-        _layers.Add(new ReLULayer(ref input));
-        _layers.Add(new BatchNormalizationLayer(ref input));
+        _layers.Add(new ConvolutionalLayer(3, 1, 8));
+        _layers.Add(new ReLULayer());
+        _layers.Add(new BatchNormalizationLayer()); 
         for (int i = 1; i < depth; i++)
         {
-            _layers.Add(new ConvolutionalLayer(3, 1, ref input, 2));
-            _layers.Add(new ReLULayer(ref input));
-            _layers.Add(new BatchNormalizationLayer(ref input));
+            _layers.Add(new ConvolutionalLayer(3, 1, 2));
+            _layers.Add(new ReLULayer());
+            _layers.Add(new BatchNormalizationLayer());
             if (i % 2 == 0)
-                _layers.Add(new AveragePoolLayer(2, ref input));
+                _layers.Add(new AveragePoolLayer(2));
         }
         for (int j = 0; j < 5; j++)
         {
-            _layers.Add(new FullyConnectedLayer(ref input, 4));
+            _layers.Add(new FullyConnectedLayer(4));
             for (int i = 0; i < depth; i++)
             {
-                _layers.Add(new ConvolutionalLayer(3, 1, ref input, 2));
-                _layers.Add(new ReLULayer(ref input));
-                _layers.Add(new BatchNormalizationLayer(ref input));
+                _layers.Add(new ConvolutionalLayer(3, 1, 2));
+                _layers.Add(new ReLULayer());
+                _layers.Add(new BatchNormalizationLayer());
                 if (j < 3 && i % 2 == 1)
-                    _layers.Add(new AveragePoolLayer(2, ref input));
+                    _layers.Add(new AveragePoolLayer(2));
             }
         }
 
-        _vectorizationLayer = new VectorizationLayer(vectorDimensions, input);
+        _vectorizationLayer = new VectorizationLayer(vectorDimensions);
         _featureMaps = new FeatureMap[Depth][,];
     }
 
@@ -108,6 +105,11 @@ public class ConvolutionalNeuralNetwork
                 correct++;
         }
         return correct / (2f * matrix.GetLength(0));
+    }
+
+    public void AddLayer(Layer layer)
+    {
+        _layers.Add(layer);
     }
 
     public static ConvolutionalNeuralNetwork LoadFromFile(string file)
@@ -362,7 +364,8 @@ public class ConvolutionalNeuralNetwork
         {
             Console.WriteLine("Error occured when trying to create director: " + directory + "\n" + e.ToString());
         }
-
+        using Context context = Context.Create(builder => builder.Cuda());
+        using Accelerator accelerator = context.CreateCudaAccelerator(0);
         string layerDirectory;
         for (int i = 0; i < Depth; i++)
         {
@@ -372,14 +375,14 @@ public class ConvolutionalNeuralNetwork
             Directory.CreateDirectory(layerDirectory);
             for (int j = 0; j < _featureMaps[i].GetLength(0); j++)
             {
-                PrintFeatureMap(_featureMaps[i][j, batchIndex], Path.Combine(layerDirectory, $"{name} {j}.png"));
+                PrintFeatureMap(_featureMaps[i][j, batchIndex], Path.Combine(layerDirectory, $"{name} {j}.png"), accelerator);
             }
         }
     }
 
-    private void PrintFeatureMap(FeatureMap map, string file)
+    private void PrintFeatureMap(FeatureMap map, string file, Accelerator accelerator)
     {
-        Bitmap image = map.ConstructBitmap();
+        Bitmap image = map.ConstructBitmap(accelerator);
         try
         {
             image.Save(file, System.Drawing.Imaging.ImageFormat.Png);

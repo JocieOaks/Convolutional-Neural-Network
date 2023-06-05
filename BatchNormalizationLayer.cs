@@ -8,8 +8,8 @@ using System.Runtime.InteropServices;
 [Serializable]
 public class BatchNormalizationLayer : Layer
 {
-    [JsonProperty] private readonly ColorVector _bias;
-    [JsonProperty] private readonly ColorVector _weight;
+    [JsonProperty] private ColorVector _bias;
+    [JsonProperty] private ColorVector _weight;
     
     private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceGradients;
     private MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] _deviceInfos;
@@ -21,20 +21,7 @@ public class BatchNormalizationLayer : Layer
     private ColorVector _mean;
     private ColorVector _sigma;
 
-    public BatchNormalizationLayer(ref FeatureMap[,] input) : base(1, 1)
-    {
-        input = Startup(input);
-
-        _weight = new ColorVector(_inputDimensions);
-        _bias = new ColorVector(_inputDimensions);
-        for (int i = 0; i < _inputDimensions; i++)
-        {
-            _weight[i] = new Color(1);
-            _bias[i] = new Color(0);
-        }
-    }
-
-    [JsonConstructor] private BatchNormalizationLayer() : base() { }
+    [JsonConstructor] public BatchNormalizationLayer() : base(1, 1) { }
 
     [JsonIgnore] public override string Name => "Batch Normalization Layer";
 
@@ -196,9 +183,21 @@ public class BatchNormalizationLayer : Layer
         return Normalized;
     }
 
-    public override FeatureMap[,] Startup(FeatureMap[,] input, int outputDimensionFactor = 0)
+    public override FeatureMap[,] Startup(FeatureMap[,] input)
     {
         BaseStartup(input);
+
+        if(_weight == null)
+        {
+            _weight = new ColorVector(_inputDimensions);
+            _bias = new ColorVector(_inputDimensions);
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                _weight[i] = new Color(1);
+                _bias[i] = new Color(0);
+            }
+        }
+
         _mean = new ColorVector(_inputDimensions);
         _sigma = new ColorVector(_inputDimensions);
 

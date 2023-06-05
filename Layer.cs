@@ -33,7 +33,7 @@ public abstract class Layer
     {
     }
 
-    public abstract FeatureMap[,] Startup(FeatureMap[,] input, int outputDimensionFactor = 1);
+    public abstract FeatureMap[,] Startup(FeatureMap[,] input);
 
     protected FeatureMap[,] BaseStartup(FeatureMap[,] input, int outputDimensionFactor = 1)
     {

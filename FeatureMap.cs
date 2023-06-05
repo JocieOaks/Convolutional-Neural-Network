@@ -77,11 +77,11 @@ public class FeatureMap
         return SumMagnitude() / Area;
     }
 
-    public Bitmap ConstructBitmap()
+    public Bitmap ConstructBitmap(Accelerator accelerator)
     {
         Bitmap bitmap = new Bitmap(Width, Length);
 
-        Color[] normalizedMap = Normalize();
+        Color[] normalizedMap = Normalize(accelerator);
 
         for(int y = 0; y < Length; y++)
         {
@@ -139,11 +139,8 @@ public class FeatureMap
         return sum;
     }
 
-    private Color[] Normalize()
+    private Color[] Normalize(Accelerator accelerator)
     {
-        using Context context = Context.Create(builder => builder.Cuda());
-        using Accelerator accelerator = context.CreateCudaAccelerator(0);
-
         var sumKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<float>>(MeanKernal);
         var varianceKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>>(VarianceKernal);
         var normalizeKernal = accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>>(NormalizeKernal);
@@ -154,6 +151,7 @@ public class FeatureMap
 
         var deviceInput = Allocate(accelerator);
 
+        //Console.Write("Sum");
         sumKernal(index, deviceInput.View, deviceSum.View);
 
         accelerator.Synchronize();
@@ -163,6 +161,7 @@ public class FeatureMap
         var deviceMean = accelerator.Allocate1D(new Color[] { mean });
         var deviceVariance = accelerator.Allocate1D<float>(3);
 
+        //Console.WriteLine("Variance");
         varianceKernal(index, deviceInput.View, deviceMean.View, deviceVariance.View);
 
         accelerator.Synchronize();
@@ -172,7 +171,7 @@ public class FeatureMap
         var deviceValues = accelerator.Allocate1D(new Color[] { mean, s_normalStandardDeviation / sigma, s_normalMean });
 
         var deviceOutput = AllocateEmpty(accelerator);
-
+        //Console.WriteLine("Normalize");
         normalizeKernal(new Index1D(Area), deviceInput.View, deviceOutput.View, deviceValues.View);
 
         accelerator.Synchronize();

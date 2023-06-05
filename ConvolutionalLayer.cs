@@ -20,24 +20,11 @@ public class ConvolutionalLayer : Layer
     private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceFilters;
     private MemoryBuffer1D<LayerInfo, Stride1D.Dense>[] _deviceInfos;
 
-    public ConvolutionalLayer(int filterSize, int stride, ref FeatureMap[,] input, int outputDimensionsMultiplier) : base(filterSize, stride)
+    private int _dimensionsMultiplier;
+
+    public ConvolutionalLayer(int filterSize, int stride, int outputDimensionsMultiplier) : base(filterSize, stride)
     {
-        input = Startup(input, outputDimensionsMultiplier);
-
-        //Setup filters and filter gradients
-        _filters = new Color[_outputDimensions][];
-
-        float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize + _inputDimensions * _filterSize * _filterSize);
-        float stdDev = MathF.Sqrt(variance);
-
-        for (int i = 0; i < _outputDimensions; i++)
-        {
-            _filters[i] = new Color[_filterSize * _filterSize];
-            for (int j = 0; j < _filterSize * _filterSize; j++)
-            {
-                _filters[i][j] = Color.RandomGauss(0, stdDev);
-            }
-        }
+        _dimensionsMultiplier = outputDimensionsMultiplier;
     }
 
     [JsonConstructor] private ConvolutionalLayer() : base() { }
@@ -219,10 +206,29 @@ public class ConvolutionalLayer : Layer
         return Convoluted;
     }
 
-    public override FeatureMap[,] Startup(FeatureMap[,] input, int outputDimensionFactor = 1)
+    public override FeatureMap[,] Startup(FeatureMap[,] input)
     {
-        BaseStartup(input, _filters == null ? outputDimensionFactor : _filters.Length  / input.GetLength(0));
+        if (_filters == null)
+        {
+            BaseStartup(input, _dimensionsMultiplier);
+            _filters = new Color[_outputDimensions][];
 
+            float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize + _inputDimensions * _filterSize * _filterSize);
+            float stdDev = MathF.Sqrt(variance);
+
+            for (int i = 0; i < _outputDimensions; i++)
+            {
+                _filters[i] = new Color[_filterSize * _filterSize];
+                for (int j = 0; j < _filterSize * _filterSize; j++)
+                {
+                    _filters[i][j] = Color.RandomGauss(0, stdDev);
+                }
+            }
+        }
+        else
+        {
+            BaseStartup(input, _filters.Length / input.GetLength(0));
+        }
         _filterGradient = new float[_outputDimensions][];
 
         for (int i = 0; i < _outputDimensions; i++)

@@ -7,32 +7,34 @@ using System.Xml;
 [Serializable]
 public class VectorizationLayer
 {
-    [JsonProperty] readonly FeatureMap _matrix;
+    [JsonProperty] FeatureMap _matrix;
     ColorVector[] _vectors;
     FeatureMap[,] _transposedGradient;
-    public VectorizationLayer(int vectorDimensions, FeatureMap[,] input)
+    [JsonProperty] int _vectorDimensions;
+    public VectorizationLayer(int vectorDimensions)
     {
-        StartUp(input);
-
-        int featureMapDimensions = input.GetLength(0);
-        
-        float variance = 2f / (3 * featureMapDimensions + vectorDimensions);
-        float stdDev = MathF.Sqrt(variance);
-        _matrix = new FeatureMap(vectorDimensions, featureMapDimensions);
-
-        for (int j = 0; j < featureMapDimensions; j++)
-        {
-            for (int i = 0; i < vectorDimensions; i++)
-            {
-                _matrix[i, j] = Color.RandomGauss(0, stdDev);
-            }
-        }
+        _vectorDimensions = vectorDimensions;
     }
 
     public void StartUp(FeatureMap[,] input)
     {
         int featureMapDimensions = input.GetLength(0);
         int batchSize = input.GetLength(1);
+
+        if (_matrix == null)
+        {
+            float variance = 2f / (3 * featureMapDimensions + _vectorDimensions);
+            float stdDev = MathF.Sqrt(variance);
+            _matrix = new FeatureMap(_vectorDimensions, featureMapDimensions);
+
+            for (int j = 0; j < featureMapDimensions; j++)
+            {
+                for (int i = 0; i < _vectorDimensions; i++)
+                {
+                    _matrix[i, j] = Color.RandomGauss(0, stdDev);
+                }
+            }
+        }
 
         _vectors = new ColorVector[batchSize];
         _transposedGradient = new FeatureMap[batchSize, featureMapDimensions];

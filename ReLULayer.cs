@@ -9,14 +9,9 @@ public class ReLULayer : Layer
 {
     private MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] _deviceInfos;
 
-    public ReLULayer(ref FeatureMap[,] input) : base(1, 1)
-    {
-        input = Startup(input);
-    }
+    [JsonConstructor] public ReLULayer() : base(1, 1) { }
 
-    [JsonConstructor] private ReLULayer() : base() { }
-
-    public override FeatureMap[,] Startup(FeatureMap[,] input, int outputDimensionFactor = 0)
+    public override FeatureMap[,] Startup(FeatureMap[,] input)
     {
         BaseStartup(input);
         _deviceInfos = new MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[_inputDimensions];
