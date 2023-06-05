@@ -190,12 +190,11 @@ public class ConvolutionalNeuralNetwork
 
         FeatureMap[,] currentGradient = TransposeArray(transposedGradient);
 
-        for (int j = Depth - 1; j > 0; j--)
+        for (int j = Depth - 1; j > 1; j--)
         {
             StopWatch(() => currentGradient = _layers[j].Backwards(_featureMaps[j - 1], currentGradient, learningRate), $"Backwards {j} {_layers[j].Name}");
         }
-        if (_layers.Count > 0)
-            StopWatch(() => (_layers[0] as ConvolutionalLayer).BackwardsFilterOnly(images, currentGradient, learningRate), $"Backwards {0} {_layers[0].Name}");
+        StopWatch(() => (_layers[1] as ConvolutionalLayer).BackwardsFilterOnly(images, currentGradient, learningRate), $"Backwards {1} {_layers[1].Name}");
     }
 
     public float CrossDescriptionLoss(float[,] score)
@@ -232,7 +231,7 @@ public class ConvolutionalNeuralNetwork
         return score;
     }
 
-    public void Forward(ImageInput[] input)
+    public void Forward(ImageInput[] input, bool inference = false)
     {
         FeatureMap[,] current = new FeatureMap[0, 0];
         FeatureMap[,] images = new FeatureMap[1, _batchSize];
@@ -247,7 +246,14 @@ public class ConvolutionalNeuralNetwork
 
         for (int j = 0; j < Depth; j++)
         {
-            StopWatch(() => current = _layers[j].Forward(current), $"Forwards {j} {_layers[j].Name}");
+            if (inference && _layers[j] is DropoutLayer)
+            {
+                StopWatch(() => current = (_layers[j] as DropoutLayer).ForwardInference(current), $"Forwards {j} {_layers[j].Name}");
+            }
+            else
+            {
+                StopWatch(() => current = _layers[j].Forward(current), $"Forwards {j} {_layers[j].Name}");
+            }
             _featureMaps[j] = current;
         }
 
@@ -369,13 +375,14 @@ public class ConvolutionalNeuralNetwork
         string layerDirectory;
         for (int i = 0; i < Depth; i++)
         {
-            if (_layers[i] is BatchNormalizationLayer || _layers[i] is ReLULayer || _layers[i] is AveragePoolLayer)
-                continue;
-            layerDirectory = Path.Combine(directory, $"{i} {_layers[i].Name}");
-            Directory.CreateDirectory(layerDirectory);
-            for (int j = 0; j < _featureMaps[i].GetLength(0); j++)
+            if (_layers[i] is BatchNormalizationLayer)
             {
-                PrintFeatureMap(_featureMaps[i][j, batchIndex], Path.Combine(layerDirectory, $"{name} {j}.png"), accelerator);
+                layerDirectory = Path.Combine(directory, $"{i} {_layers[i].Name}");
+                Directory.CreateDirectory(layerDirectory);
+                for (int j = 0; j < _featureMaps[i].GetLength(0); j++)
+                {
+                    PrintFeatureMap(_featureMaps[i][j, batchIndex], Path.Combine(layerDirectory, $"{name} {j}.png"), accelerator);
+                }
             }
         }
     }
@@ -432,7 +439,7 @@ public class ConvolutionalNeuralNetwork
     }
     public (float, float) Test(ImageInput[] input)
     {
-        Forward(input);
+        Forward(input, true);
         float[,] matrix = Score();
         float loss = Loss(matrix);
         float accuracy = Accuracy(matrix);
