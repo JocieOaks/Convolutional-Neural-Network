@@ -16,12 +16,17 @@ public class VectorizationLayer
         _vectorDimensions = vectorDimensions;
     }
 
+    public void ChangeVectorDimensions(int vectorDimensions)
+    {
+        _vectorDimensions = vectorDimensions;
+    }
+
     public void StartUp(FeatureMap[,] input)
     {
         int featureMapDimensions = input.GetLength(0);
         int batchSize = input.GetLength(1);
 
-        if (_matrix == null)
+        if (_matrix == null || _matrix.Width != _vectorDimensions)
         {
             float variance = 2f / (3 * featureMapDimensions + _vectorDimensions);
             float stdDev = MathF.Sqrt(variance);

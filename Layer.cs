@@ -3,7 +3,7 @@ using ILGPU.Runtime;
 using Newtonsoft.Json;
 
 [Serializable]
-public abstract class Layer
+public abstract class Layer : ILayer
 {
     [JsonProperty] protected int _filterSize;
     [JsonProperty] protected int _stride;

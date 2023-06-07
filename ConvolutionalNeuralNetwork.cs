@@ -1,6 +1,7 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
 using ILGPU;
+using ILGPU.IR.Transformations;
 using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
@@ -9,19 +10,11 @@ using System.Drawing;
 using System.Security.Policy;
 
 [Serializable]
-public class ConvolutionalNeuralNetwork
+public partial class ConvolutionalNeuralNetwork
 {
     //Used to avoid divide by zero or log of zero going to infinity.
     public const float ASYMPTOTEERRORFACTOR = 1e-6f; //Used to avoid divide by zero or log of zero going to infinity.
     private const bool PRINTSTOPWATCH = false;
-    
-    private int _batchSize;
-
-    [JsonProperty] readonly private List<Layer> _layers = new();
-
-    [JsonProperty] readonly private Transformer _transformer;
-
-    [JsonProperty] readonly private VectorizationLayer _vectorizationLayer;
 
     private Vector[] _descriptionGradient;
     Vector[] _descriptionVectors;
@@ -34,41 +27,6 @@ public class ConvolutionalNeuralNetwork
     private Vector[] _previousDescriptionGradient;
     private Vector[] _previousImageGradient;
     private FeatureMap[,] _transposedFinalFeatureMap;
-    public ConvolutionalNeuralNetwork(int depth, int vectorDimensions, int batchSize, int descriptionBoolLength, int descriptionFloatLength)
-    {
-        _transformer = new Transformer(descriptionBoolLength, descriptionFloatLength, vectorDimensions);
-        _batchSize = batchSize;
-
-        _descriptionVectors = new Vector[batchSize];
-        _descriptionVectorsNorm = new Vector[batchSize];
-
-        _layers.Add(new ConvolutionalLayer(3, 1, 8));
-        _layers.Add(new ReLULayer());
-        _layers.Add(new BatchNormalizationLayer()); 
-        for (int i = 1; i < depth; i++)
-        {
-            _layers.Add(new ConvolutionalLayer(3, 1, 2));
-            _layers.Add(new ReLULayer());
-            _layers.Add(new BatchNormalizationLayer());
-            if (i % 2 == 0)
-                _layers.Add(new AveragePoolLayer(2));
-        }
-        for (int j = 0; j < 5; j++)
-        {
-            _layers.Add(new FullyConnectedLayer(4));
-            for (int i = 0; i < depth; i++)
-            {
-                _layers.Add(new ConvolutionalLayer(3, 1, 2));
-                _layers.Add(new ReLULayer());
-                _layers.Add(new BatchNormalizationLayer());
-                if (j < 3 && i % 2 == 1)
-                    _layers.Add(new AveragePoolLayer(2));
-            }
-        }
-
-        _vectorizationLayer = new VectorizationLayer(vectorDimensions);
-        _featureMaps = new FeatureMap[Depth][,];
-    }
 
     [JsonConstructor] private ConvolutionalNeuralNetwork() { }
 
@@ -105,41 +63,6 @@ public class ConvolutionalNeuralNetwork
                 correct++;
         }
         return correct / (2f * matrix.GetLength(0));
-    }
-
-    public void AddLayer(Layer layer)
-    {
-        _layers.Add(layer);
-    }
-
-    public static ConvolutionalNeuralNetwork LoadFromFile(string file)
-    {
-        ConvolutionalNeuralNetwork cnn = null;
-
-        if (File.Exists(file))
-        {
-            try
-            {
-                string dataToLoad = "";
-                using (FileStream stream = new(file, FileMode.Open))
-                {
-                    using (StreamReader read = new(stream))
-                    {
-                        dataToLoad = read.ReadToEnd();
-                    }
-                }
-                cnn = JsonConvert.DeserializeObject<ConvolutionalNeuralNetwork>(dataToLoad, new JsonSerializerSettings
-                {
-                    TypeNameHandling = TypeNameHandling.Auto
-                });
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine("Error occured when trying to load data from file: " + file + "\n" + e.ToString());
-            }
-        }
-
-        return cnn;
     }
 
     public static float Loss(float[,] matrix)
@@ -190,45 +113,11 @@ public class ConvolutionalNeuralNetwork
 
         FeatureMap[,] currentGradient = TransposeArray(transposedGradient);
 
-        for (int j = Depth - 1; j > 1; j--)
+        for (int j = Depth - 1; j > 0; j--)
         {
             StopWatch(() => currentGradient = _layers[j].Backwards(_featureMaps[j - 1], currentGradient, learningRate), $"Backwards {j} {_layers[j].Name}");
         }
-        StopWatch(() => (_layers[1] as ConvolutionalLayer).BackwardsFilterOnly(images, currentGradient, learningRate), $"Backwards {1} {_layers[1].Name}");
-    }
-
-    public float CrossDescriptionLoss(float[,] score)
-    {
-        float loss = 0;
-        for (int i = 0; i < _batchSize; i++)
-        {
-            for (int j = i + 1; j < _batchSize; j++)
-            {
-                if (score[i, j] > 0)
-                {
-                    loss += -2 * MathF.Log(1 - score[i, j] + ASYMPTOTEERRORFACTOR);
-                }
-            }
-        }
-        return loss / (_batchSize * _batchSize);
-    }
-
-    public float[,] CrossDescriptionScore()
-    {
-        float[,] score = new float[_batchSize, _batchSize];
-        for (int i = 0; i < _batchSize; i++)
-        {
-            for (int j = i + 1; j < _batchSize; j++)
-            {
-                float loss = Vector.Dot(_descriptionVectorsNorm[i], _descriptionVectorsNorm[j]);
-                if (loss > 0)
-                {
-                    score[i, j] = loss;
-                    score[j, i] = loss;
-                }
-            }
-        }
-        return score;
+        StopWatch(() => (_layers[0] as ConvolutionalLayer).BackwardsFilterOnly(images, currentGradient, learningRate), $"Backwards {0} {_layers[0].Name}");
     }
 
     public void Forward(ImageInput[] input, bool inference = false)
@@ -329,35 +218,6 @@ public class ConvolutionalNeuralNetwork
 
     }
 
-    public void SaveToFile(string file)
-    {
-        try
-        {
-            // create the directory the file will be written to if it doesn't already exist
-            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
-
-            // serialize the C# game data object into Json
-            string dataToStore = JsonConvert.SerializeObject(this, Formatting.Indented, new JsonSerializerSettings
-            {
-                TypeNameHandling = TypeNameHandling.Auto
-            });
-
-            // write the serialized data to the file
-            using (FileStream stream = File.Create(file))
-            {
-                using (StreamWriter writer = new(stream))
-                {
-                    writer.Write(dataToStore);
-                }
-            }
-
-        }
-        catch (System.Exception e)
-        {
-            Console.WriteLine("Error occured when trying to save data to file: " + file + "\n" + e.ToString());
-        }
-    }
-
     public void PrintFeatureMaps(string directory, string name, int batchIndex)
     {
         directory = Path.Combine(directory, name);
@@ -415,30 +275,11 @@ public class ConvolutionalNeuralNetwork
         return cosScores;
     }
 
-    public void StartUp(int batchSize, int width, int length)
-    {
-        _batchSize = batchSize;
-        FeatureMap[,] input = new FeatureMap[1, batchSize];
-        for (int j = 0; j < batchSize; j++)
-        {
-            input[0, j] = new FeatureMap(width, length);
-        }
-
-        FeatureMap[,] current = input;
-        foreach(var layer in _layers)
-        {
-            current = layer.Startup(current);
-        }
-
-        _vectorizationLayer.StartUp(current);
-
-        _descriptionVectors = new Vector[batchSize];
-        _descriptionVectorsNorm = new Vector[batchSize];
-
-        _featureMaps = new FeatureMap[Depth][,];
-    }
     public (float, float) Test(ImageInput[] input)
     {
+        if (!_ready)
+            throw new InvalidOperationException("Network has not finished setup");
+
         Forward(input, true);
         float[,] matrix = Score();
         float loss = Loss(matrix);
@@ -448,6 +289,9 @@ public class ConvolutionalNeuralNetwork
 
     public float Train(ImageInput[] input, float learningRate, float transformLearningRate, float momentum)
     {
+        if (!_ready)
+            throw new InvalidOperationException("Network has not finished setup");
+
         Forward(input);
         float[,] score = Score();
         float loss = Loss(score);

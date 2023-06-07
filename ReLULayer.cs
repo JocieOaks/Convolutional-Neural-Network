@@ -5,7 +5,7 @@ using Newtonsoft.Json;
 
 
 [Serializable]
-public class ReLULayer : Layer
+public class ReLULayer : Layer, ISecondaryLayer
 {
     private MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] _deviceInfos;
 

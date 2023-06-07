@@ -3,7 +3,7 @@ using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
 
-public class DropoutLayer : Layer
+public class DropoutLayer : Layer, ISecondaryLayer
 {
     private MemoryBuffer1D<int, Stride1D.Dense>[] _deviceDropout;
     private int[][] _dropout;

@@ -5,7 +5,7 @@ using Newtonsoft.Json;
 
 
 [Serializable]
-public class FullyConnectedLayer : Layer
+public class FullyConnectedLayer : Layer, IPrimaryLayer
 {
     private MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] _deviceInfos;
     private MemoryBuffer1D<float, Stride1D.Dense>[,] _deviceMultiplierGradients;

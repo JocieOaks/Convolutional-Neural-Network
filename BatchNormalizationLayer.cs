@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 
 
 [Serializable]
-public class BatchNormalizationLayer : Layer
+public class BatchNormalizationLayer : Layer, ISecondaryLayer
 {
     [JsonProperty] private ColorVector _bias;
     [JsonProperty] private ColorVector _weight;

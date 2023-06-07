@@ -6,7 +6,7 @@ using Newtonsoft.Json;
 
 
 [Serializable]
-public class AveragePoolLayer : Layer
+public class AveragePoolLayer : Layer, IStructuralLayer
 {
     private FeatureMap[,] Pooled => _outputs;
 

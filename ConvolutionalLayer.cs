@@ -6,7 +6,7 @@ using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
 
 [Serializable]
-public class ConvolutionalLayer : Layer
+public class ConvolutionalLayer : Layer, IPrimaryLayer
 {
     protected const int CLAMP = 1;
 

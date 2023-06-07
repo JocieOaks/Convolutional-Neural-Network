@@ -1,38 +1,73 @@
 ﻿// See https://aka.ms/new-console-template for more information
+using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
 
 
 [Serializable]
 public class Transformer
 {
-    [JsonProperty] private readonly float[,] _boolMatrix;
-    [JsonProperty] private readonly float[,] _floatMatrix;
-
-    public Transformer(int bools, int floats, int outputs)
+    [JsonProperty] private float[,] _boolMatrix;
+    [JsonProperty] private float[,] _floatMatrix;
+    [JsonProperty] private int _vectorDimensions;
+    public Transformer(int vectorDimensions)
     {
-        float variance = 2f / (bools + floats + outputs);
-        float stdDev = MathF.Sqrt(variance);
-
-        _boolMatrix = new float[outputs, bools];
-        for (int i = 0; i < outputs; i++)
-        {
-            for (int j = 0; j < bools; j++)
-            {
-                _boolMatrix[i, j] = ConvolutionalNeuralNetwork.RandomGauss(0, stdDev);
-            }
-        }
-
-        _floatMatrix = new float[outputs, floats];
-        for (int i = 0; i < outputs; i++)
-        {
-            for (int j = 0; j < floats; j++)
-            {
-                _floatMatrix[i, j] = (float)ConvolutionalNeuralNetwork.Random.NextDouble() - 0.5f;
-            }
-        }
+        _vectorDimensions = vectorDimensions;
     }
 
-    [JsonConstructor]
+    public void ChangeVectorDimensions(int vectorDimensions)
+    {
+        _vectorDimensions = vectorDimensions;
+    }
+
+    public bool Startup(int bools, int floats)
+    {
+        bool initialize = false;
+        float variance = 2f / (bools + floats + _vectorDimensions);
+        float stdDev = MathF.Sqrt(variance);
+        if(_boolMatrix.GetLength(1) + 1== bools)
+        {
+            float[,] newBoolMatrix = new float[_vectorDimensions, bools];
+            for(int i = 0; i < _vectorDimensions; i++)
+            {
+                for (int j = 0; j < bools; j++)
+                {
+                    newBoolMatrix[i, j] = j switch
+                    {
+                        < 3 => _boolMatrix[i, j],
+                        3 => ConvolutionalNeuralNetwork.RandomGauss(0, stdDev),
+                        > 3 => _boolMatrix[i, j - 1]
+                    };
+                }
+            }
+        }
+        else if (_boolMatrix == null || _boolMatrix.GetLength(0) != _vectorDimensions || _boolMatrix.GetLength(1) != bools)
+        {
+            initialize = true;
+            _boolMatrix = new float[_vectorDimensions, bools];
+            for (int i = 0; i < _vectorDimensions; i++)
+            {
+                for (int j = 0; j < bools; j++)
+                {
+                    _boolMatrix[i, j] = ConvolutionalNeuralNetwork.RandomGauss(0, stdDev);
+                }
+            }
+        }
+        if (_floatMatrix == null || _floatMatrix.GetLength(0) != _vectorDimensions || _floatMatrix.GetLength(1) != floats)
+        {
+            initialize = true;
+            _floatMatrix = new float[_vectorDimensions, floats];
+            for (int i = 0; i < _vectorDimensions; i++)
+            {
+                for (int j = 0; j < floats; j++)
+                {
+                    _floatMatrix[i, j] = ConvolutionalNeuralNetwork.RandomGauss(0, stdDev);
+                }
+            }
+        }
+        return initialize;
+    }
+
+        [JsonConstructor]
     private Transformer()
     {
     }
@@ -59,7 +94,7 @@ public class Transformer
         {
             for (int j = 0; j < _floatMatrix.GetLength(1); j++)
             {
-                _floatMatrix[i, j] -= learningRate * descriptionGradient[i] * floats[j];
+                _floatMatrix[i, j] -= learningRate * 5 * descriptionGradient[i] * floats[j];
             }
         }
 
@@ -68,7 +103,7 @@ public class Transformer
             for (int j = 0; j < _boolMatrix.GetLength(1); j++)
             {
                 if (bools[j])
-                    _boolMatrix[i, j] -= learningRate * descriptionGradient[i];
+                    _boolMatrix[i, j] -= learningRate * 5 * descriptionGradient[i];
             }
         }
     }
