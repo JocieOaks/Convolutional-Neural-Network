@@ -5,6 +5,7 @@
     FeatureMap[,] Backwards(FeatureMap[,] input, FeatureMap[,] inGradient, float learningRate);
     FeatureMap[,] Forward(FeatureMap[,] input);
     FeatureMap[,] Startup(FeatureMap[,] input);
+    void Reset();
 }
 
 /// <summary>

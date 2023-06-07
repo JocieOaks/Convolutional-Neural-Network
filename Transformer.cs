@@ -24,23 +24,8 @@ public class Transformer
         bool initialize = false;
         float variance = 2f / (bools + floats + _vectorDimensions);
         float stdDev = MathF.Sqrt(variance);
-        if(_boolMatrix.GetLength(1) + 1== bools)
-        {
-            float[,] newBoolMatrix = new float[_vectorDimensions, bools];
-            for(int i = 0; i < _vectorDimensions; i++)
-            {
-                for (int j = 0; j < bools; j++)
-                {
-                    newBoolMatrix[i, j] = j switch
-                    {
-                        < 3 => _boolMatrix[i, j],
-                        3 => ConvolutionalNeuralNetwork.RandomGauss(0, stdDev),
-                        > 3 => _boolMatrix[i, j - 1]
-                    };
-                }
-            }
-        }
-        else if (_boolMatrix == null || _boolMatrix.GetLength(0) != _vectorDimensions || _boolMatrix.GetLength(1) != bools)
+
+        if (_boolMatrix == null || _boolMatrix.GetLength(0) != _vectorDimensions || _boolMatrix.GetLength(1) != bools)
         {
             initialize = true;
             _boolMatrix = new float[_vectorDimensions, bools];

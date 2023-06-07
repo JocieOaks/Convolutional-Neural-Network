@@ -110,6 +110,21 @@ public partial class ConvolutionalNeuralNetwork
         }
         _layers.Clear();
     }
+
+    public void ResetLayer(int index)
+    {
+        _layers[index].Reset();
+    }
+
+    public void ResetAll(Predicate<ILayer> predicate)
+    {
+        foreach(var layer in _layers)
+        {
+            if(predicate(layer))
+                layer.Reset();
+        }
+    }
+
     public void SaveToFile(string file)
     {
         try

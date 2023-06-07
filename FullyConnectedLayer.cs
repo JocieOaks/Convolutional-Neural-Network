@@ -234,4 +234,19 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
     {
         return (SingleLayerInfo)_layerInfos[index];
     }
+
+    public override void Reset()
+    {
+        float variance = 0.666f / (_inputDimensions + _outputDimensions);
+        float stdDev = MathF.Sqrt(variance);
+        for (int i = 0; i < _inputDimensions; i++)
+        {
+            for (int j = 0; j < _outputDimensions; j++)
+            {
+                _matrixRed[i, j] = Color.RandomGauss(0, stdDev);
+                _matrixGreen[i, j] = Color.RandomGauss(0, stdDev);
+                _matrixBlue[i, j] = Color.RandomGauss(0, stdDev);
+            }
+        }
+    }
 }

@@ -117,4 +117,6 @@ public abstract class Layer : ILayer
     public abstract FeatureMap[,] Forward(FeatureMap[,] input);
 
     public abstract FeatureMap[,] Backwards(FeatureMap[,] input, FeatureMap[,] inGradient, float learningRate);
+
+    public abstract void Reset();
 }

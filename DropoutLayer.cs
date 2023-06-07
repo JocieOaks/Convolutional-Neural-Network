@@ -163,4 +163,8 @@ public class DropoutLayer : Layer, ISecondaryLayer
     {
         return (SingleLayerInfo)_layerInfos[index];
     }
+
+    public override void Reset()
+    {
+    }
 }

@@ -115,4 +115,8 @@ public class ReLULayer : Layer, ISecondaryLayer
     {
         return (SingleLayerInfo)_layerInfos[index];
     }
+
+    public override void Reset()
+    {
+    }
 }

@@ -322,4 +322,18 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
     {
         return index * 3 + rgb;
     }
+
+    public override void Reset()
+    {
+        float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize + _inputDimensions * _filterSize * _filterSize);
+        float stdDev = MathF.Sqrt(variance);
+
+        for (int i = 0; i < _outputDimensions; i++)
+        {
+            for (int j = 0; j < _filterSize * _filterSize; j++)
+            {
+                _filters[i][j] = Color.RandomGauss(0, stdDev);
+            }
+        }
+    }
 }

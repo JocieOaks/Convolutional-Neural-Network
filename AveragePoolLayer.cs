@@ -124,4 +124,8 @@ public class AveragePoolLayer : Layer, IStructuralLayer
         }
         pooled[info[0].OutputIndex(index.X, index.Y)] = sum * info[0].InverseKSquared;
     }
+
+    public override void Reset()
+    {
+    }
 }

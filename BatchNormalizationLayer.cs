@@ -249,6 +249,15 @@ public class BatchNormalizationLayer : Layer, ISecondaryLayer
         return (SingleLayerInfo)_layerInfos[index];
     }
 
+    public override void Reset()
+    {
+        for (int i = 0; i < _inputDimensions; i++)
+        {
+            _weight[i] = new Color(1);
+            _bias[i] = new Color(0);
+        }
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private struct Gradients
     {
