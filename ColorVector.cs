@@ -15,7 +15,10 @@ public class ColorVector
         _values = new Color[length];
     }
 
-    [JsonConstructor] private ColorVector() { }
+    [JsonConstructor]
+    private ColorVector()
+    {
+    }
 
     [JsonIgnore] public int Length => _values.Length;
 

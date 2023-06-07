@@ -1,14 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Drawing.Drawing2D;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
-
-public class Vector
+﻿public class Vector
 {
-    readonly float[] _values;
+    private readonly float[] _values;
 
     public float this[int index]
     {
@@ -239,4 +231,3 @@ public class Vector
         return values;
     }
 }
-

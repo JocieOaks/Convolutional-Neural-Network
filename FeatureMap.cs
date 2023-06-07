@@ -1,6 +1,5 @@
 ﻿using ILGPU;
 using ILGPU.Runtime;
-using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
 using System.Drawing;
 
@@ -83,9 +82,9 @@ public class FeatureMap
 
         Color[] normalizedMap = Normalize(accelerator);
 
-        for(int y = 0; y < Length; y++)
+        for (int y = 0; y < Length; y++)
         {
-            for(int x = 0; x < Width; x++)
+            for (int x = 0; x < Width; x++)
             {
                 bitmap.SetPixel(x, Length - y - 1, (System.Drawing.Color)normalizedMap[y * Width + x]);
             }

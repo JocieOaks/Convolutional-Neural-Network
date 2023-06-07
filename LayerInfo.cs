@@ -1,6 +1,4 @@
-﻿// See https://aka.ms/new-console-template for more information
-
-public interface ILayerInfo
+﻿public interface ILayerInfo
 {
     int InputWidth { get; }
     int InputLength { get; }
@@ -15,7 +13,8 @@ public interface ILayerInfo
 
 public readonly struct LayerInfo : ILayerInfo
 {
-    public LayerInfo() { }
+    public LayerInfo()
+    { }
 
     public int InputWidth { get; init; }
     public int InputLength { get; init; }

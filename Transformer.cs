@@ -1,7 +1,5 @@
-﻿// See https://aka.ms/new-console-template for more information
-using ILGPU.Runtime.Cuda;
+﻿
 using Newtonsoft.Json;
-
 
 [Serializable]
 public class Transformer
@@ -9,6 +7,7 @@ public class Transformer
     [JsonProperty] private float[,] _boolMatrix;
     [JsonProperty] private float[,] _floatMatrix;
     [JsonProperty] private int _vectorDimensions;
+
     public Transformer(int vectorDimensions)
     {
         _vectorDimensions = vectorDimensions;
@@ -52,7 +51,7 @@ public class Transformer
         return initialize;
     }
 
-        [JsonConstructor]
+    [JsonConstructor]
     private Transformer()
     {
     }

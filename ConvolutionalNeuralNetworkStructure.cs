@@ -1,24 +1,20 @@
 ﻿using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 public partial class ConvolutionalNeuralNetwork
 {
-    [JsonProperty] readonly private List<ILayer> _layers = new();
+    [JsonProperty] private readonly List<ILayer> _layers = new();
 
     private readonly List<IPrimaryLayer> _primaryLayers = new();
-    [JsonProperty] readonly private Transformer _transformer;
+    [JsonProperty] private readonly Transformer _transformer;
 
-    [JsonProperty] readonly private VectorizationLayer _vectorizationLayer;
+    [JsonProperty] private readonly VectorizationLayer _vectorizationLayer;
 
     private ActivationPattern _activationPattern;
     private int _batchSize;
 
-    [JsonProperty] bool _configured = false;
-    bool _ready = false;
+    [JsonProperty] private bool _configured = false;
+    private bool _ready = false;
+
     public ConvolutionalNeuralNetwork(int vectorDimensions)
     {
         _transformer = new Transformer(vectorDimensions);
@@ -100,10 +96,11 @@ public partial class ConvolutionalNeuralNetwork
     {
         _primaryLayers.Insert(index, layer);
     }
+
     public void ReconfigureNetwork()
     {
         _configured = false;
-        foreach(var layer in  _layers)
+        foreach (var layer in _layers)
         {
             if (layer is IPrimaryLayer primary)
                 _primaryLayers.Add(primary);
@@ -118,9 +115,9 @@ public partial class ConvolutionalNeuralNetwork
 
     public void ResetAll(Predicate<ILayer> predicate)
     {
-        foreach(var layer in _layers)
+        foreach (var layer in _layers)
         {
-            if(predicate(layer))
+            if (predicate(layer))
                 layer.Reset();
         }
     }
@@ -146,7 +143,6 @@ public partial class ConvolutionalNeuralNetwork
                     writer.Write(dataToStore);
                 }
             }
-
         }
         catch (System.Exception e)
         {

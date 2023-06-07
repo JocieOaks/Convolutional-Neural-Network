@@ -3,13 +3,15 @@ using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
 
-
 [Serializable]
 public class ReLULayer : Layer, ISecondaryLayer
 {
     private MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] _deviceInfos;
 
-    [JsonConstructor] public ReLULayer() : base(1, 1) { }
+    [JsonConstructor]
+    public ReLULayer() : base(1, 1)
+    {
+    }
 
     public override FeatureMap[,] Startup(FeatureMap[,] input)
     {

@@ -1,17 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
-
-public static class VectorNormalizationLayer
+﻿public static class VectorNormalizationLayer
 {
-
     public static Vector[] Forward(Vector[] input)
     {
         Vector[] vectors = new Vector[input.Length];
-        for(int i = 0; i < vectors.Length; i++)
+        for (int i = 0; i < vectors.Length; i++)
         {
             vectors[i] = Forward(input[i]);
         }
@@ -26,7 +18,7 @@ public static class VectorNormalizationLayer
     public static Vector[] Backwards(Vector[] input, Vector[] inGradients)
     {
         Vector[] outGradients = new Vector[input.Length];
-        for(int i = 0; i < outGradients.Length ; i++)
+        for (int i = 0; i < outGradients.Length; i++)
         {
             outGradients[i] = Backwards(input[i], inGradients[i]);
         }
@@ -40,13 +32,11 @@ public static class VectorNormalizationLayer
 
         Vector outGradient = new Vector(inGradient.Length);
 
-        for(int i = 0; i < inGradient.Length; i++)
+        for (int i = 0; i < inGradient.Length; i++)
         {
             outGradient[i] = (magnitude - input[i] * input[i] * invMagnitude) * invMagnitude * invMagnitude * inGradient[i];
         }
 
         return outGradient;
     }
-
 }
-

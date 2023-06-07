@@ -1,6 +1,4 @@
-﻿// See https://aka.ms/new-console-template for more information
-
-using ILGPU;
+﻿using ILGPU;
 using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
@@ -27,7 +25,10 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
         _dimensionsMultiplier = outputDimensionsMultiplier;
     }
 
-    [JsonConstructor] private ConvolutionalLayer() : base() { }
+    [JsonConstructor]
+    private ConvolutionalLayer() : base()
+    {
+    }
 
     public override string Name => "Convolutional Layer";
 
@@ -206,6 +207,20 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
         return Convoluted;
     }
 
+    public override void Reset()
+    {
+        float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize + _inputDimensions * _filterSize * _filterSize);
+        float stdDev = MathF.Sqrt(variance);
+
+        for (int i = 0; i < _outputDimensions; i++)
+        {
+            for (int j = 0; j < _filterSize * _filterSize; j++)
+            {
+                _filters[i][j] = Color.RandomGauss(0, stdDev);
+            }
+        }
+    }
+
     public override FeatureMap[,] Startup(FeatureMap[,] input)
     {
         if (_filters == null)
@@ -242,6 +257,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
 
         return _outputs;
     }
+
     protected static void BackwardsGradientKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> input, ArrayView<float> filterGradient, ArrayView<LayerInfo> info)
     {
         float dL = inGradient[info[0].OutputIndex(index.X, index.Y)][index.Z] * info[0].InverseKSquared;
@@ -297,6 +313,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
             }
         }
     }
+
     protected static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> convoluted, ArrayView<Color> filter, ArrayView<LayerInfo> info)
     {
         Color sum = new();
@@ -321,19 +338,5 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
     private static int FloatIndex(int index, int rgb)
     {
         return index * 3 + rgb;
-    }
-
-    public override void Reset()
-    {
-        float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize + _inputDimensions * _filterSize * _filterSize);
-        float stdDev = MathF.Sqrt(variance);
-
-        for (int i = 0; i < _outputDimensions; i++)
-        {
-            for (int j = 0; j < _filterSize * _filterSize; j++)
-            {
-                _filters[i][j] = Color.RandomGauss(0, stdDev);
-            }
-        }
     }
 }

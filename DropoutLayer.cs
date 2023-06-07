@@ -148,9 +148,9 @@ public class DropoutLayer : Layer, ISecondaryLayer
 
     private static void ForwardKernal(Index1D index, ArrayView<Color> input, ArrayView<int> dropout, ArrayView<Color> output)
     {
-        float r = dropout[3 * index] == 0 ? 0 :input[index].R;
+        float r = dropout[3 * index] == 0 ? 0 : input[index].R;
         float g = dropout[3 * index + 1] == 0 ? 0 : input[index].G;
-        float b = dropout[3 * index + 2] == 0 ? 0 :input[index].B;
+        float b = dropout[3 * index + 2] == 0 ? 0 : input[index].B;
         output[index] = new Color(r, g, b);
     }
 

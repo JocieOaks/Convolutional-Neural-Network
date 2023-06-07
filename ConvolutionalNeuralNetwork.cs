@@ -1,34 +1,33 @@
-﻿// See https://aka.ms/new-console-template for more information
-
-using ILGPU;
-using ILGPU.IR.Transformations;
+﻿using ILGPU;
 using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
-using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
-using System.Security.Policy;
 
 [Serializable]
 public partial class ConvolutionalNeuralNetwork
 {
     //Used to avoid divide by zero or log of zero going to infinity.
     public const float ASYMPTOTEERRORFACTOR = 1e-6f; //Used to avoid divide by zero or log of zero going to infinity.
+
     private const bool PRINTSTOPWATCH = false;
 
     private Vector[] _descriptionGradient;
-    Vector[] _descriptionVectors;
+    private Vector[] _descriptionVectors;
     private Vector[] _descriptionVectorsNorm;
     private FeatureMap[][,] _featureMaps;
     private Vector[] _imageGradient;
-    Vector[] _imageVectors;
+    private Vector[] _imageVectors;
     private Vector[] _imageVectorsNorm;
 
     private Vector[] _previousDescriptionGradient;
     private Vector[] _previousImageGradient;
     private FeatureMap[,] _transposedFinalFeatureMap;
 
-    [JsonConstructor] private ConvolutionalNeuralNetwork() { }
+    [JsonConstructor]
+    private ConvolutionalNeuralNetwork()
+    {
+    }
 
     public static Random Random { get; } = new Random();
 
@@ -162,7 +161,6 @@ public partial class ConvolutionalNeuralNetwork
         _descriptionVectorsNorm = new Vector[vectorCount];
         for (int i = 0; i < vectorCount; i++)
         {
-
             Vector newImageVector = new Vector(vectorLength);
             Vector newDescriptionVector = new Vector(vectorLength);
             for (int j = 0; j < vectorLength; j++)
@@ -180,7 +178,6 @@ public partial class ConvolutionalNeuralNetwork
         yield return (loss, accuracy);
         for (int i = 0; i < 10; i++)
         {
-
             (Vector[] imageGradients, Vector[] descriptionGradients) = CalculateGradient(matrix, loss);
             for (int j = 0; j < vectorCount; j++)
             {
@@ -215,7 +212,6 @@ public partial class ConvolutionalNeuralNetwork
                 }
             }
         } while (changed);
-
     }
 
     public void PrintFeatureMaps(string directory, string name, int batchIndex)
@@ -425,7 +421,7 @@ public partial class ConvolutionalNeuralNetwork
         func();
         watch.Stop();
         var elapsedMs = watch.ElapsedMilliseconds;
-        if(PRINTSTOPWATCH)
+        if (PRINTSTOPWATCH)
             Console.WriteLine($"Time: {elapsedMs / 1000f:F3} s {processName}");
     }
 
@@ -455,6 +451,7 @@ public partial class ConvolutionalNeuralNetwork
         }
         return transposed;
     }
+
     private (Vector[], Vector[]) CalculateGradient(float[,] matrix, float loss)
     {
         return (CalculateGradient(matrix, _imageVectorsNorm, _descriptionVectorsNorm, loss),

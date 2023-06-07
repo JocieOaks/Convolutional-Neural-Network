@@ -4,24 +4,26 @@ using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
 using System.Runtime.InteropServices;
 
-
 [Serializable]
 public class BatchNormalizationLayer : Layer, ISecondaryLayer
 {
     [JsonProperty] private ColorVector _bias;
     [JsonProperty] private ColorVector _weight;
-    
+
     private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceGradients;
     private MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] _deviceInfos;
     private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceMeans;
     private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceSums;
     private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceValues;
     private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceVariances;
-    
+
     private ColorVector _mean;
     private ColorVector _sigma;
 
-    [JsonConstructor] public BatchNormalizationLayer() : base(1, 1) { }
+    [JsonConstructor]
+    public BatchNormalizationLayer() : base(1, 1)
+    {
+    }
 
     [JsonIgnore] public override string Name => "Batch Normalization Layer";
 
@@ -187,7 +189,7 @@ public class BatchNormalizationLayer : Layer, ISecondaryLayer
     {
         BaseStartup(input);
 
-        if(_weight == null)
+        if (_weight == null)
         {
             _weight = new ColorVector(_inputDimensions);
             _bias = new ColorVector(_inputDimensions);
@@ -210,6 +212,7 @@ public class BatchNormalizationLayer : Layer, ISecondaryLayer
 
         return _outputs;
     }
+
     private static void BackwardsKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<float> outGradient, ArrayView<Color> values, ArrayView<SingleLayerInfo> info)
     {
         int mapsIndex = info[0].Index(index.X, index.Y);

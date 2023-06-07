@@ -3,7 +3,6 @@ using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
 
-
 [Serializable]
 public class FullyConnectedLayer : Layer, IPrimaryLayer
 {
@@ -11,7 +10,7 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
     private MemoryBuffer1D<float, Stride1D.Dense>[,] _deviceMultiplierGradients;
     private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceMultipliers;
     private new MemoryBuffer1D<float, Stride1D.Dense>[,] _deviceOutputs;
-    
+
     [JsonProperty] private FeatureMap _matrixBlue;
     [JsonProperty] private FeatureMap _matrixGreen;
     [JsonProperty] private FeatureMap _matrixRed;
@@ -21,7 +20,10 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
         _outputDimensions = outputDimensions;
     }
 
-    [JsonConstructor] private FullyConnectedLayer() : base() { }
+    [JsonConstructor]
+    private FullyConnectedLayer() : base()
+    {
+    }
 
     public override FeatureMap[,] Startup(FeatureMap[,] input)
     {

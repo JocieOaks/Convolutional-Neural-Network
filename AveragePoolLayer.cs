@@ -1,9 +1,8 @@
-﻿// See https://aka.ms/new-console-template for more information
+﻿
 using ILGPU;
 using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
-
 
 [Serializable]
 public class AveragePoolLayer : Layer, IStructuralLayer
@@ -12,9 +11,14 @@ public class AveragePoolLayer : Layer, IStructuralLayer
 
     private MemoryBuffer1D<LayerInfo, Stride1D.Dense>[] _deviceInfos;
 
-    public AveragePoolLayer(int filterSize) : base(filterSize, filterSize) { }
+    public AveragePoolLayer(int filterSize) : base(filterSize, filterSize)
+    {
+    }
 
-    [JsonConstructor] private AveragePoolLayer() : base() { }
+    [JsonConstructor]
+    private AveragePoolLayer() : base()
+    {
+    }
 
     public override FeatureMap[,] Startup(FeatureMap[,] input)
     {

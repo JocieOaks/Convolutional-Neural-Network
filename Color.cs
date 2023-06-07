@@ -1,4 +1,4 @@
-﻿// See https://aka.ms/new-console-template for more information
+﻿
 
 using ILGPU;
 using ILGPU.Runtime;
@@ -30,8 +30,6 @@ public readonly struct Color
         _2g = unit;
         _3b = unit;
     }
-
-
 
     private readonly float _1r;
     private readonly float _2g;

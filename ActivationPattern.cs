@@ -1,15 +1,14 @@
-﻿// See https://aka.ms/new-console-template for more information
-
-public enum NormalizationLayers
+﻿public enum NormalizationLayers
 {
     Activation,
     BatchNormalization,
     Dropout
 }
+
 public struct ActivationPattern
 {
-    NormalizationLayers[] _pattern;
-    float _dropoutRate;
+    private NormalizationLayers[] _pattern;
+    private float _dropoutRate;
 
     public ActivationPattern(NormalizationLayers[] pattern, float dropoutRate)
     {
@@ -19,7 +18,7 @@ public struct ActivationPattern
 
     public IEnumerable<ISecondaryLayer> GetLayers()
     {
-        foreach(var layer in  _pattern)
+        foreach (var layer in _pattern)
         {
             yield return layer switch
             {
