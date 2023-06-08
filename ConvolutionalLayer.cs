@@ -177,7 +177,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
             Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
             for (int j = 0; j < _batchSize; j++)
             {
-                _deviceOutputs[i, j] = _outputs[i, j].AllocateEmpty(accelerator);
+                _deviceOutputs[i, j] = Convoluted[i, j].AllocateEmpty(accelerator);
 
                 forwardKernal(index, _deviceInputs[i % _inputDimensions, j].View, _deviceOutputs[i, j].View, _deviceFilters[i].View, _deviceInfos[i % _inputDimensions].View);
             }

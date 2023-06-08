@@ -271,6 +271,16 @@ public partial class ConvolutionalNeuralNetwork
         return cosScores;
     }
 
+    public float[] ScoreIndividual()
+    {
+        float[] scores = new float[_batchSize];
+        for (int i = 0; i < _batchSize; i++)
+        {
+            scores[i] = Vector.Dot(_imageVectorsNorm[i], _descriptionVectorsNorm[i]);
+        }
+        return scores;
+    }
+
     public (float, float) Test(ImageInput[] input)
     {
         if (!_ready)

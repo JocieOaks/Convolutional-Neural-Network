@@ -93,6 +93,21 @@ public class FeatureMap
         return bitmap;
     }
 
+    public static FeatureMap FromBitmap(Bitmap bitmap)
+    {
+        FeatureMap map = new FeatureMap(bitmap.Width, bitmap.Height);
+        {
+            for(int y = 0; y < bitmap.Height; y++)
+            {
+                for(int x = 0; x < bitmap.Width; x++)
+                {
+                    map[x,bitmap.Height - y - 1] = (Color)bitmap.GetPixel(x, y);
+                }
+            }
+        }
+        return map;
+    }
+
     public void CopyFromBuffer(MemoryBuffer1D<Color, Stride1D.Dense> buffer)
     {
         buffer.CopyToCPU(_map);

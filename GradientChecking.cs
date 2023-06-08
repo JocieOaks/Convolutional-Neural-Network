@@ -229,4 +229,46 @@
                     }
                 }*/
     }
+
+    public static void TestScalingLayer()
+    {
+        FeatureMap[,] testInput = new FeatureMap[,] { { new FeatureMap(3, 3) } };
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                testInput[0, 0][i, j] = new Color(i, j, i - j);
+            }
+        }
+        FeatureMap[,] testOutput;
+        ScalingLayer layer = new ScalingLayer();
+        layer.SetDimensions(1, 1);
+        layer.Startup(testInput);
+        FeatureMap[,] gradient = new FeatureMap[,] { { new FeatureMap(1, 1, new Color(1)) } };
+        testOutput = layer.Forward(testInput);
+        Color output = testOutput[0, 0][0, 0];
+        FeatureMap[,] outGradient = layer.Backwards(testInput, gradient, 0);
+
+        float h = 0.0001f;
+
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                for (int k = 0; k < 3; k++)
+                {
+                    Color hColor = k switch
+                    {
+                        0 => new Color(h, 0, 0),
+                        1 => new Color(0, h, 0),
+                        2 => new Color(0, 0, h)
+                    };
+                    testInput[0, 0][i, j] += hColor;
+                    testOutput = layer.Forward(testInput);
+                    Console.WriteLine($"Expected Gradient: {outGradient[0, 0][i, j][k]:f4} \t Test Gradient: {(testOutput[0, 0][0, 0][k] - output[k]) / h:f4}");
+                    testInput[0, 0][i, j] -= hColor;
+                }
+            }
+        }
+    }
 }
