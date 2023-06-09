@@ -1,12 +1,18 @@
-﻿public interface ILayer
+﻿using ILGPU.Runtime.Cuda;
+
+public interface ILayer
 {
     string Name { get; }
 
-    FeatureMap[,] Backwards(FeatureMap[,] input, FeatureMap[,] inGradient, float learningRate);
+    public FeatureMap[,] Outputs { get; }
 
-    FeatureMap[,] Forward(FeatureMap[,] input);
+    public int OutputDimensions { get; }
 
-    FeatureMap[,] Startup(FeatureMap[,] input);
+    void Backwards(float learningRate);
+
+    void Forward();
+
+    (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] input, FeatureMap[,] outGradients);
 
     void Reset();
 }

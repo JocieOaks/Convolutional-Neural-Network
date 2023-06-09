@@ -4,9 +4,12 @@
 public class VectorizationLayer
 {
     [JsonProperty] private FeatureMap _matrix;
-    private FeatureMap[,] _transposedGradient;
+    private FeatureMap[,] _transposedGradients;
     [JsonProperty] private int _vectorDimensions;
     private ColorVector[] _vectors;
+
+    private FeatureMap[,] _transposedInput;
+
     public VectorizationLayer(int vectorDimensions)
     {
         _vectorDimensions = vectorDimensions;
@@ -19,29 +22,27 @@ public class VectorizationLayer
 
     public string Name => "Vectorization Layer";
 
-    public FeatureMap[,] Backwards(Vector[] vectorGradient, float learningRate)
+    public void Backwards(Vector[] vectorGradient, float learningRate)
     {
         for (int i = 0; i < vectorGradient.Length; i++)
         {
             Backwards(i, vectorGradient[i], _vectors[i], learningRate);
         }
-
-        return _transposedGradient;
     }
 
     public void Backwards(int batch, Vector vectorGradient, ColorVector vector, float learningRate)
     {
-        float _xy = 1f / _transposedGradient[batch, 0].Area;
+        float _xy = 1f / _transposedGradients[batch, 0].Area;
 
         ColorVector pixelGradient = _xy * vectorGradient * _matrix;
 
-        for (int i = 0; i < _transposedGradient.GetLength(1); i++)
+        for (int i = 0; i < _transposedGradients.GetLength(1); i++)
         {
-            for (int j = 0; j < _transposedGradient[batch, i].Length; j++)
+            for (int j = 0; j < _transposedGradients[batch, i].Length; j++)
             {
-                for (int k = 0; k < _transposedGradient[batch, i].Width; k++)
+                for (int k = 0; k < _transposedGradients[batch, i].Width; k++)
                 {
-                    _transposedGradient[batch, i][k, j] = pixelGradient[i];
+                    _transposedGradients[batch, i][k, j] = pixelGradient[i];
                 }
             }
         }
@@ -61,15 +62,15 @@ public class VectorizationLayer
         _vectorDimensions = vectorDimensions;
     }
 
-    public Vector[] Forward(FeatureMap[,] inputTransposed)
+    public Vector[] Forward()
     {
-        Vector[] vectors = new Vector[inputTransposed.GetLength(0)];
-        for (int i = 0; i < inputTransposed.GetLength(0); i++)
+        Vector[] vectors = new Vector[_transposedInput.GetLength(0)];
+        for (int i = 0; i < _transposedInput.GetLength(0); i++)
         {
-            ColorVector vector = new ColorVector(inputTransposed.GetLength(1));
-            for (int j = 0; j < inputTransposed.GetLength(1); j++)
+            ColorVector vector = new ColorVector(_transposedInput.GetLength(1));
+            for (int j = 0; j < _transposedInput.GetLength(1); j++)
             {
-                vector[j] = inputTransposed[i, j].Average();
+                vector[j] = _transposedInput[i, j].Average();
             }
 
             vectors[i] = _matrix * vector;
@@ -78,10 +79,12 @@ public class VectorizationLayer
         return vectors;
     }
 
-    public void StartUp(FeatureMap[,] input)
+    public void StartUp(FeatureMap[,] transposedInputs, FeatureMap[,] outGradients)
     {
-        int featureMapDimensions = input.GetLength(0);
-        int batchSize = input.GetLength(1);
+        int batchSize = transposedInputs.GetLength(0);
+        int featureMapDimensions = transposedInputs.GetLength(1);
+        
+        _transposedInput = transposedInputs;
 
         if (_matrix == null || _matrix.Width != _vectorDimensions)
         {
@@ -99,14 +102,13 @@ public class VectorizationLayer
         }
 
         _vectors = new ColorVector[batchSize];
-        _transposedGradient = new FeatureMap[batchSize, featureMapDimensions];
-
+        _transposedGradients = new FeatureMap[batchSize, featureMapDimensions];
         for (int i = 0; i < batchSize; i++)
         {
             _vectors[i] = new ColorVector(featureMapDimensions);
             for (int j = 0; j < featureMapDimensions; j++)
             {
-                _transposedGradient[i, j] = new FeatureMap(input[j, i].Width, input[j, i].Length);
+                outGradients[j, i] = _transposedGradients[i, j] = new FeatureMap(transposedInputs[i, j].Width, transposedInputs[i, j].Length);
             }
         }
     }

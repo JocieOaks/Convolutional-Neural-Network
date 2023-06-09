@@ -15,14 +15,12 @@ public partial class ConvolutionalNeuralNetwork
     private Vector[] _descriptionGradient;
     private Vector[] _descriptionVectors;
     private Vector[] _descriptionVectorsNorm;
-    private FeatureMap[][,] _featureMaps;
     private Vector[] _imageGradient;
     private Vector[] _imageVectors;
     private Vector[] _imageVectorsNorm;
 
     private Vector[] _previousDescriptionGradient;
     private Vector[] _previousImageGradient;
-    private FeatureMap[,] _transposedFinalFeatureMap;
 
     [JsonConstructor]
     private ConvolutionalNeuralNetwork()
@@ -108,49 +106,42 @@ public partial class ConvolutionalNeuralNetwork
         }
 
         FeatureMap[,] transposedGradient = new FeatureMap[0, 0];
-        StopWatch(() => transposedGradient = _vectorizationLayer.Backwards(VectorNormalizationLayer.Backwards(_imageVectors, gradients.image), learningRate), $"Backwards {_vectorizationLayer.Name}");
+        StopWatch(() => _vectorizationLayer.Backwards(VectorNormalizationLayer.Backwards(_imageVectors, gradients.image), learningRate), $"Backwards {_vectorizationLayer.Name}");
 
         FeatureMap[,] currentGradient = TransposeArray(transposedGradient);
 
         for (int j = Depth - 1; j > 0; j--)
         {
-            StopWatch(() => currentGradient = _layers[j].Backwards(_featureMaps[j - 1], currentGradient, learningRate), $"Backwards {j} {_layers[j].Name}");
+            StopWatch(() => _layers[j].Backwards(learningRate), $"Backwards {j} {_layers[j].Name}");
         }
-        StopWatch(() => (_layers[0] as ConvolutionalLayer).BackwardsFilterOnly(images, currentGradient, learningRate), $"Backwards {0} {_layers[0].Name}");
+        StopWatch(() => (_layers[0] as ConvolutionalLayer).BackwardsFilterOnly(learningRate), $"Backwards {0} {_layers[0].Name}");
     }
 
     public void Forward(ImageInput[] input, bool inference = false)
     {
-        FeatureMap[,] current = new FeatureMap[0, 0];
-        FeatureMap[,] images = new FeatureMap[1, _batchSize];
         for (int i = 0; i < _batchSize; i++)
         {
-            images[0, i] = input[i].Image;
+            _inputImages[0, i] = input[i].Image;
             _descriptionVectors[i] = _transformer.Forward(input[i].Bools, input[i].Floats);
             _descriptionVectorsNorm[i] = VectorNormalizationLayer.Forward(_descriptionVectors[i]);
         }
-
-        current = images;
 
         for (int j = 0; j < Depth; j++)
         {
             if (inference && _layers[j] is DropoutLayer)
             {
-                StopWatch(() => current = (_layers[j] as DropoutLayer).ForwardInference(current), $"Forwards {j} {_layers[j].Name}");
+                StopWatch(() => (_layers[j] as DropoutLayer).ForwardInference(), $"Forwards {j} {_layers[j].Name}");
             }
             else
             {
-                StopWatch(() => current = _layers[j].Forward(current), $"Forwards {j} {_layers[j].Name}");
+                StopWatch(() => _layers[j].Forward(), $"Forwards {j} {_layers[j].Name}");
             }
-            _featureMaps[j] = current;
         }
 
         //Normalization preferes featuremaps grouped by dimension first, while Vectorization prefers them to be grouped by batch member first.
         //This transposes the featuremaps to perform Vectorization.
 
-        _transposedFinalFeatureMap = TransposeArray(current);
-
-        StopWatch(() => _imageVectors = _vectorizationLayer.Forward(_transposedFinalFeatureMap), $"Forwards {_vectorizationLayer.Name}");
+        StopWatch(() => _imageVectors = _vectorizationLayer.Forward(), $"Forwards {_vectorizationLayer.Name}");
 
         _imageVectorsNorm = VectorNormalizationLayer.Forward(_imageVectors);
     }
@@ -235,9 +226,9 @@ public partial class ConvolutionalNeuralNetwork
             {
                 layerDirectory = Path.Combine(directory, $"{i} {_layers[i].Name}");
                 Directory.CreateDirectory(layerDirectory);
-                for (int j = 0; j < _featureMaps[i].GetLength(0); j++)
+                for (int j = 0; j < _layers[i].OutputDimensions; j++)
                 {
-                    PrintFeatureMap(_featureMaps[i][j, batchIndex], Path.Combine(layerDirectory, $"{name} {j}.png"), accelerator);
+                    PrintFeatureMap(_layers[i].Outputs[j, batchIndex], Path.Combine(layerDirectory, $"{name} {j}.png"), accelerator);
                 }
             }
         }

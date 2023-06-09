@@ -5,23 +5,20 @@ using Newtonsoft.Json;
 [Serializable]
 public abstract class Layer : ILayer
 {
-    [JsonProperty] protected int _filterSize;
-    [JsonProperty] protected int _stride;
-    protected int _inputDimensions;
-    protected int _outputDimensions;
     protected int _batchSize;
-
-    protected FeatureMap[,] _outputs;
-    protected FeatureMap[,] _outGradients;
-    protected ILayerInfo[] _layerInfos;
-
-    protected MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInputs;
     protected MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInGradients;
-    protected MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceOutputs;
+    protected MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInputs;
     protected MemoryBuffer1D<float, Stride1D.Dense>[,] _deviceOutGradients;
-
-    [JsonIgnore] public abstract string Name { get; }
-
+    protected MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceOutputs;
+    [JsonProperty] protected int _filterSize;
+    protected FeatureMap[,] _inGradients;
+    protected int _inputDimensions;
+    protected FeatureMap[,] _inputs;
+    protected ILayerInfo[] _layerInfos;
+    protected FeatureMap[,] _outGradients;
+    protected int _outputDimensions;
+    protected FeatureMap[,] _outputs;
+    [JsonProperty] protected int _stride;
     public Layer(int filterSize, int stride)
     {
         _filterSize = filterSize;
@@ -33,11 +30,23 @@ public abstract class Layer : ILayer
     {
     }
 
-    public abstract FeatureMap[,] Startup(FeatureMap[,] input);
+    [JsonIgnore] public abstract string Name { get; }
 
-    protected FeatureMap[,] BaseStartup(FeatureMap[,] input, int outputDimensionFactor = 1)
+    [JsonIgnore] public FeatureMap[,] Outputs => _outputs;
+
+    [JsonIgnore] public int OutputDimensions => _outputDimensions;
+
+    public abstract void Backwards(float learningRate);
+
+    public abstract void Forward();
+
+    public abstract void Reset();
+
+    public abstract (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients);
+
+    protected void BaseStartup(FeatureMap[,] inputs, FeatureMap[,] outGradients, int outputDimensionFactor = 1)
     {
-        _inputDimensions = input.GetLength(0);
+        _inputDimensions = inputs.GetLength(0);
         if (outputDimensionFactor >= 1)
         {
             _outputDimensions = outputDimensionFactor * _inputDimensions;
@@ -54,10 +63,13 @@ public abstract class Layer : ILayer
             }
         }
 
-        _batchSize = input.GetLength(1);
+        _batchSize = inputs.GetLength(1);
         _layerInfos = new ILayerInfo[_inputDimensions];
-        _outGradients = new FeatureMap[_inputDimensions, _batchSize];
+        _inputs = inputs;
+        _outGradients = outGradients;
         _outputs = new FeatureMap[_outputDimensions, _batchSize];
+        _inGradients = new FeatureMap[_outputDimensions, _batchSize];
+        
         for (int i = 0; i < _inputDimensions; i++)
         {
             ILayerInfo layer;
@@ -65,8 +77,8 @@ public abstract class Layer : ILayer
             {
                 layer = _layerInfos[i] = new SingleLayerInfo()
                 {
-                    Width = input[i, 0].Width,
-                    Length = input[i, 0].Length,
+                    Width = inputs[i, 0].Width,
+                    Length = inputs[i, 0].Length,
                 };
             }
             else
@@ -76,10 +88,10 @@ public abstract class Layer : ILayer
                     FilterSize = _filterSize,
                     Stride = _stride,
                     InverseKSquared = 1f / (_filterSize * _filterSize),
-                    InputWidth = input[i, 0].Width,
-                    InputLength = input[i, 0].Length,
-                    OutputWidth = 2 + (input[i, 0].Width - _filterSize - 1) / _stride,
-                    OutputLength = 2 + (input[i, 0].Length - _filterSize - 1) / _stride
+                    InputWidth = inputs[i, 0].Width,
+                    InputLength = inputs[i, 0].Length,
+                    OutputWidth = 2 + (inputs[i, 0].Width - _filterSize - 1) / _stride,
+                    OutputLength = 2 + (inputs[i, 0].Length - _filterSize - 1) / _stride
                 };
             }
 
@@ -110,13 +122,5 @@ public abstract class Layer : ILayer
         _deviceInGradients = new MemoryBuffer1D<Color, Stride1D.Dense>[_outputDimensions, _batchSize];
         _deviceOutputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_outputDimensions, _batchSize];
         _deviceOutGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions, _batchSize];
-
-        return _outputs;
     }
-
-    public abstract FeatureMap[,] Forward(FeatureMap[,] input);
-
-    public abstract FeatureMap[,] Backwards(FeatureMap[,] input, FeatureMap[,] inGradient, float learningRate);
-
-    public abstract void Reset();
 }

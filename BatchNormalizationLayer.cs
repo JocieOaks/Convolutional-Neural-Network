@@ -29,7 +29,7 @@ public class BatchNormalizationLayer : Layer, ISecondaryLayer
 
     private FeatureMap[,] Normalized => _outputs;
 
-    public override FeatureMap[,] Backwards(FeatureMap[,] inputs, FeatureMap[,] inGradients, float learningRate)
+    public override void Backwards(float learningRate)
     {
         using Context context = Context.Create(builder => builder.Cuda());
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
@@ -47,8 +47,8 @@ public class BatchNormalizationLayer : Layer, ISecondaryLayer
 
             for (int j = 0; j < _batchSize; j++)
             {
-                _deviceInputs[i, j] = inputs[i, j].Allocate(accelerator);
-                _deviceInGradients[i, j] = inGradients[i, j].Allocate(accelerator);
+                _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
+                _deviceInGradients[i, j] = _inGradients[i, j].Allocate(accelerator);
                 _deviceOutputs[i, j] = Normalized[i, j].Allocate(accelerator);
 
                 gradientKernal(index, _deviceInputs[i, j].View, _deviceInGradients[i, j].View, _deviceOutputs[i, j].View, _deviceMeans[i].View, _deviceGradients[i].View, _deviceInfos[i].View);
@@ -102,11 +102,9 @@ public class BatchNormalizationLayer : Layer, ISecondaryLayer
             _deviceMeans[i].Dispose();
             _deviceValues[i].Dispose();
         }
-
-        return _outGradients;
     }
 
-    public override FeatureMap[,] Forward(FeatureMap[,] input)
+    public override void Forward()
     {
         using Context context = Context.Create(builder => builder.Cuda());
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
@@ -122,7 +120,7 @@ public class BatchNormalizationLayer : Layer, ISecondaryLayer
 
             for (int j = 0; j < _batchSize; j++)
             {
-                _deviceInputs[i, j] = input[i, j].Allocate(accelerator);
+                _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
 
                 sumKernal(index, _deviceInputs[i, j].View, _deviceSums[i].View, _deviceInfos[i].View);
             }
@@ -181,13 +179,11 @@ public class BatchNormalizationLayer : Layer, ISecondaryLayer
             _deviceVariances[i].Dispose();
             _deviceValues[i].Dispose();
         }
-
-        return Normalized;
     }
 
-    public override FeatureMap[,] Startup(FeatureMap[,] input)
+    public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients)
     {
-        BaseStartup(input);
+        BaseStartup(inputs, outGradients);
 
         if (_weight == null)
         {
@@ -210,7 +206,7 @@ public class BatchNormalizationLayer : Layer, ISecondaryLayer
         _deviceSums = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
         _deviceVariances = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
 
-        return _outputs;
+        return (_outputs, _inGradients);
     }
 
     private static void BackwardsKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<float> outGradient, ArrayView<Color> values, ArrayView<SingleLayerInfo> info)

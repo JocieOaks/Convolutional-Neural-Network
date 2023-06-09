@@ -25,40 +25,9 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
     {
     }
 
-    public override FeatureMap[,] Startup(FeatureMap[,] input)
-    {
-        if (_matrixRed == null)
-        {
-            BaseStartup(input, -input.GetLength(0) / _outputDimensions);
-            float variance = 0.666f / (_inputDimensions + _outputDimensions);
-            float stdDev = MathF.Sqrt(variance);
-            _matrixRed = new FeatureMap(_inputDimensions, _outputDimensions);
-            _matrixGreen = new FeatureMap(_inputDimensions, _outputDimensions);
-            _matrixBlue = new FeatureMap(_inputDimensions, _outputDimensions);
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _outputDimensions; j++)
-                {
-                    _matrixRed[i, j] = Color.RandomGauss(0, stdDev);
-                    _matrixGreen[i, j] = Color.RandomGauss(0, stdDev);
-                    _matrixBlue[i, j] = Color.RandomGauss(0, stdDev);
-                }
-            }
-        }
-        else
-        {
-            BaseStartup(input, -_matrixRed.Width / _matrixRed.Length);
-        }
-        _deviceInfos = new MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[_inputDimensions];
-        _deviceMultiplierGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions, _outputDimensions];
-        _deviceMultipliers = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _outputDimensions];
-        _deviceOutputs = new MemoryBuffer1D<float, Stride1D.Dense>[_outputDimensions, _batchSize];
-        return _outputs;
-    }
-
     public override string Name => "Fully Connected Layer";
 
-    public override FeatureMap[,] Backwards(FeatureMap[,] inputs, FeatureMap[,] inGradients, float learningRate)
+    public override void Backwards(float learningRate)
     {
         using Context context = Context.Create(builder => builder.Cuda());
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
@@ -73,7 +42,7 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
             for (int j = 0; j < _batchSize; j++)
             {
                 _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator);
-                _deviceInputs[i, j] = inputs[i, j].Allocate(accelerator);
+                _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
             }
         }
 
@@ -81,7 +50,7 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
         {
             for (int j = 0; j < _batchSize; j++)
             {
-                _deviceInGradients[i, j] = inGradients[i, j].Allocate(accelerator);
+                _deviceInGradients[i, j] = _inGradients[i, j].Allocate(accelerator);
             }
         }
 
@@ -134,11 +103,9 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
 
             _deviceInfos[i].Dispose();
         }
-
-        return _outGradients;
     }
 
-    public override FeatureMap[,] Forward(FeatureMap[,] inputs)
+    public override void Forward()
     {
         using Context context = Context.Create(builder => builder.Cuda());
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
@@ -159,7 +126,7 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
 
             for (int j = 0; j < _batchSize; j++)
             {
-                _deviceInputs[i, j] = inputs[i, j].Allocate(accelerator);
+                _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
             }
         }
 
@@ -202,10 +169,53 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
             }
             _deviceInfos[i].Dispose();
         }
-
-        return _outputs;
     }
 
+    public override void Reset()
+    {
+        float variance = 0.666f / (_inputDimensions + _outputDimensions);
+        float stdDev = MathF.Sqrt(variance);
+        for (int i = 0; i < _inputDimensions; i++)
+        {
+            for (int j = 0; j < _outputDimensions; j++)
+            {
+                _matrixRed[i, j] = Color.RandomGauss(0, stdDev);
+                _matrixGreen[i, j] = Color.RandomGauss(0, stdDev);
+                _matrixBlue[i, j] = Color.RandomGauss(0, stdDev);
+            }
+        }
+    }
+
+    public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients)
+    {
+        if (_matrixRed == null)
+        {
+            BaseStartup(inputs, outGradients, -inputs.GetLength(0) / _outputDimensions);
+            float variance = 0.666f / (_inputDimensions + _outputDimensions);
+            float stdDev = MathF.Sqrt(variance);
+            _matrixRed = new FeatureMap(_inputDimensions, _outputDimensions);
+            _matrixGreen = new FeatureMap(_inputDimensions, _outputDimensions);
+            _matrixBlue = new FeatureMap(_inputDimensions, _outputDimensions);
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                for (int j = 0; j < _outputDimensions; j++)
+                {
+                    _matrixRed[i, j] = Color.RandomGauss(0, stdDev);
+                    _matrixGreen[i, j] = Color.RandomGauss(0, stdDev);
+                    _matrixBlue[i, j] = Color.RandomGauss(0, stdDev);
+                }
+            }
+        }
+        else
+        {
+            BaseStartup(inputs, outGradients, -_matrixRed.Width / _matrixRed.Length);
+        }
+        _deviceInfos = new MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[_inputDimensions];
+        _deviceMultiplierGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions, _outputDimensions];
+        _deviceMultipliers = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _outputDimensions];
+        _deviceOutputs = new MemoryBuffer1D<float, Stride1D.Dense>[_outputDimensions, _batchSize];
+        return (_outputs, _inGradients);
+    }
     private static void BackwardsGradientKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> input, ArrayView<float> multiplierGradient, ArrayView<SingleLayerInfo> info)
     {
         int mapsIndex = info[0].Index(index.X, index.Y);
@@ -235,20 +245,5 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
     private SingleLayerInfo Infos(int index)
     {
         return (SingleLayerInfo)_layerInfos[index];
-    }
-
-    public override void Reset()
-    {
-        float variance = 0.666f / (_inputDimensions + _outputDimensions);
-        float stdDev = MathF.Sqrt(variance);
-        for (int i = 0; i < _inputDimensions; i++)
-        {
-            for (int j = 0; j < _outputDimensions; j++)
-            {
-                _matrixRed[i, j] = Color.RandomGauss(0, stdDev);
-                _matrixGreen[i, j] = Color.RandomGauss(0, stdDev);
-                _matrixBlue[i, j] = Color.RandomGauss(0, stdDev);
-            }
-        }
     }
 }

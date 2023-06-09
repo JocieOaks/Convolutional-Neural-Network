@@ -25,7 +25,7 @@ public class ScalingLayer : Layer, IStructuralLayer
 
     public override string Name => "Scaling Layer";
 
-    public override FeatureMap[,] Backwards(FeatureMap[,] inputs, FeatureMap[,] inGradients, float learningRate)
+    public override void Backwards(float learningRatee)
     {
         using Context context = Context.Create(builder => builder.Cuda());
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
@@ -46,7 +46,7 @@ public class ScalingLayer : Layer, IStructuralLayer
             Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
             for (int j = 0; j < _batchSize; j++)
             {
-                _deviceInGradients[i, j] = inGradients[i, j].Allocate(accelerator);
+                _deviceInGradients[i, j] = _inGradients[i, j].Allocate(accelerator);
 
                 backwardsKernal(index, _deviceInGradients[i, j].View, _deviceOutGradients[i, j].View, _deviceInfos[i].View.VariableView(0));
             }
@@ -65,11 +65,9 @@ public class ScalingLayer : Layer, IStructuralLayer
             }
             _deviceInfos[i].Dispose();
         }
-
-        return _outGradients;
     }
 
-    public override FeatureMap[,] Forward(FeatureMap[,] inputs)
+    public override void Forward()
     {
         using Context context = Context.Create(builder => builder.Cuda());
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
@@ -81,7 +79,7 @@ public class ScalingLayer : Layer, IStructuralLayer
             _deviceInfos[i] = accelerator.Allocate1D(new ScalingLayerInfo[] { Infos(i) });
             for (int j = 0; j < _batchSize; j++)
             {
-                _deviceInputs[i, j] = inputs[i, j].Allocate(accelerator);
+                _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
             }
         }
 
@@ -108,19 +106,17 @@ public class ScalingLayer : Layer, IStructuralLayer
             }
             _deviceInfos[i].Dispose();
         }
-
-        return Scaled;
     }
 
     public override void Reset()
     {
     }
 
-    public override FeatureMap[,] Startup(FeatureMap[,] input)
+    public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients)
     {
-        _outputDimensions = _inputDimensions = input.GetLength(0);
+        _outputDimensions = _inputDimensions = inputs.GetLength(0);
 
-        _batchSize = input.GetLength(1);
+        _batchSize = inputs.GetLength(1);
         _layerInfos = new ILayerInfo[_inputDimensions];
         _outGradients = new FeatureMap[_inputDimensions, _batchSize];
         _outputs = new FeatureMap[_outputDimensions, _batchSize];
@@ -139,8 +135,8 @@ public class ScalingLayer : Layer, IStructuralLayer
             {
                 if (_scaleWidth != 0)
                 {
-                    outputWidth = (int)(input[i, 0].Width * _scaleWidth);
-                    outputLength = (int)(input[i, 0].Length * _scaleLength);
+                    outputWidth = (int)(inputs[i, 0].Width * _scaleWidth);
+                    outputLength = (int)(inputs[i, 0].Length * _scaleLength);
                     scaleWidth = _scaleWidth;
                     scaleLength = _scaleLength;
                 }
@@ -153,15 +149,15 @@ public class ScalingLayer : Layer, IStructuralLayer
             {
                 outputWidth = _outputWidth;
                 outputLength = _outputLength;
-                scaleWidth = _outputWidth / (float)input[i, 0].Width;
-                scaleLength = _outputLength / (float)input[i, 0].Length;
+                scaleWidth = _outputWidth / (float)inputs[i, 0].Width;
+                scaleLength = _outputLength / (float)inputs[i, 0].Length;
             }
 
             ILayerInfo layer = _layerInfos[i] = new ScalingLayerInfo()
             {
-                InputWidth = input[i, 0].Width,
+                InputWidth = inputs[i, 0].Width,
                 InverseKSquared = scaleWidth * scaleLength,
-                InputLength = input[i, 0].Length,
+                InputLength = inputs[i, 0].Length,
                 OutputWidth = outputWidth,
                 OutputLength = outputLength,
                 InvWidthScaling = 1 / scaleWidth,
@@ -175,7 +171,7 @@ public class ScalingLayer : Layer, IStructuralLayer
             }
             
         }
-        return _outputs;
+        return (_outputs, _inGradients);
     }
 
     private static void BackwardsKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<float> outGradient, VariableView<ScalingLayerInfo> info)

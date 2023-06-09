@@ -34,7 +34,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
 
     protected FeatureMap[,] Convoluted => _outputs;
 
-    public override FeatureMap[,] Backwards(FeatureMap[,] inputs, FeatureMap[,] inGradients, float learningRate)
+    public override void Backwards(float learningRate)
     {
         using Context context = Context.Create(builder => builder.Cuda());
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
@@ -47,7 +47,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
             _deviceInfos[i] = accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
             for (int j = 0; j < _batchSize; j++)
             {
-                _deviceInputs[i, j] = inputs[i, j].Allocate(accelerator);
+                _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
                 _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator);
             }
         }
@@ -59,7 +59,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
             Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
             for (int j = 0; j < _batchSize; j++)
             {
-                _deviceInGradients[i, j] = inGradients[i, j].Allocate(accelerator);
+                _deviceInGradients[i, j] = _inGradients[i, j].Allocate(accelerator);
 
                 backwardsOutKernal(index, _deviceInGradients[i, j].View, _deviceFilters[i].View, _deviceOutGradients[i % _inputDimensions, j].View, _deviceInfos[i % _inputDimensions].View);
                 backwardsGradientKernal(index, _deviceInGradients[i, j].View, _deviceInputs[i % _inputDimensions, j].View, _deviceFilterGradients[i].View, _deviceInfos[i % _inputDimensions].View);
@@ -95,11 +95,9 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
                 _deviceInGradients[i, j].Dispose();
             }
         }
-
-        return _outGradients;
     }
 
-    public void BackwardsFilterOnly(FeatureMap[,] inputs, FeatureMap[,] inGradients, float learningRate)
+    public void BackwardsFilterOnly(float learningRate)
     {
         using Context context = Context.Create(builder => builder.Cuda());
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
@@ -111,7 +109,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
             _deviceInfos[i] = accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
             for (int j = 0; j < _batchSize; j++)
             {
-                _deviceInputs[i, j] = inputs[i, j].Allocate(accelerator);
+                _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
             }
         }
 
@@ -121,7 +119,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
             Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
             for (int j = 0; j < _batchSize; j++)
             {
-                _deviceInGradients[i, j] = inGradients[i, j].Allocate(accelerator);
+                _deviceInGradients[i, j] = _inGradients[i, j].Allocate(accelerator);
 
                 backwardsGradientKernal(index, _deviceInGradients[i, j].View, _deviceInputs[i % _inputDimensions, j].View, _deviceFilterGradients[i].View, _deviceInfos[i % _inputDimensions].View);
             }
@@ -155,7 +153,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
         }
     }
 
-    public override FeatureMap[,] Forward(FeatureMap[,] inputs)
+    public override void Forward()
     {
         using Context context = Context.Create(builder => builder.Cuda());
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
@@ -167,7 +165,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
             _deviceInfos[i] = accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
             for (int j = 0; j < _batchSize; j++)
             {
-                _deviceInputs[i, j] = inputs[i, j].Allocate(accelerator);
+                _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
             }
         }
 
@@ -203,8 +201,6 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
             }
             _deviceInfos[i].Dispose();
         }
-
-        return Convoluted;
     }
 
     public override void Reset()
@@ -221,11 +217,11 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
         }
     }
 
-    public override FeatureMap[,] Startup(FeatureMap[,] input)
+    public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] input, FeatureMap[,] outGradients)
     {
         if (_filters == null)
         {
-            BaseStartup(input, _dimensionsMultiplier);
+            BaseStartup(input, outGradients, _dimensionsMultiplier);
             _filters = new Color[_outputDimensions][];
 
             float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize + _inputDimensions * _filterSize * _filterSize);
@@ -242,7 +238,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
         }
         else
         {
-            BaseStartup(input, _filters.Length / input.GetLength(0));
+            BaseStartup(input, outGradients, _filters.Length / input.GetLength(0));
         }
         _filterGradient = new float[_outputDimensions][];
 
@@ -255,7 +251,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
         _deviceFilters = new MemoryBuffer1D<Color, Stride1D.Dense>[_outputDimensions];
         _deviceFilterGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_outputDimensions];
 
-        return _outputs;
+        return (_outputs, _inGradients);
     }
 
     protected static void BackwardsGradientKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> input, ArrayView<float> filterGradient, ArrayView<LayerInfo> info)

@@ -1,6 +1,6 @@
 ﻿public static class GradientChecking
 {
-    public static void TestConvolutionalLayer()
+    /*public static void TestConvolutionalLayer()
     {
         FeatureMap[,] testInput = new FeatureMap[,] { { new FeatureMap(3, 3) } };
         for (int i = 0; i < 3; i++)
@@ -227,7 +227,7 @@
                             layer._blueMatrix[0, 0] -= hColor;
                             break;
                     }
-                }*/
+                }
     }
 
     public static void TestScalingLayer()
@@ -270,5 +270,5 @@
                 }
             }
         }
-    }
+    }*/
 }

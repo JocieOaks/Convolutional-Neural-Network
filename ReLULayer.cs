@@ -13,16 +13,9 @@ public class ReLULayer : Layer, ISecondaryLayer
     {
     }
 
-    public override FeatureMap[,] Startup(FeatureMap[,] input)
-    {
-        BaseStartup(input);
-        _deviceInfos = new MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[_inputDimensions];
-        return _outputs;
-    }
-
     public override string Name => "Activation Layer";
 
-    public override FeatureMap[,] Backwards(FeatureMap[,] input, FeatureMap[,] inGradient, float learningRate)
+    public override void Backwards(float learningRate)
     {
         using Context context = Context.Create(builder => builder.Cuda());
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
@@ -35,9 +28,9 @@ public class ReLULayer : Layer, ISecondaryLayer
             Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
             for (int j = 0; j < _batchSize; j++)
             {
-                _deviceOutGradients[i, j] = input[i, j].AllocateFloat(accelerator);
-                _deviceInputs[i, j] = input[i, j].Allocate(accelerator);
-                _deviceInGradients[i, j] = inGradient[i, j].Allocate(accelerator);
+                _deviceOutGradients[i, j] = _inputs[i, j].AllocateFloat(accelerator);
+                _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
+                _deviceInGradients[i, j] = _inGradients[i, j].Allocate(accelerator);
 
                 forwardKernal(index, _deviceInputs[i, j].View, _deviceInGradients[i, j].View, _deviceOutGradients[i, j].View, _deviceInfos[i].View);
             }
@@ -58,11 +51,9 @@ public class ReLULayer : Layer, ISecondaryLayer
 
             _deviceInfos[i].Dispose();
         }
-
-        return _outGradients;
     }
 
-    public override FeatureMap[,] Forward(FeatureMap[,] input)
+    public override void Forward()
     {
         using Context context = Context.Create(builder => builder.Cuda());
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
@@ -76,8 +67,8 @@ public class ReLULayer : Layer, ISecondaryLayer
 
             for (int j = 0; j < _batchSize; j++)
             {
-                _deviceOutputs[i, j] = input[i, j].AllocateEmpty(accelerator);
-                _deviceInputs[i, j] = input[i, j].Allocate(accelerator);
+                _deviceOutputs[i, j] = _inputs[i, j].AllocateEmpty(accelerator);
+                _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
 
                 forwardKernal(index, _deviceInputs[i, j].View, _deviceOutputs[i, j].View, _deviceInfos[i].View);
             }
@@ -97,10 +88,18 @@ public class ReLULayer : Layer, ISecondaryLayer
 
             _deviceInfos[i].Dispose();
         }
-
-        return _outputs;
     }
 
+    public override void Reset()
+    {
+    }
+
+    public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients)
+    {
+        BaseStartup(inputs, outGradients);
+        _deviceInfos = new MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[_inputDimensions];
+        return (_outputs, _inGradients);
+    }
     private static void BackwardsKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<float> outGradient, ArrayView<SingleLayerInfo> info)
     {
         int mapsIndex = info[0].Index(index.X, index.Y);
@@ -116,9 +115,5 @@ public class ReLULayer : Layer, ISecondaryLayer
     private SingleLayerInfo Infos(int index)
     {
         return (SingleLayerInfo)_layerInfos[index];
-    }
-
-    public override void Reset()
-    {
     }
 }
