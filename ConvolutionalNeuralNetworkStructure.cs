@@ -67,6 +67,14 @@ public partial class ConvolutionalNeuralNetwork
         _primaryLayers.Add(layer);
     }
 
+    public void AddSkipConnection(int index1, int index2)
+    {
+        SkipConnectionLayer skipLayer = new SkipConnectionLayer();
+        ConcatenationLayer concatenationLayer = skipLayer.GetConcatenationLayer();
+        _primaryLayers.Insert(index2, concatenationLayer);
+        _primaryLayers.Insert(index1, skipLayer);
+    }
+
     public void ChangeVectorDimensions(int dimensions)
     {
         _vectorizationLayer.ChangeVectorDimensions(dimensions);
