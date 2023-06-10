@@ -15,7 +15,7 @@ public class ReLULayer : Layer, ISecondaryLayer
 
     public override string Name => "Activation Layer";
 
-    public override void BackwardsNoUpdate()
+    public override void Backwards(float learningRate)
     {
         Context context = ConvolutionalNeuralNetwork.Context;
         Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
@@ -51,11 +51,6 @@ public class ReLULayer : Layer, ISecondaryLayer
 
             _deviceInfos[i].Dispose();
         }
-    }
-
-    public override void Backwards(float learningRate)
-    {
-        BackwardsNoUpdate();
     }
 
     public override void Forward()

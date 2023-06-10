@@ -25,7 +25,7 @@ public class SkipConnectionLayer : Layer, IStructuralLayer
         return _concatenationLayer;
     }
 
-    public override void BackwardsNoUpdate()
+    public override void Backwards(float learningRate)
     {
         Context context = ConvolutionalNeuralNetwork.Context;
         Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
@@ -57,11 +57,6 @@ public class SkipConnectionLayer : Layer, IStructuralLayer
                 _deviceInGradientsSecondary[i, j].Dispose();
             }
         }
-    }
-
-    public override void Backwards(float learningRate)
-    {
-        BackwardsNoUpdate();
     }
 
     public override void Forward()

@@ -21,7 +21,7 @@ public class DropoutLayer : Layer, ISecondaryLayer
 
     public override string Name => "Dropout Layer";
 
-    public override void BackwardsNoUpdate()
+    public override void Backwards(float learningRate)
     {
         Context context = ConvolutionalNeuralNetwork.Context;
         Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
@@ -51,11 +51,6 @@ public class DropoutLayer : Layer, ISecondaryLayer
             }
             _deviceDropout[i].Dispose();
         }
-    }
-
-    public override void Backwards(float learningRate)
-    {
-        BackwardsNoUpdate();
     }
 
     public override void Forward()

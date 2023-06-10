@@ -27,7 +27,7 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
 
     public override string Name => "Fully Connected Layer";
 
-    public override void BackwardsNoUpdate()
+    private void BackwardsNoUpdate()
     {
         Context context = ConvolutionalNeuralNetwork.Context;
         Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
@@ -91,6 +91,14 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
     }
 
     public override void Backwards(float learningRate)
+    {
+        if (learningRate == 0)
+            BackwardsNoUpdate();
+        else
+            BackwardsUpdate(learningRate);
+    }
+
+    private void BackwardsUpdate(float learningRate)
     {
         Context context = ConvolutionalNeuralNetwork.Context;
         Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;

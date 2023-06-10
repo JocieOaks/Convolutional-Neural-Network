@@ -34,7 +34,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
 
     protected FeatureMap[,] Convoluted => _outputs;
 
-    public override void BackwardsNoUpdate()
+    private void BackwardsNoUpdate()
     {
         Context context = ConvolutionalNeuralNetwork.Context;
         Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
@@ -86,6 +86,14 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
     }
 
     public override void Backwards(float learningRate)
+    {
+        if (learningRate == 0)
+            BackwardsNoUpdate();
+        else
+            BackwardsUpdate(learningRate);
+    }
+
+    private void BackwardsUpdate(float learningRate)
     {
         Context context = ConvolutionalNeuralNetwork.Context;
         Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
@@ -148,7 +156,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
         }
     }
 
-    public void BackwardsFilterOnly(float learningRate)
+    public void BackwardsUpdateOnly(float learningRate)
     {
         Context context = ConvolutionalNeuralNetwork.Context;
         Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;

@@ -26,7 +26,7 @@ public class ScalingLayer : Layer, IStructuralLayer
 
     public override string Name => "Scaling Layer";
 
-    public override void BackwardsNoUpdate()
+    public override void Backwards(float learningRatee)
     {
         Context context = ConvolutionalNeuralNetwork.Context;
         Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
@@ -59,12 +59,6 @@ public class ScalingLayer : Layer, IStructuralLayer
             }
             _deviceInfos[i].Dispose();
         }
-
-    }
-
-    public override void Backwards(float learningRatee)
-    {
-        BackwardsNoUpdate();
     }
 
     public override void Forward()

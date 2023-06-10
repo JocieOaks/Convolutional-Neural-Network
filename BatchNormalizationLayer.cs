@@ -257,11 +257,6 @@ public class BatchNormalizationLayer : Layer, ISecondaryLayer
         }
     }
 
-    public override void BackwardsNoUpdate()
-    {
-        Backwards(0);
-    }
-
     [StructLayout(LayoutKind.Sequential)]
     private struct Gradients
     {
