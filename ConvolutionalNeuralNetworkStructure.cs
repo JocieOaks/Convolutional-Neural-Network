@@ -1,31 +1,22 @@
 ﻿using Newtonsoft.Json;
 using System.Runtime.Serialization;
 
-public partial class ConvolutionalNeuralNetwork
+public abstract partial class ConvolutionalNeuralNetwork
 {
-    private FeatureMap[,] _inputImages;
-    private FeatureMap[,] _finalOutGradient;
-    private FeatureMap[,] _firstInGradient;
-    [JsonProperty] private readonly List<ILayer> _layers = new();
+    protected FeatureMap[,] _inputImages;
+    [JsonProperty] protected readonly List<ILayer> _layers = new();
 
     private readonly List<IPrimaryLayer> _primaryLayers = new();
-    [JsonProperty] private readonly Transformer _transformer;
 
-    [JsonProperty] private readonly VectorizationLayer _vectorizationLayer;
-
-    [JsonProperty] List<(int, int)> _skipConnections;
+    [JsonProperty] private List<(int, int)> _skipConnections;
 
     private ActivationPattern _activationPattern;
-    private int _batchSize;
+    protected int _batchSize;
+    protected int _classificationBoolsLength;
+    protected int _classificationFloatsLength;
 
-    [JsonProperty] private bool _configured = false;
-    private bool _ready = false;
-
-    public ConvolutionalNeuralNetwork(int vectorDimensions)
-    {
-        _transformer = new Transformer(vectorDimensions);
-        _vectorizationLayer = new VectorizationLayer(vectorDimensions);
-    }
+    [JsonProperty] protected bool _configured = false;
+    protected bool _ready = false;
 
     public IEnumerable<IPrimaryLayer> PrimaryLayers
     {
@@ -77,12 +68,6 @@ public partial class ConvolutionalNeuralNetwork
         ConcatenationLayer concatenationLayer = skipLayer.GetConcatenationLayer();
         _primaryLayers.Insert(index2, concatenationLayer);
         _primaryLayers.Insert(index1, skipLayer);
-    }
-
-    public void ChangeVectorDimensions(int dimensions)
-    {
-        _vectorizationLayer.ChangeVectorDimensions(dimensions);
-        _transformer.ChangeVectorDimensions(dimensions);
     }
 
     public void ClearLayers()
@@ -197,7 +182,7 @@ public partial class ConvolutionalNeuralNetwork
         }
     }
 
-    public bool StartUp(int batchSize, int width, int length, int descriptionBools, int descriptionFloats)
+    public virtual void StartUp(int batchSize, int width, int length, int boolsLength, int floatsLength)
     {
         if (!_configured)
         {
@@ -227,27 +212,7 @@ public partial class ConvolutionalNeuralNetwork
 
         _batchSize = batchSize;
         _inputImages = new FeatureMap[1, batchSize];
-        _finalOutGradient = new FeatureMap[1, batchSize];
-        for (int j = 0; j < batchSize; j++)
-        {
-            _inputImages[0, j] = new FeatureMap(width, length);
-        }
-
-        FeatureMap[,] current = _inputImages;
-        FeatureMap[,] gradients = _finalOutGradient;
-        foreach (var layer in _layers)
-        {
-            (current, gradients) = layer.Startup(current, gradients);
-        }
-
-        _firstInGradient = gradients;
-
-        _vectorizationLayer.StartUp(TransposeArray(current), gradients);
-
-        _descriptionVectors = new Vector[batchSize];
-        _descriptionVectorsNorm = new Vector[batchSize];
-
-        _ready = true;
-        return _transformer.Startup(descriptionBools, descriptionFloats);
+        _classificationBoolsLength = boolsLength;
+        _classificationFloatsLength = floatsLength;
     }
 }
