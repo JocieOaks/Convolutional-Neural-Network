@@ -31,7 +31,7 @@ public class AveragePoolLayer : Layer, IStructuralLayer
 
     public override void Backwards(float learningRate)
     {
-        using Context context = Context.Create(builder => builder.Cuda());
+Context context = ConvolutionalNeuralNetwork.Context;
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
 
         var backwardsKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsKernal);
@@ -65,7 +65,7 @@ public class AveragePoolLayer : Layer, IStructuralLayer
 
     public override void Forward()
     {
-        using Context context = Context.Create(builder => builder.Cuda());
+Context context = ConvolutionalNeuralNetwork.Context;
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
 
         var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(ForwardKernal);

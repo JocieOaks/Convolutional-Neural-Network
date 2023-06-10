@@ -29,7 +29,7 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
 
     public override void Backwards(float learningRate)
     {
-        using Context context = Context.Create(builder => builder.Cuda());
+        Context context = ConvolutionalNeuralNetwork.Context;
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
 
         var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(BackwardsOutKernal);
@@ -96,9 +96,9 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
                 _deviceMultiplierGradients[i, j].Dispose();
                 _deviceMultipliers[i, j].Dispose();
 
-                _matrixRed[i, j] -= new Color(multiplierGradients[0], multiplierGradients[1], multiplierGradients[2]) * learningRate;
-                _matrixGreen[i, j] -= new Color(multiplierGradients[3], multiplierGradients[4], multiplierGradients[5]) * learningRate;
-                _matrixBlue[i, j] -= new Color(multiplierGradients[6], multiplierGradients[7], multiplierGradients[8]) * learningRate;
+                _matrixRed[i, j] -= new Color(multiplierGradients[0], multiplierGradients[1], multiplierGradients[2]).Clamp(1) * learningRate;
+                _matrixGreen[i, j] -= new Color(multiplierGradients[3], multiplierGradients[4], multiplierGradients[5]).Clamp(1) * learningRate;
+                _matrixBlue[i, j] -= new Color(multiplierGradients[6], multiplierGradients[7], multiplierGradients[8]).Clamp(1) * learningRate;
             }
 
             _deviceInfos[i].Dispose();
@@ -107,7 +107,7 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
 
     public override void Forward()
     {
-        using Context context = Context.Create(builder => builder.Cuda());
+Context context = ConvolutionalNeuralNetwork.Context;
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
 
         var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);

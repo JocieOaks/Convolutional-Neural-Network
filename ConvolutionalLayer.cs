@@ -14,11 +14,11 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
 
     [JsonProperty] protected Color[][] _filters;
 
-    private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceFilterGradients;
-    private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceFilters;
-    private MemoryBuffer1D<LayerInfo, Stride1D.Dense>[] _deviceInfos;
+    protected MemoryBuffer1D<float, Stride1D.Dense>[] _deviceFilterGradients;
+    protected MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceFilters;
+    protected MemoryBuffer1D<LayerInfo, Stride1D.Dense>[] _deviceInfos;
 
-    private int _dimensionsMultiplier;
+    protected int _dimensionsMultiplier;
 
     public ConvolutionalLayer(int filterSize, int stride, int outputDimensionsMultiplier) : base(filterSize, stride)
     {
@@ -26,7 +26,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
     }
 
     [JsonConstructor]
-    private ConvolutionalLayer() : base()
+    protected ConvolutionalLayer() : base()
     {
     }
 
@@ -36,7 +36,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
 
     public override void Backwards(float learningRate)
     {
-        using Context context = Context.Create(builder => builder.Cuda());
+        Context context = ConvolutionalNeuralNetwork.Context;
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
 
         var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsOutKernal);
@@ -99,7 +99,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
 
     public void BackwardsFilterOnly(float learningRate)
     {
-        using Context context = Context.Create(builder => builder.Cuda());
+Context context = ConvolutionalNeuralNetwork.Context;
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
 
         var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsGradientKernal);

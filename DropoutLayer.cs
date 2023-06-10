@@ -23,7 +23,7 @@ public class DropoutLayer : Layer, ISecondaryLayer
 
     public override void Backwards(float learningRate)
     {
-        using Context context = Context.Create(builder => builder.Cuda());
+Context context = ConvolutionalNeuralNetwork.Context;
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
         var backwardsKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<int>, ArrayView<float>>(BackwardsKernal);
 
@@ -55,7 +55,7 @@ public class DropoutLayer : Layer, ISecondaryLayer
 
     public override void Forward()
     {
-        using Context context = Context.Create(builder => builder.Cuda());
+Context context = ConvolutionalNeuralNetwork.Context;
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
         var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<int>, ArrayView<Color>>(ForwardKernal);
 
@@ -91,7 +91,7 @@ public class DropoutLayer : Layer, ISecondaryLayer
 
     public void ForwardInference()
     {
-        using Context context = Context.Create(builder => builder.Cuda());
+Context context = ConvolutionalNeuralNetwork.Context;
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
         var inferenceKernal = accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>>(InferenceKernal);
 

@@ -4,6 +4,7 @@ public partial class ConvolutionalNeuralNetwork
 {
     private FeatureMap[,] _inputImages;
     private FeatureMap[,] _finalOutGradient;
+    private FeatureMap[,] _firstInGradient;
     [JsonProperty] private readonly List<ILayer> _layers = new();
 
     private readonly List<IPrimaryLayer> _primaryLayers = new();
@@ -195,17 +196,20 @@ public partial class ConvolutionalNeuralNetwork
 
         _batchSize = batchSize;
         _inputImages = new FeatureMap[1, batchSize];
+        _finalOutGradient = new FeatureMap[1, batchSize];
         for (int j = 0; j < batchSize; j++)
         {
             _inputImages[0, j] = new FeatureMap(width, length);
         }
 
         FeatureMap[,] current = _inputImages;
-        FeatureMap[,] gradients = new FeatureMap[1, batchSize];
+        FeatureMap[,] gradients = _finalOutGradient;
         foreach (var layer in _layers)
         {
             (current, gradients) = layer.Startup(current, gradients);
         }
+
+        _firstInGradient = gradients;
 
         _vectorizationLayer.StartUp(TransposeArray(current), gradients);
 

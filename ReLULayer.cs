@@ -17,7 +17,7 @@ public class ReLULayer : Layer, ISecondaryLayer
 
     public override void Backwards(float learningRate)
     {
-        using Context context = Context.Create(builder => builder.Cuda());
+Context context = ConvolutionalNeuralNetwork.Context;
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
 
         var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(BackwardsKernal);
@@ -55,7 +55,7 @@ public class ReLULayer : Layer, ISecondaryLayer
 
     public override void Forward()
     {
-        using Context context = Context.Create(builder => builder.Cuda());
+Context context = ConvolutionalNeuralNetwork.Context;
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
 
         var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);

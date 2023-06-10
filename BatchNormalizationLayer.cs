@@ -31,7 +31,7 @@ public class BatchNormalizationLayer : Layer, ISecondaryLayer
 
     public override void Backwards(float learningRate)
     {
-        using Context context = Context.Create(builder => builder.Cuda());
+Context context = ConvolutionalNeuralNetwork.Context;
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
 
         Gradients[] gradients = new Gradients[_inputDimensions];
@@ -106,7 +106,7 @@ public class BatchNormalizationLayer : Layer, ISecondaryLayer
 
     public override void Forward()
     {
-        using Context context = Context.Create(builder => builder.Cuda());
+Context context = ConvolutionalNeuralNetwork.Context;
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
 
         var sumKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(MeanKernal);

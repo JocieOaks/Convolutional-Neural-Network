@@ -76,11 +76,14 @@ public class FeatureMap
         return SumMagnitude() / Area;
     }
 
-    public Bitmap ConstructBitmap(Accelerator accelerator)
+    public Bitmap ConstructBitmap(Accelerator accelerator, bool setNormalized = false)
     {
         Bitmap bitmap = new Bitmap(Width, Length);
 
         Color[] normalizedMap = Normalize(accelerator);
+
+        if (setNormalized)
+            _map = normalizedMap;
 
         for (int y = 0; y < Length; y++)
         {

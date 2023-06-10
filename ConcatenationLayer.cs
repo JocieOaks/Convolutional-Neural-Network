@@ -27,7 +27,7 @@ public class ConcatenationLayer : Layer, IStructuralLayer
         for (int i = 0; i < _secondaryDimensions; i++)
         {
             int width = inputs[i, 0].Width;
-            int length = inputs[i, 1].Length;
+            int length = inputs[i, 0].Length;
             for (int j = 0; j < _batchSize; j++)
             {
                 _outGradientsSecondary[i, j] = new FeatureMap(width, length);
@@ -49,7 +49,7 @@ public class ConcatenationLayer : Layer, IStructuralLayer
         {
             for (int j = 0; j < _batchSize; j++)
             {
-                _outGradientsSecondary[_inputDimensions + i, j] = _inGradients[i, j];
+                _outGradientsSecondary[i, j] = _inGradients[_inputDimensions + i, j];
             }
         }
     }
@@ -90,10 +90,21 @@ public class ConcatenationLayer : Layer, IStructuralLayer
         for (int i = 0; i < _inputDimensions; i++)
         {
             int width = _inputs[i, 0].Width;
-            int length = _inputs[i, 1].Length;
+            int length = _inputs[i, 0].Length;
             for (int j = 0; j < _batchSize; j++)
             {
+                _outputs[i,j] = new FeatureMap(width,length);
                 _outGradients[i, j] = new FeatureMap(width, length);
+            }
+        }
+
+        for(int i = 0; i < _secondaryDimensions; i++)
+        {
+            int width = _inputsSecondary[i, 0].Width;
+            int length = _inputsSecondary[i, 0].Length;
+            for (int j = 0; j < _batchSize; j++)
+            {
+                _outputs[_inputDimensions + i, j] = new FeatureMap(width, length);
             }
         }
 

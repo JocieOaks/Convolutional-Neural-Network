@@ -3,6 +3,8 @@ using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
 using System.Drawing;
+using System.IO;
+using System.Reflection.Metadata.Ecma335;
 
 [Serializable]
 public partial class ConvolutionalNeuralNetwork
@@ -11,6 +13,9 @@ public partial class ConvolutionalNeuralNetwork
     public const float ASYMPTOTEERRORFACTOR = 1e-6f; //Used to avoid divide by zero or log of zero going to infinity.
 
     private const bool PRINTSTOPWATCH = false;
+
+    public static Context Context { get; } = Context.Create(builder => builder.Cuda());
+    public static Accelerator Accelerator { get; } = Context.CreateCudaAccelerator(0);
 
     private Vector[] _descriptionGradient;
     private Vector[] _descriptionVectors;
@@ -146,6 +151,46 @@ public partial class ConvolutionalNeuralNetwork
         _imageVectorsNorm = VectorNormalizationLayer.Forward(_imageVectors);
     }
 
+    public FeatureMap[,] ForwardGenerate(ImageInput[] input, bool inference = false)
+    {
+        for (int i = 0; i < _batchSize; i++)
+        {
+            _inputImages[0, i] = input[i].Image;
+        }
+
+        for (int j = 0; j < Depth; j++)
+        {
+            if (inference && _layers[j] is DropoutLayer)
+            {
+                StopWatch(() => (_layers[j] as DropoutLayer).ForwardInference(), $"Forwards {j} {_layers[j].Name}");
+            }
+            else
+            {
+                StopWatch(() => _layers[j].Forward(), $"Forwards {j} {_layers[j].Name}");
+            }
+        }
+
+        return _layers.Last().Outputs;
+    }
+
+    public void BackWardsGenerate(FeatureMap gradients, ImageInput[] input, float learningRate)
+    {
+        FeatureMap[,] images = new FeatureMap[1, _batchSize];
+        for (int i = 0; i < _batchSize; i++)
+        {
+            images[0, i] = input[i].Image;
+        }
+
+        _firstInGradient[0,0] = gradients;
+
+        for (int j = Depth - 1; j > 0; j--)
+        {
+            StopWatch(() => _layers[j].Backwards(learningRate), $"Backwards {j} {_layers[j].Name}");
+        }
+        StopWatch(() => (_layers[0] as ConvolutionalLayer).BackwardsFilterOnly(learningRate), $"Backwards {0} {_layers[0].Name}");
+    }
+
+
     public IEnumerable<(float, float)> GradientTest(int vectorCount, int vectorLength)
     {
         _imageVectorsNorm = new Vector[vectorCount];
@@ -179,6 +224,87 @@ public partial class ConvolutionalNeuralNetwork
             loss = Loss(matrix);
             accuracy = Accuracy(matrix);
             yield return (loss, accuracy);
+        }
+    }
+
+    public (FeatureMap, float) Discriminate(ImageInput input)
+    {
+        if (!_ready)
+            throw new InvalidOperationException("Network has not finished setup");
+
+        ImageInput[] augmented = new ImageInput[_batchSize];
+        augmented[0] = input;
+        for (int i = 1; i < _batchSize; i++)
+        {
+            double random = Random.NextDouble();
+            augmented[i] = new ImageInput
+            {
+                Image = random switch
+                {
+                    < .1 => Augmentations.HorizontalFlip(input.Image),
+                    < .4 => Augmentations.GaussianNoise(input.Image),
+                    < .7 => Augmentations.RandomBrightness(input.Image),
+                    _ => Augmentations.RandomSaturation(input.Image)
+                },
+                Bools = input.Bools,
+                Floats = input.Floats
+            };
+
+            using (Context context = Context.Create(builder => builder.Cuda()))
+            {
+                using Accelerator accelerator = context.CreateCudaAccelerator(0);
+                Bitmap generatedBitmap = augmented[i].Image.ConstructBitmap(accelerator);
+                generatedBitmap.Save(Path.Combine(Program.s_directory, $"Feature Maps\\Model 5\\Epoch {Program.Epoch} Augmentation {i}.png"));
+            }
+        }
+        Forward(augmented);
+
+        _imageGradient ??= new Vector[_batchSize];
+
+        float totalLoss = 0;
+        for (int i = 0; i < _batchSize; i++)
+        {
+            float score = Vector.Dot(_imageVectorsNorm[0], _descriptionVectorsNorm[0]);
+            float loss = -(score - 1);
+            totalLoss += loss;
+            _imageGradient[i] =  loss * _descriptionVectorsNorm[i];
+        }
+        totalLoss /= _batchSize;
+        Console.WriteLine($"Loss {totalLoss}");
+
+        BackGradient(_imageGradient, augmented, 0);
+        FeatureMap gradient = new FeatureMap(input.Image.Width, input.Image.Length);
+
+        for (int j = 0; j < gradient.Length; j++)
+        {
+            for (int k = 0; k < gradient.Width; k++)
+            {
+                for (int i = 0; i < _batchSize; i++)
+                {
+                    gradient[k, j] += _finalOutGradient[0, i][k, j];
+                }
+                gradient[k, j] /= _batchSize;
+            }
+        }
+        return (gradient, totalLoss);
+    }
+
+    public void BackGradient(Vector[] gradient, ImageInput[] input, float learningRate)
+    {
+        FeatureMap[,] images = new FeatureMap[1, _batchSize];
+        for (int i = 0; i < _batchSize; i++)
+        {
+            images[0, i] = input[i].Image;
+        }
+
+        FeatureMap[,] transposedGradient = new FeatureMap[0, 0];
+        StopWatch(() => _vectorizationLayer.Backwards(VectorNormalizationLayer.Backwards(_imageVectors, gradient), learningRate), $"Backwards {_vectorizationLayer.Name}");
+
+        FeatureMap[,] currentGradient = TransposeArray(transposedGradient);
+
+        for (int j = Depth - 1; j >= 0; j--)
+        {
+            StopWatch(() => _layers[j].Backwards(learningRate), $"Backwards {j} {_layers[j].Name}");
         }
     }
 
@@ -217,7 +343,7 @@ public partial class ConvolutionalNeuralNetwork
         {
             Console.WriteLine("Error occured when trying to create director: " + directory + "\n" + e.ToString());
         }
-        using Context context = Context.Create(builder => builder.Cuda());
+Context context = ConvolutionalNeuralNetwork.Context;
         using Accelerator accelerator = context.CreateCudaAccelerator(0);
         string layerDirectory;
         for (int i = 0; i < Depth; i++)
