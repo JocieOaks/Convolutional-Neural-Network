@@ -21,10 +21,10 @@ public class DropoutLayer : Layer, ISecondaryLayer
 
     public override string Name => "Dropout Layer";
 
-    public override void Backwards(float learningRate)
+    public override void BackwardsNoUpdate()
     {
-Context context = ConvolutionalNeuralNetwork.Context;
-        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+        Context context = ConvolutionalNeuralNetwork.Context;
+        Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
         var backwardsKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<int>, ArrayView<float>>(BackwardsKernal);
 
         for (int i = 0; i < _inputDimensions; i++)
@@ -53,10 +53,15 @@ Context context = ConvolutionalNeuralNetwork.Context;
         }
     }
 
+    public override void Backwards(float learningRate)
+    {
+        BackwardsNoUpdate();
+    }
+
     public override void Forward()
     {
 Context context = ConvolutionalNeuralNetwork.Context;
-        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+        Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
         var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<int>, ArrayView<Color>>(ForwardKernal);
 
         for (int i = 0; i < _inputDimensions; i++)
@@ -92,7 +97,7 @@ Context context = ConvolutionalNeuralNetwork.Context;
     public void ForwardInference()
     {
 Context context = ConvolutionalNeuralNetwork.Context;
-        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+        Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
         var inferenceKernal = accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>>(InferenceKernal);
 
         MemoryBuffer1D<float, Stride1D.Dense> deviceRatio = accelerator.Allocate1D(new float[] { 1 - _dropoutRate });

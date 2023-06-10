@@ -34,10 +34,61 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
 
     protected FeatureMap[,] Convoluted => _outputs;
 
+    public override void BackwardsNoUpdate()
+    {
+        Context context = ConvolutionalNeuralNetwork.Context;
+        Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
+
+        var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsOutKernal);
+
+        for (int i = 0; i < _inputDimensions; i++)
+        {
+            _deviceInfos[i] = accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
+            for (int j = 0; j < _batchSize; j++)
+            {
+                _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator);
+            }
+        }
+
+        for (int i = 0; i < _outputDimensions; i++)
+        {
+            _deviceFilters[i] = accelerator.Allocate1D(_filters[i]);
+            Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
+            for (int j = 0; j < _batchSize; j++)
+            {
+                _deviceInGradients[i, j] = _inGradients[i, j].Allocate(accelerator);
+
+                backwardsOutKernal(index, _deviceInGradients[i, j].View, _deviceFilters[i].View, _deviceOutGradients[i % _inputDimensions, j].View, _deviceInfos[i % _inputDimensions].View);
+            }
+        }
+
+        accelerator.Synchronize();
+
+        for (int i = 0; i < _inputDimensions; i++)
+        {
+            for (int j = 0; j < _batchSize; j++)
+            {
+                _outGradients[i, j].CopyFromBuffer(_deviceOutGradients[i, j]);
+                _deviceOutGradients[i, j].Dispose();
+            }
+            _deviceInfos[i].Dispose();
+        }
+
+        for (int i = 0; i < _outputDimensions; i++)
+        {
+            _deviceFilters[i].Dispose();
+
+            for (int j = 0; j < _batchSize; j++)
+            {
+                _deviceInGradients[i, j].Dispose();
+            }
+        }
+    }
+
     public override void Backwards(float learningRate)
     {
         Context context = ConvolutionalNeuralNetwork.Context;
-        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+        Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
 
         var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsOutKernal);
         var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsGradientKernal);
@@ -99,8 +150,8 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
 
     public void BackwardsFilterOnly(float learningRate)
     {
-Context context = ConvolutionalNeuralNetwork.Context;
-        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+        Context context = ConvolutionalNeuralNetwork.Context;
+        Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
 
         var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsGradientKernal);
 
@@ -155,8 +206,8 @@ Context context = ConvolutionalNeuralNetwork.Context;
 
     public override void Forward()
     {
-        using Context context = Context.Create(builder => builder.Cuda());
-        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+        Context context = ConvolutionalNeuralNetwork.Context;
+        Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
 
         var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(ForwardKernal);
 

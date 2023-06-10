@@ -252,9 +252,8 @@ public partial class ConvolutionalNeuralNetwork
 
             using (Context context = Context.Create(builder => builder.Cuda()))
             {
-                using Accelerator accelerator = context.CreateCudaAccelerator(0);
-                Bitmap generatedBitmap = augmented[i].Image.ConstructBitmap(accelerator);
-                generatedBitmap.Save(Path.Combine(Program.s_directory, $"Feature Maps\\Model 5\\Epoch {Program.Epoch} Augmentation {i}.png"));
+                Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
+                Bitmap generatedBitmap = augmented[i].Image.ConstructBitmap(accelerator, true);
             }
         }
         Forward(augmented);
@@ -264,15 +263,19 @@ public partial class ConvolutionalNeuralNetwork
         float totalLoss = 0;
         for (int i = 0; i < _batchSize; i++)
         {
-            float score = Vector.Dot(_imageVectorsNorm[0], _descriptionVectorsNorm[0]);
+            float score = Vector.Dot(_imageVectorsNorm[i], _descriptionVectorsNorm[i]);
             float loss = -(score - 1);
+            if(float.IsNaN(loss))
+            {
+                return (null, 2);
+            }
             totalLoss += loss;
             _imageGradient[i] =  loss * _descriptionVectorsNorm[i];
         }
         totalLoss /= _batchSize;
         Console.WriteLine($"Loss {totalLoss}");
 
-        BackGradient(_imageGradient, augmented, 0);
+        BackGradient(_imageGradient, augmented);
         FeatureMap gradient = new FeatureMap(input.Image.Width, input.Image.Length);
 
         for (int j = 0; j < gradient.Length; j++)
@@ -289,7 +292,7 @@ public partial class ConvolutionalNeuralNetwork
         return (gradient, totalLoss);
     }
 
-    public void BackGradient(Vector[] gradient, ImageInput[] input, float learningRate)
+    public void BackGradient(Vector[] gradient, ImageInput[] input)
     {
         FeatureMap[,] images = new FeatureMap[1, _batchSize];
         for (int i = 0; i < _batchSize; i++)
@@ -298,13 +301,13 @@ public partial class ConvolutionalNeuralNetwork
         }
 
         FeatureMap[,] transposedGradient = new FeatureMap[0, 0];
-        StopWatch(() => _vectorizationLayer.Backwards(VectorNormalizationLayer.Backwards(_imageVectors, gradient), learningRate), $"Backwards {_vectorizationLayer.Name}");
+        StopWatch(() => _vectorizationLayer.Backwards(VectorNormalizationLayer.Backwards(_imageVectors, gradient), 0), $"Backwards {_vectorizationLayer.Name}");
 
         FeatureMap[,] currentGradient = TransposeArray(transposedGradient);
 
         for (int j = Depth - 1; j >= 0; j--)
         {
-            StopWatch(() => _layers[j].Backwards(learningRate), $"Backwards {j} {_layers[j].Name}");
+            StopWatch(() => _layers[j].BackwardsNoUpdate(), $"Backwards {j} {_layers[j].Name}");
         }
     }
 
@@ -344,7 +347,7 @@ public partial class ConvolutionalNeuralNetwork
             Console.WriteLine("Error occured when trying to create director: " + directory + "\n" + e.ToString());
         }
 Context context = ConvolutionalNeuralNetwork.Context;
-        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+        Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
         string layerDirectory;
         for (int i = 0; i < Depth; i++)
         {

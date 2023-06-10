@@ -26,10 +26,10 @@ public class ScalingLayer : Layer, IStructuralLayer
 
     public override string Name => "Scaling Layer";
 
-    public override void Backwards(float learningRatee)
+    public override void BackwardsNoUpdate()
     {
-Context context = ConvolutionalNeuralNetwork.Context;
-        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+        Context context = ConvolutionalNeuralNetwork.Context;
+        Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
 
         var backwardsKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<ScalingLayerInfo>>(BackwardsKernal);
 
@@ -59,12 +59,18 @@ Context context = ConvolutionalNeuralNetwork.Context;
             }
             _deviceInfos[i].Dispose();
         }
+
+    }
+
+    public override void Backwards(float learningRatee)
+    {
+        BackwardsNoUpdate();
     }
 
     public override void Forward()
     {
-Context context = ConvolutionalNeuralNetwork.Context;
-        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+        Context context = ConvolutionalNeuralNetwork.Context;
+        Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
 
         var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<ScalingLayerInfo>>(ForwardKernal);
 

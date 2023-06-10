@@ -10,6 +10,8 @@ public interface ILayer
 
     void Backwards(float learningRate);
 
+    void BackwardsNoUpdate();
+
     void Forward();
 
     (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] input, FeatureMap[,] outGradients);

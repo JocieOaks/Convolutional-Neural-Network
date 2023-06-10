@@ -15,10 +15,10 @@ public class ReLULayer : Layer, ISecondaryLayer
 
     public override string Name => "Activation Layer";
 
-    public override void Backwards(float learningRate)
+    public override void BackwardsNoUpdate()
     {
-Context context = ConvolutionalNeuralNetwork.Context;
-        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+        Context context = ConvolutionalNeuralNetwork.Context;
+        Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
 
         var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(BackwardsKernal);
 
@@ -53,10 +53,15 @@ Context context = ConvolutionalNeuralNetwork.Context;
         }
     }
 
+    public override void Backwards(float learningRate)
+    {
+        BackwardsNoUpdate();
+    }
+
     public override void Forward()
     {
 Context context = ConvolutionalNeuralNetwork.Context;
-        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+        Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
 
         var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);
 

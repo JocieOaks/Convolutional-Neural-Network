@@ -20,21 +20,22 @@ public class SkipConnectionLayer : Layer, IStructuralLayer
 
     public ConcatenationLayer GetConcatenationLayer()
     {
-        _concatenationLayer = new ConcatenationLayer();
+        if(_concatenationLayer == null )
+            _concatenationLayer = new ConcatenationLayer();
         return _concatenationLayer;
     }
 
-    public override void Backwards(float learningRate)
+    public override void BackwardsNoUpdate()
     {
-Context context = ConvolutionalNeuralNetwork.Context;
-        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+        Context context = ConvolutionalNeuralNetwork.Context;
+        Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
 
         var backwardsKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>>(BackwardsKernal);
 
-        for(int i = 0; i < _inputDimensions; i++)
+        for (int i = 0; i < _inputDimensions; i++)
         {
             Index2D index = new Index2D(Infos(i).Area, 3);
-            for(int j = 0; j < _batchSize; j++)
+            for (int j = 0; j < _batchSize; j++)
             {
                 _deviceInGradients[i, j] = _inGradients[i, j].Allocate(accelerator);
                 _deviceInGradientsSecondary[i, j] = _inGradientSecondary[i, j].Allocate(accelerator);
@@ -46,9 +47,9 @@ Context context = ConvolutionalNeuralNetwork.Context;
 
         accelerator.Synchronize();
 
-        for(int i = 0; i< _inputDimensions; i++)
+        for (int i = 0; i < _inputDimensions; i++)
         {
-            for(int j = 0; j< _batchSize; j++)
+            for (int j = 0; j < _batchSize; j++)
             {
                 _outGradients[i, j].CopyFromBuffer(_deviceOutGradients[i, j]);
                 _deviceOutGradients[i, j].Dispose();
@@ -56,6 +57,11 @@ Context context = ConvolutionalNeuralNetwork.Context;
                 _deviceInGradientsSecondary[i, j].Dispose();
             }
         }
+    }
+
+    public override void Backwards(float learningRate)
+    {
+        BackwardsNoUpdate();
     }
 
     public override void Forward()

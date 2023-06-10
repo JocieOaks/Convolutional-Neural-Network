@@ -38,6 +38,8 @@ public abstract class Layer : ILayer
 
     public abstract void Backwards(float learningRate);
 
+    public abstract void BackwardsNoUpdate();
+
     public abstract void Forward();
 
     public abstract void Reset();

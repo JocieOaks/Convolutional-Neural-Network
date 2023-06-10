@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using System.Runtime.Serialization;
 
 public partial class ConvolutionalNeuralNetwork
 {
@@ -11,6 +12,8 @@ public partial class ConvolutionalNeuralNetwork
     [JsonProperty] private readonly Transformer _transformer;
 
     [JsonProperty] private readonly VectorizationLayer _vectorizationLayer;
+
+    [JsonProperty] List<(int, int)> _skipConnections;
 
     private ActivationPattern _activationPattern;
     private int _batchSize;
@@ -164,6 +167,34 @@ public partial class ConvolutionalNeuralNetwork
     public void SetActivationPattern(ActivationPattern pattern)
     {
         _activationPattern = pattern;
+    }
+
+    [OnSerializing]
+    private void OnSerializing(StreamingContext context) {
+        _skipConnections = new List<(int, int)>();
+        for(int i = 0; i < _layers.Count; i++)
+        {
+            if (_layers[i] is SkipConnectionLayer skip)
+            {
+                _skipConnections.Add((i, _layers.IndexOf(skip.GetConcatenationLayer())));
+            }
+        }
+
+    }
+
+    [OnDeserialized]
+    private void OnDeserialized(StreamingContext context)
+    {
+        if (_skipConnections != null)
+        {
+            foreach((int skipIndex, int concatIndex) in _skipConnections)
+            {
+                SkipConnectionLayer skip = new SkipConnectionLayer();
+                ConcatenationLayer concat = skip.GetConcatenationLayer();
+                _layers[skipIndex] = skip;
+                _layers[concatIndex] = concat;
+            }
+        }
     }
 
     public bool StartUp(int batchSize, int width, int length, int descriptionBools, int descriptionFloats)

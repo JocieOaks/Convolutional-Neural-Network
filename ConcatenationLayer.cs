@@ -35,13 +35,13 @@ public class ConcatenationLayer : Layer, IStructuralLayer
         }
     }
 
-    public override void Backwards(float learningRate)
+    public override void BackwardsNoUpdate()
     {
         for (int i = 0; i < _inputDimensions; i++)
         {
             for (int j = 0; j < _batchSize; j++)
             {
-                _outGradients[i,j] = _inGradients[i, j];
+                _outGradients[i, j] = _inGradients[i, j];
             }
         }
 
@@ -52,6 +52,11 @@ public class ConcatenationLayer : Layer, IStructuralLayer
                 _outGradientsSecondary[i, j] = _inGradients[_inputDimensions + i, j];
             }
         }
+    }
+
+    public override void Backwards(float learningRate)
+    {
+        BackwardsNoUpdate();
     }
 
     public override void Forward()

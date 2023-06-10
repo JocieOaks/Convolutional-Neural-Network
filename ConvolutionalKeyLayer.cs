@@ -122,7 +122,7 @@ public class ConvolutionalKeyLayer : ConvolutionalLayer
         }
         else
         {
-            BaseStartup(input, outGradients, _filters.Length / input.GetLength(0));
+            BaseStartup(input, outGradients, _boolFilterVector.GetLength(0) / input.GetLength(0));
         }
 
         _filters = new Color[_outputDimensions][];

@@ -27,10 +27,73 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
 
     public override string Name => "Fully Connected Layer";
 
+    public override void BackwardsNoUpdate()
+    {
+        Context context = ConvolutionalNeuralNetwork.Context;
+        Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
+
+        var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(BackwardsOutKernal);
+
+        for (int i = 0; i < _inputDimensions; i++)
+        {
+            _deviceInfos[i] = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
+            for (int j = 0; j < _batchSize; j++)
+            {
+                _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator);
+            }
+        }
+
+        for (int i = 0; i < _outputDimensions; i++)
+        {
+            for (int j = 0; j < _batchSize; j++)
+            {
+                _deviceInGradients[i, j] = _inGradients[i, j].Allocate(accelerator);
+            }
+        }
+
+        for (int i = 0; i < _inputDimensions; i++)
+        {
+            Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
+            for (int j = 0; j < _outputDimensions; j++)
+            {
+                _deviceMultipliers[i, j] = accelerator.Allocate1D(new Color[] { _matrixRed[i, j], _matrixGreen[i, j], _matrixBlue[i, j] });
+                for (int k = 0; k < _batchSize; k++)
+                {
+                    backwardsOutKernal(index, _deviceInGradients[j, k].View, _deviceMultipliers[i, j].View, _deviceOutGradients[i, k].View, _deviceInfos[i].View);
+                }
+            }
+        }
+
+        accelerator.Synchronize();
+
+        for (int j = 0; j < _batchSize; j++)
+        {
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                _outGradients[i, j].CopyFromBuffer(_deviceOutGradients[i, j]);
+                _deviceOutGradients[i, j].Dispose();
+            }
+            for (int i = 0; i < _outputDimensions; i++)
+            {
+                _deviceInGradients[i, j].Dispose();
+            }
+        }
+
+        for (int i = 0; i < _inputDimensions; i++)
+        {
+            for (int j = 0; j < _outputDimensions; j++)
+            {
+                _deviceMultipliers[i, j].Dispose();
+            }
+
+            _deviceInfos[i].Dispose();
+        }
+    }
+
     public override void Backwards(float learningRate)
     {
         Context context = ConvolutionalNeuralNetwork.Context;
-        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+        Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
 
         var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(BackwardsOutKernal);
 
@@ -108,7 +171,7 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
     public override void Forward()
     {
 Context context = ConvolutionalNeuralNetwork.Context;
-        using Accelerator accelerator = context.CreateCudaAccelerator(0);
+        Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
 
         var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);
 

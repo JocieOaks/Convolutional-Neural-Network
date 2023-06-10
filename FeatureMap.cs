@@ -6,8 +6,8 @@ using System.Drawing;
 [Serializable]
 public class FeatureMap
 {
-    private static Color s_normalMean = new(127);
-    private static Color s_normalStandardDeviation = new(50);
+    private static Color s_normalMean = new(0.5f);
+    private static Color s_normalStandardDeviation = new(0.23f);
     [JsonProperty] private Color[] _map;
 
     public FeatureMap(int width, int length)
@@ -89,7 +89,7 @@ public class FeatureMap
         {
             for (int x = 0; x < Width; x++)
             {
-                bitmap.SetPixel(x, Length - y - 1, (System.Drawing.Color)normalizedMap[y * Width + x]);
+                bitmap.SetPixel(x, Length - y - 1, (System.Drawing.Color)(normalizedMap[y * Width + x] * 255));
             }
         }
 
