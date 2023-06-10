@@ -77,6 +77,11 @@ public class Generator : ConvolutionalNeuralNetwork
 
         foreach (var layer in _layers)
         {
+            if(layer is ConvolutionalKeyLayer key)
+            {
+                key.Bools = _classificationBools;
+                key.Floats = _classificationFloats;
+            }
 
             (current, gradients) = layer.Startup(current, gradients);
         }

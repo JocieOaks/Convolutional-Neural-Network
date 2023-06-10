@@ -10,9 +10,9 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
 
     protected const float LEARNINGMULTIPLIER = 1f;
 
-    protected float[][] _filterGradient;
+    private float[][] _filterGradients;
 
-    [JsonProperty] protected Color[][] _filters;
+    [JsonProperty] private Color[][] _filters;
 
     protected MemoryBuffer1D<float, Stride1D.Dense>[] _deviceFilterGradients;
     protected MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceFilters;
@@ -114,7 +114,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
         for (int i = 0; i < _outputDimensions; i++)
         {
             _deviceFilters[i] = accelerator.Allocate1D(_filters[i]);
-            _deviceFilterGradients[i] = accelerator.Allocate1D<float>(_filterGradient[i].Length);
+            _deviceFilterGradients[i] = accelerator.Allocate1D<float>(_filterGradients[i].Length);
             Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
             for (int j = 0; j < _batchSize; j++)
             {
@@ -140,13 +140,13 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
 
         for (int i = 0; i < _outputDimensions; i++)
         {
-            _deviceFilterGradients[i].CopyToCPU(_filterGradient[i]);
+            _deviceFilterGradients[i].CopyToCPU(_filterGradients[i]);
             _deviceFilterGradients[i].Dispose();
             _deviceFilters[i].Dispose();
 
             for (int j = 0; j < _filterSize * _filterSize; j++)
             {
-                _filters[i][j] -= learningRate * LEARNINGMULTIPLIER * new Color(_filterGradient[i][j * 3], _filterGradient[i][j * 3 + 1], _filterGradient[i][j * 3 + 2]).Clamp(CLAMP);
+                _filters[i][j] -= learningRate * LEARNINGMULTIPLIER * new Color(_filterGradients[i][j * 3], _filterGradients[i][j * 3 + 1], _filterGradients[i][j * 3 + 2]).Clamp(CLAMP);
             }
 
             for (int j = 0; j < _batchSize; j++)
@@ -174,7 +174,7 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
 
         for (int i = 0; i < _outputDimensions; i++)
         {
-            _deviceFilterGradients[i] = accelerator.Allocate1D<float>(_filterGradient[i].Length);
+            _deviceFilterGradients[i] = accelerator.Allocate1D<float>(_filterGradients[i].Length);
             Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
             for (int j = 0; j < _batchSize; j++)
             {
@@ -197,12 +197,12 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
 
         for (int i = 0; i < _outputDimensions; i++)
         {
-            _deviceFilterGradients[i].CopyToCPU(_filterGradient[i]);
+            _deviceFilterGradients[i].CopyToCPU(_filterGradients[i]);
             _deviceFilterGradients[i].Dispose();
 
             for (int j = 0; j < _filterSize * _filterSize; j++)
             {
-                _filters[i][j] -= learningRate * LEARNINGMULTIPLIER * new Color(_filterGradient[i][j * 3], _filterGradient[i][j * 3 + 1], _filterGradient[i][j * 3 + 2]).Clamp(CLAMP);
+                _filters[i][j] -= learningRate * LEARNINGMULTIPLIER * new Color(_filterGradients[i][j * 3], _filterGradients[i][j * 3 + 1], _filterGradients[i][j * 3 + 2]).Clamp(CLAMP);
             }
 
             for (int j = 0; j < _batchSize; j++)
@@ -299,11 +299,11 @@ public class ConvolutionalLayer : Layer, IPrimaryLayer
         {
             BaseStartup(input, outGradients, _filters.Length / input.GetLength(0));
         }
-        _filterGradient = new float[_outputDimensions][];
+        _filterGradients = new float[_outputDimensions][];
 
         for (int i = 0; i < _outputDimensions; i++)
         {
-            _filterGradient[i] = new float[_filterSize * _filterSize * 3];
+            _filterGradients[i] = new float[_filterSize * _filterSize * 3];
         }
 
         _deviceInfos = new MemoryBuffer1D<LayerInfo, Stride1D.Dense>[_inputDimensions];
