@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -90,6 +91,36 @@ public class Generator : ConvolutionalNeuralNetwork
         FirstInGradients = gradients;
 
         _ready = true;
+    }
+
+    public static Generator LoadFromFile(string file)
+    {
+        Generator generator = null;
+
+        if (File.Exists(file))
+        {
+            try
+            {
+                string dataToLoad = "";
+                using (FileStream stream = new(file, FileMode.Open))
+                {
+                    using (StreamReader read = new(stream))
+                    {
+                        dataToLoad = read.ReadToEnd();
+                    }
+                }
+                generator = JsonConvert.DeserializeObject<Generator>(dataToLoad, new JsonSerializerSettings
+                {
+                    TypeNameHandling = TypeNameHandling.Auto
+                });
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Error occured when trying to load data from file: " + file + "\n" + e.ToString());
+            }
+        }
+
+        return generator;
     }
 }
 

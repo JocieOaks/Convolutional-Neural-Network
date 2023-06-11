@@ -128,16 +128,19 @@ public class ScalingLayer : Layer, IStructuralLayer
             float scaleWidth, scaleLength;
             if (_outputWidth == 0)
             {
-                if (_scaleWidth != 0)
+                if (_scaleWidth == 0)
+                {
+                    outputWidth = inputs[0, 0].Width;
+                    outputLength = inputs[0, 0].Length;
+                    scaleWidth = outputWidth / (float)inputs[i, 0].Width;
+                    scaleLength = outputLength / (float)inputs[i, 0].Length;
+                }
+                else
                 {
                     outputWidth = (int)(inputs[i, 0].Width * _scaleWidth);
                     outputLength = (int)(inputs[i, 0].Length * _scaleLength);
                     scaleWidth = _scaleWidth;
                     scaleLength = _scaleLength;
-                }
-                else
-                {
-                    throw new InvalidOperationException("Rescaling not set");
                 }
             }
             else

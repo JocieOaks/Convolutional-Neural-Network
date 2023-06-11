@@ -11,7 +11,7 @@ public class Discriminator : ConvolutionalNeuralNetwork
 
     protected FeatureMap[,] FinalOutGradient { get; set; }
 
-    [JsonProperty] private readonly VectorizationLayer _vectorizationLayer;
+    [JsonProperty] private VectorizationLayer _vectorizationLayer;
 
     public void Backwards(Vector[] gradients, ImageInput[] input, float learningRate)
     {
@@ -85,7 +85,12 @@ public class Discriminator : ConvolutionalNeuralNetwork
             (current, gradients) = layer.Startup(current, gradients);
         }
 
+        _vectorizationLayer ??= new VectorizationLayer(descriptionBools + descriptionFloats);
+        
         _vectorizationLayer.StartUp(TransposeArray(current), gradients);
+
+        _discriminatorGradients = new Vector[_batchSize];
+        _generatorGradients = new Vector[_batchSize];
 
         _ready = true;
     }
@@ -98,8 +103,6 @@ public class Discriminator : ConvolutionalNeuralNetwork
         ImageInput[] total = real.Concat(fake).ToArray();
 
         Forward(total);
-
-        _discriminatorGradients ??= new Vector[_batchSize];
 
         float discriminatorLoss = 0;
         for (int i = 0; i < real.Length; i++)
@@ -126,7 +129,6 @@ public class Discriminator : ConvolutionalNeuralNetwork
             _generatorGradients[i + real.Length] = (2 * score - 2) * classificationVector;
         }
 
-        _previousImageGradient = _discriminatorGradients;
         if (_previousImageGradient != null)
         {
             for (int i = 0; i < _batchSize; i++)
@@ -134,6 +136,7 @@ public class Discriminator : ConvolutionalNeuralNetwork
                 _discriminatorGradients[i] += _previousImageGradient[i] * momentum;
             }
         }
+        _previousImageGradient = _discriminatorGradients;
 
         discriminatorLoss /= _batchSize;
         generatorLoss /= fake.Length;
@@ -328,6 +331,36 @@ public class Discriminator : ConvolutionalNeuralNetwork
         float loss = Loss(matrix);
         float accuracy = Accuracy(matrix);
         return (loss, accuracy);
+    }
+
+    public static Discriminator LoadFromFile(string file)
+    {
+        Discriminator discriminator = null;
+
+        if (File.Exists(file))
+        {
+            try
+            {
+                string dataToLoad = "";
+                using (FileStream stream = new(file, FileMode.Open))
+                {
+                    using (StreamReader read = new(stream))
+                    {
+                        dataToLoad = read.ReadToEnd();
+                    }
+                }
+                discriminator = JsonConvert.DeserializeObject<Discriminator>(dataToLoad, new JsonSerializerSettings
+                {
+                    TypeNameHandling = TypeNameHandling.Auto
+                });
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Error occured when trying to load data from file: " + file + "\n" + e.ToString());
+            }
+        }
+
+        return discriminator;
     }
 }
 

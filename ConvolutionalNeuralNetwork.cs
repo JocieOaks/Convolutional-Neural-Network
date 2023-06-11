@@ -103,8 +103,6 @@ public abstract partial class ConvolutionalNeuralNetwork
         {
             Console.WriteLine("Error occured when trying to create director: " + directory + "\n" + e.ToString());
         }
-        Context context = ConvolutionalNeuralNetwork.Context;
-        Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
         string layerDirectory;
         for (int i = 0; i < Depth; i++)
         {
@@ -114,7 +112,7 @@ public abstract partial class ConvolutionalNeuralNetwork
                 Directory.CreateDirectory(layerDirectory);
                 for (int j = 0; j < _layers[i].OutputDimensions; j++)
                 {
-                    PrintFeatureMap(_layers[i].Outputs[j, batchIndex], Path.Combine(layerDirectory, $"{name} {j}.png"), accelerator);
+                    PrintFeatureMap(_layers[i].Outputs[j, batchIndex], Path.Combine(layerDirectory, $"{name} {j}.png"), Accelerator);
                 }
             }
         }

@@ -26,6 +26,7 @@ public class ConvolutionalKeyLayer : Layer, IPrimaryLayer
 
     public ConvolutionalKeyLayer(int filterSize, int stride, int outputDimensionsMultiplier) : base(filterSize, stride)
     {
+        _dimensionsMultiplier = outputDimensionsMultiplier;
     }
 
     [JsonConstructor]

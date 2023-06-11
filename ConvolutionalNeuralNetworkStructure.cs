@@ -27,36 +27,6 @@ public abstract partial class ConvolutionalNeuralNetwork
         }
     }
 
-    public static ConvolutionalNeuralNetwork LoadFromFile(string file)
-    {
-        ConvolutionalNeuralNetwork cnn = null;
-
-        if (File.Exists(file))
-        {
-            try
-            {
-                string dataToLoad = "";
-                using (FileStream stream = new(file, FileMode.Open))
-                {
-                    using (StreamReader read = new(stream))
-                    {
-                        dataToLoad = read.ReadToEnd();
-                    }
-                }
-                cnn = JsonConvert.DeserializeObject<ConvolutionalNeuralNetwork>(dataToLoad, new JsonSerializerSettings
-                {
-                    TypeNameHandling = TypeNameHandling.Auto
-                });
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine("Error occured when trying to load data from file: " + file + "\n" + e.ToString());
-            }
-        }
-
-        return cnn;
-    }
-
     public void AddLayer(IPrimaryLayer layer)
     {
         _primaryLayers.Add(layer);
@@ -190,9 +160,8 @@ public abstract partial class ConvolutionalNeuralNetwork
             {
                 _activationPattern = new ActivationPattern(new NormalizationLayers[] {
                     NormalizationLayers.Activation,
-                    NormalizationLayers.Dropout,
                     NormalizationLayers.BatchNormalization
-                }, 0.2f);
+                }, 0);
             }
 
             foreach (var primaryLayer in _primaryLayers)
