@@ -178,7 +178,6 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
 
     public override void Forward()
     {
-Context context = ConvolutionalNeuralNetwork.Context;
         Accelerator accelerator = ConvolutionalNeuralNetwork.Accelerator;
 
         var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);

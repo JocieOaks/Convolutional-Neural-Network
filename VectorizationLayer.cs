@@ -10,13 +10,8 @@ public class VectorizationLayer
 
     private FeatureMap[,] _transposedInput;
 
-    public VectorizationLayer(int vectorDimensions)
-    {
-        _vectorDimensions = vectorDimensions;
-    }
-
     [JsonConstructor]
-    private VectorizationLayer()
+    public VectorizationLayer()
     {
     }
 
@@ -57,11 +52,6 @@ public class VectorizationLayer
         }
     }
 
-    public void ChangeVectorDimensions(int vectorDimensions)
-    {
-        _vectorDimensions = vectorDimensions;
-    }
-
     public Vector[] Forward()
     {
         Vector[] vectors = new Vector[_transposedInput.GetLength(0)];
@@ -79,22 +69,23 @@ public class VectorizationLayer
         return vectors;
     }
 
-    public void StartUp(FeatureMap[,] transposedInputs, FeatureMap[,] outGradients)
+    public void StartUp(FeatureMap[,] transposedInputs, FeatureMap[,] outGradients, int vectorDimensions)
     {
         int batchSize = transposedInputs.GetLength(0);
         int featureMapDimensions = transposedInputs.GetLength(1);
         
         _transposedInput = transposedInputs;
+        _vectorDimensions = vectorDimensions;
 
-        if (_matrix == null || _matrix.Width != _vectorDimensions)
+        if (_matrix == null || _matrix.Width != vectorDimensions)
         {
-            float variance = 2f / (3 * featureMapDimensions + _vectorDimensions);
+            float variance = 2f / (3 * featureMapDimensions + vectorDimensions);
             float stdDev = MathF.Sqrt(variance);
-            _matrix = new FeatureMap(_vectorDimensions, featureMapDimensions);
+            _matrix = new FeatureMap(vectorDimensions, featureMapDimensions);
 
             for (int j = 0; j < featureMapDimensions; j++)
             {
-                for (int i = 0; i < _vectorDimensions; i++)
+                for (int i = 0; i < vectorDimensions; i++)
                 {
                     _matrix[i, j] = Color.RandomGauss(0, stdDev);
                 }
@@ -109,6 +100,22 @@ public class VectorizationLayer
             for (int j = 0; j < featureMapDimensions; j++)
             {
                 outGradients[j, i] = _transposedGradients[i, j] = new FeatureMap(transposedInputs[i, j].Width, transposedInputs[i, j].Length);
+            }
+        }
+    }
+
+    public void Reset()
+    {
+        int featureMapDimensions = _transposedInput.GetLength(1);
+        float variance = 2f / (3 * featureMapDimensions + _vectorDimensions);
+        float stdDev = MathF.Sqrt(variance);
+        _matrix = new FeatureMap(_vectorDimensions, featureMapDimensions);
+
+        for (int j = 0; j < featureMapDimensions; j++)
+        {
+            for (int i = 0; i < _vectorDimensions; i++)
+            {
+                _matrix[i, j] = Color.RandomGauss(0, stdDev);
             }
         }
     }

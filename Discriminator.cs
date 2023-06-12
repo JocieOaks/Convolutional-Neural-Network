@@ -9,9 +9,66 @@ public class Discriminator : ConvolutionalNeuralNetwork
 
     private Vector[] _previousImageGradient;
 
+    private static Vector _boolWeights;
+    private static Vector _floatWeights;
+
+
     protected FeatureMap[,] FinalOutGradient { get; set; }
 
     [JsonProperty] private VectorizationLayer _vectorizationLayer;
+
+    public static void SetWeights(Classifications classifications)
+    {
+        _boolWeights = new Vector(classifications.Artists + classifications.Names + classifications.Races + classifications.Styles + classifications.Tags);
+        _floatWeights = new Vector(10);
+        int index = 0;
+        for(int i = 0; i < classifications.Artists; i++)
+        {
+            _boolWeights[index++] = 4;
+        }
+        for(int i = 0; i < classifications.Names; i++)
+        {
+            _boolWeights[index++] = 3;
+        }
+        for(int i = 0; i < classifications.Races; i++)
+        {
+            _boolWeights[index++] = 2;
+        }
+        for(int i = 0; i < classifications.Styles; i++)
+        {
+            _boolWeights[index++] = 5;
+        }
+        for(int i = 0; i < classifications.Tags; i++)
+        {
+            _boolWeights[index++] = 1;
+        }
+
+        _floatWeights[0] = 5;   //Muscle
+        _floatWeights[1] = 5;   //Fat
+        _floatWeights[2] = 4;   //Body Hair
+        _floatWeights[3] = 3;   //Ears
+
+        for (int i = 0; i < 3; i++)
+        {
+            _floatWeights[4 + i] = 3;
+            _floatWeights[7 + i] = 3;
+        }
+    }
+
+    public static Vector VectorizeClassification(bool[] bools, float[] floats)
+    {
+        Vector vector = new Vector(bools.Length + floats.Length);
+        for (int i = 0; i < bools.Length; i++)
+        {
+            vector[i] = bools[i] ? 1 : -1;
+        }
+        for (int i = 0; i < floats.Length; i++)
+        {
+            vector[bools.Length + i] = floats[i] * 2 - 1;
+        }
+
+        return vector.Normalized();
+    }
 
     public void Backwards(Vector[] gradients, ImageInput[] input, float learningRate)
     {
@@ -85,9 +142,9 @@ public class Discriminator : ConvolutionalNeuralNetwork
             (current, gradients) = layer.Startup(current, gradients);
         }
 
-        _vectorizationLayer ??= new VectorizationLayer(descriptionBools + descriptionFloats);
+        _vectorizationLayer ??= new VectorizationLayer();
         
-        _vectorizationLayer.StartUp(TransposeArray(current), gradients);
+        _vectorizationLayer.StartUp(TransposeArray(current), gradients, descriptionBools + descriptionFloats);
 
         _discriminatorGradients = new Vector[_batchSize];
         _generatorGradients = new Vector[_batchSize];
@@ -95,7 +152,7 @@ public class Discriminator : ConvolutionalNeuralNetwork
         _ready = true;
     }
 
-    public (FeatureMap[,], float, float) TrainDiscriminator(ImageInput[] real, ImageInput[] fake, float learningRate, float momentum)
+    public (float, float) Train(ImageInput[] real, ImageInput[] fake, float learningRate, float momentum, bool discriminatorStep)
     {
         if (!_ready)
             throw new InvalidOperationException("Network has not finished setup");
@@ -111,8 +168,8 @@ public class Discriminator : ConvolutionalNeuralNetwork
             float score = Vector.Dot(_imageVectorsNorm[i], classificationVector);
             float loss = MathF.Pow(score - 1, 2);
             discriminatorLoss += loss;
-            _discriminatorGradients[i] = (2 * score - 2) * classificationVector;
-            _generatorGradients[i] = new Vector(_classificationBoolsLength + _classificationFloatsLength);
+            _discriminatorGradients[i] = loss * (2 * score - 2) * classificationVector;
+            _generatorGradients[i] ??= new Vector(_classificationBoolsLength + _classificationFloatsLength);
         }
 
         float generatorLoss = 0;
@@ -122,11 +179,11 @@ public class Discriminator : ConvolutionalNeuralNetwork
             float score = Vector.Dot(_imageVectorsNorm[i + real.Length], classificationVector);
             float loss = MathF.Pow(score + 1, 2);
             discriminatorLoss += loss;
-            _discriminatorGradients[i + real.Length] = (2 * score + 2) * classificationVector;
+            _discriminatorGradients[i + real.Length] = loss * (2 * score + 2) * classificationVector;
 
             loss = MathF.Pow(score - 1, 2);
             generatorLoss += loss;
-            _generatorGradients[i + real.Length] = (2 * score - 2) * classificationVector;
+            _generatorGradients[i + real.Length] = loss * (2 * score - 2) * classificationVector;
         }
 
         if (_previousImageGradient != null)
@@ -141,16 +198,31 @@ public class Discriminator : ConvolutionalNeuralNetwork
         discriminatorLoss /= _batchSize;
         generatorLoss /= fake.Length;
 
+
+        if(discriminatorStep)
+            Backwards(_discriminatorGradients, total, learningRate);
+
+        return (discriminatorLoss, generatorLoss);
+    }
+
+    public FeatureMap[,] GeneratorGradient(ImageInput[] real, ImageInput[] fake)
+    {
+        ImageInput[] total = real.Concat(fake).ToArray();
         Backwards(_generatorGradients, total, 0);
         FeatureMap[,] gradient = new FeatureMap[1, fake.Length];
-        for(int i = 0; i < fake.Length; i++)
+        for (int i = 0; i < fake.Length; i++)
         {
             gradient[0, i] = FinalOutGradient[0, i + real.Length];
         }
 
-        Backwards(_discriminatorGradients, total, learningRate);
+        return gradient;
+    }
 
-        return (gradient, discriminatorLoss, generatorLoss);
+    public override void ResetNetwork()
+    {
+        base.ResetNetwork();
+
+        _vectorizationLayer.Reset();
     }
 
     public float[,] Score(ImageInput[] input)

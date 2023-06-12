@@ -18,7 +18,7 @@ public abstract partial class ConvolutionalNeuralNetwork
     [JsonProperty] protected bool _configured = false;
     protected bool _ready = false;
 
-    public IEnumerable<IPrimaryLayer> PrimaryLayers
+    [JsonIgnore] public IEnumerable<IPrimaryLayer> PrimaryLayers
     {
         get
         {
@@ -88,6 +88,14 @@ public abstract partial class ConvolutionalNeuralNetwork
         {
             if (predicate(layer))
                 layer.Reset();
+        }
+    }
+
+    public virtual void ResetNetwork()
+    {
+        foreach(var layer in _layers)
+        {
+            layer.Reset();
         }
     }
 

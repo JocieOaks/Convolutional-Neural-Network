@@ -18,8 +18,8 @@ public class ConvolutionalKeyLayer : Layer, IPrimaryLayer
 
     protected int _dimensionsMultiplier;
 
-    public bool[][] Bools { get; set; }
-    public float[][] Floats { get; set; }
+    [JsonIgnore] public bool[][] Bools { get; set; }
+    [JsonIgnore] public float[][] Floats { get; set; }
 
     [JsonProperty] ColorVector[,] _boolFilterVector;
     [JsonProperty] ColorVector[,] _floatFilterVector;
@@ -191,7 +191,7 @@ public class ConvolutionalKeyLayer : Layer, IPrimaryLayer
 
     public override void Reset()
     {
-        float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize * (Bools.Length + Floats.Length) + _inputDimensions * _filterSize * _filterSize * (Bools.Length + Floats.Length));
+        float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize * (Bools[0].Length + Floats[0].Length) + _inputDimensions * _filterSize * _filterSize * (Bools[0].Length + Floats[0].Length));
         float stdDev = MathF.Sqrt(variance);
 
         for (int i = 0; i < _outputDimensions; i++)
@@ -220,21 +220,21 @@ public class ConvolutionalKeyLayer : Layer, IPrimaryLayer
             _boolFilterVector = new ColorVector[_outputDimensions, _filterSize * _filterSize];
             _floatFilterVector = new ColorVector[_outputDimensions, _filterSize * _filterSize];
 
-            float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize * (Bools.Length + Floats.Length) + _inputDimensions * _filterSize * _filterSize * (Bools.Length + Floats.Length));
+            float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize * (Bools[0].Length + Floats[0].Length) + _inputDimensions * _filterSize * _filterSize * (Bools[0].Length + Floats[0].Length));
             float stdDev = MathF.Sqrt(variance);
 
             for (int i = 0; i < _outputDimensions; i++)
             {
                 for (int j = 0; j < _filterSize * _filterSize; j++)
                 {
-                    _boolFilterVector[i, j] = new ColorVector(Bools.Length);
-                    for(int k = 0; k < Bools.Length; k++)
+                    _boolFilterVector[i, j] = new ColorVector(Bools[0].Length);
+                    for(int k = 0; k < Bools[0].Length; k++)
                     {
                         _boolFilterVector[i, j][k] = Color.RandomGauss(0, stdDev);
                     }
 
-                    _floatFilterVector[i,j] = new ColorVector(Floats.Length);
-                    for (int k = 0; k < Floats.Length; k++)
+                    _floatFilterVector[i,j] = new ColorVector(Floats[0].Length);
+                    for (int k = 0; k < Floats[0].Length; k++)
                     {
                         _floatFilterVector[i, j][k] = Color.RandomGauss(0, stdDev);
                     }
@@ -244,6 +244,36 @@ public class ConvolutionalKeyLayer : Layer, IPrimaryLayer
         else
         {
             BaseStartup(input, outGradients, _boolFilterVector.GetLength(0) / input.GetLength(0));
+            if (_boolFilterVector[0,0].Length != Bools[0].Length || _floatFilterVector[0,0].Length != Floats[0].Length)
+            {
+                float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize * (Bools[0].Length + Floats[0].Length) + _inputDimensions * _filterSize * _filterSize * (Bools[0].Length + Floats[0].Length));
+                float stdDev = MathF.Sqrt(variance);
+                for (int i = 0; i < _outputDimensions; i++)
+                {
+                    for (int j = 0; j < _filterSize * _filterSize; j++)
+                    {
+                        ColorVector newBoolVector = new ColorVector(Bools[0].Length);
+                        for (int k = 0; k < Bools[0].Length; k++)
+                        {
+                            if (_boolFilterVector[i, j].Length > k)
+                                newBoolVector[k] = _boolFilterVector[i, j][k];
+                            else
+                                newBoolVector[k] = Color.RandomGauss(0, stdDev);
+                        }
+                        _boolFilterVector[i, j] = newBoolVector;
+
+                        ColorVector newFloatVector = new ColorVector(Floats[0].Length);
+                        for (int k = 0; k < Floats[0].Length; k++)
+                        {
+                            if (_floatFilterVector[i,j].Length > k)
+                                newFloatVector[k] = _floatFilterVector[i, j][k];
+                            else
+                                newFloatVector[k] = Color.RandomGauss(0, stdDev);
+                        }
+                        _floatFilterVector[i, j] = newFloatVector;
+                    }
+                }
+            }
         }
 
         _filters = new Color[_outputDimensions, _batchSize][];
