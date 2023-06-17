@@ -51,6 +51,34 @@ public class FeatureMap
         set => _map[y * Width + x] = value;
     }
 
+    public static FeatureMap Random(int width, int length)
+    {
+        FeatureMap map = new FeatureMap(width, length);
+        for(int y = 0; y < length; y++)
+        {
+            for(int x = 0; x < width; x++)
+            {
+                map[x, y] = Color.RandomGauss(0.5f, 0.2f).Clamp(1);
+            }
+        }
+        return map;
+    }
+
+    public bool HasNaN()
+    {
+        for (int i = 0; i < Area; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                if (float.IsNaN(_map[i][j]))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public MemoryBuffer1D<Color, Stride1D.Dense> Allocate(Accelerator accelerator)
     {
         return accelerator.Allocate1D(_map);

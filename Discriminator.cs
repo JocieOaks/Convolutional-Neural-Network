@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using System.Diagnostics;
 
 public class Discriminator : ConvolutionalNeuralNetwork
 {
@@ -152,67 +153,59 @@ public class Discriminator : ConvolutionalNeuralNetwork
         _ready = true;
     }
 
-    public (float, float) Train(ImageInput[] real, ImageInput[] fake, float learningRate, float momentum, bool discriminatorStep)
+    public float Train(ImageInput[] images, float learningRate, float momentum, int step)
     {
         if (!_ready)
             throw new InvalidOperationException("Network has not finished setup");
 
-        ImageInput[] total = real.Concat(fake).ToArray();
+        Forward(images);
 
-        Forward(total);
-
-        float discriminatorLoss = 0;
-        for (int i = 0; i < real.Length; i++)
+        float totalLoss = 0;
+        for (int i = 0; i < images.Length; i++)
         {
-            Vector classificationVector = ClassificationVectorization.Vectorize(real[i].Bools, real[i].Floats);
+            Vector classificationVector = ClassificationVectorization.Vectorize(images[i].Bools, images[i].Floats);
             float score = Vector.Dot(_imageVectorsNorm[i], classificationVector);
-            float loss = MathF.Pow(score - 1, 2);
-            discriminatorLoss += loss;
-            _discriminatorGradients[i] = loss * (2 * score - 2) * classificationVector;
-            _generatorGradients[i] ??= new Vector(_classificationBoolsLength + _classificationFloatsLength);
-        }
+            float loss = step == 1 ? MathF.Pow(score + 1, 2) : MathF.Pow(score - 1, 2);
+            totalLoss += loss;
 
-        float generatorLoss = 0;
-        for (int i = 0; i < fake.Length; i++)
-        {
-            Vector classificationVector = ClassificationVectorization.Vectorize(fake[i].Bools, fake[i].Floats);
-            float score = Vector.Dot(_imageVectorsNorm[i + real.Length], classificationVector);
-            float loss = MathF.Pow(score + 1, 2);
-            discriminatorLoss += loss;
-            _discriminatorGradients[i + real.Length] = loss * (2 * score + 2) * classificationVector;
-
-            loss = MathF.Pow(score - 1, 2);
-            generatorLoss += loss;
-            _generatorGradients[i + real.Length] = loss * (2 * score - 2) * classificationVector;
-        }
-
-        if (_previousImageGradient != null)
-        {
-            for (int i = 0; i < _batchSize; i++)
+            switch (step)
             {
-                _discriminatorGradients[i] += _previousImageGradient[i] * momentum;
+                case 0:
+                    _discriminatorGradients[i] = loss * (2 * score - 2) * classificationVector;
+                    break;
+                case 1:
+                    _discriminatorGradients[i] = loss * (2 * score + 2) * classificationVector;
+                    break;
+                case 2:
+                    _generatorGradients[i] = loss * (2 * score - 2) * classificationVector;
+                    break;
             }
         }
-        _previousImageGradient = _discriminatorGradients;
 
-        discriminatorLoss /= _batchSize;
-        generatorLoss /= fake.Length;
+        if (step != 2)
+        {
+            if (_previousImageGradient != null)
+            {
+                for (int i = 0; i < _batchSize; i++)
+                {
+                    _discriminatorGradients[i] += _previousImageGradient[i] * momentum;
+                }
+            }
+            _previousImageGradient = _discriminatorGradients;
 
+            Backwards(_discriminatorGradients, images, learningRate);
+        }
 
-        if(discriminatorStep)
-            Backwards(_discriminatorGradients, total, learningRate);
-
-        return (discriminatorLoss, generatorLoss);
+        return totalLoss / images.Length;
     }
 
-    public FeatureMap[,] GeneratorGradient(ImageInput[] real, ImageInput[] fake)
+    public FeatureMap[,] GeneratorGradient(ImageInput[] inputs)
     {
-        ImageInput[] total = real.Concat(fake).ToArray();
-        Backwards(_generatorGradients, total, 0);
-        FeatureMap[,] gradient = new FeatureMap[1, fake.Length];
-        for (int i = 0; i < fake.Length; i++)
+        Backwards(_generatorGradients, inputs, 0);
+        FeatureMap[,] gradient = new FeatureMap[1, inputs.Length];
+        for (int i = 0; i < inputs.Length; i++)
         {
-            gradient[0, i] = FinalOutGradient[0, i + real.Length];
+            gradient[0, i] = FinalOutGradient[0, i + inputs.Length];
         }
 
         return gradient;

@@ -28,11 +28,10 @@ public class Generator : ConvolutionalNeuralNetwork
             FirstInGradients[0, i] = gradients[0, i];
         }
 
-        for (int j = Depth - 1; j > 0; j--)
+        for (int i = Depth - 1; i >= 0; i--)
         {
-            StopWatch(() => _layers[j].Backwards(learningRate), $"Backwards {j} {_layers[j].Name}");
+            StopWatch(() => _layers[i].Backwards(learningRate), $"Backwards {i} {_layers[i].Name}");
         }
-        StopWatch(() => (_layers[0] as ConvolutionalLayer).BackwardsUpdateOnly(learningRate), $"Backwards {0} {_layers[0].Name}");
     }
 
     public FeatureMap[,] Forward(ImageInput[] input, bool inference = false)
@@ -44,15 +43,15 @@ public class Generator : ConvolutionalNeuralNetwork
             _classificationFloats[i] = input[i].Floats;
         }
 
-        for (int j = 0; j < Depth; j++)
+        for (int i = 0; i < Depth; i++)
         {
-            if (inference && _layers[j] is DropoutLayer)
+            if (inference && _layers[i] is DropoutLayer)
             {
-                StopWatch(() => (_layers[j] as DropoutLayer).ForwardInference(), $"Forwards {j} {_layers[j].Name}");
+                StopWatch(() => (_layers[i] as DropoutLayer).ForwardInference(), $"Forwards {i} {_layers[i].Name}");
             }
             else
             {
-                StopWatch(() => _layers[j].Forward(), $"Forwards {j} {_layers[j].Name}");
+                StopWatch(() => _layers[i].Forward(), $"Forwards {i} {_layers[i].Name}");
             }
         }
 
@@ -62,6 +61,11 @@ public class Generator : ConvolutionalNeuralNetwork
     public override void StartUp(int batchSize, int width, int length, int boolsLength, int floatsLength)
     {
         base.StartUp(batchSize, width, length, boolsLength, floatsLength);
+
+        //_layers.Insert(0, new DropoutLayer(0.5f));
+        _layers.Remove(_layers.FindLast(x => x is ReLULayer));
+        _layers.Remove(_layers.FindLast(x => x is BatchNormalizationLayer));
+
         _classificationBools = new bool[_batchSize][];
         _classificationFloats = new float[_batchSize][];
         for (int i = 0; i < batchSize; i++)

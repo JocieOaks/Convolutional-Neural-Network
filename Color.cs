@@ -153,12 +153,12 @@ public readonly struct Color
 
     public Color ReLU()
     {
-        return new Color(R < 0 ? 0 : R, G < 0 ? 0 : G, B < 0 ? 0 : B);
+        return new Color(R < 0 ? 0.1f * R : R, G < 0 ? 0.1f * G : G, B < 0 ? 0.1f * B : B);
     }
 
     public Color ReLUPropogation()
     {
-        return new Color(R < 0 ? 0 : 1, G < 0 ? 0 : 1, B < 0 ? 0 : 1);
+        return new Color(R < 0 ? 0.1f : 1, G < 0 ? 0.1f : 1, B < 0 ? 0.1f : 1);
     }
 
     public override string ToString()
