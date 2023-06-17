@@ -15,14 +15,20 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
     [JsonProperty] private FeatureMap _matrixGreen;
     [JsonProperty] private FeatureMap _matrixRed;
 
-    public FullyConnectedLayer(int outputDimensions) : base(1, 1)
+    private int _dimensionMultiplier;
+
+    public FullyConnectedLayer() : base(1, 1)
     {
-        _outputDimensions = outputDimensions;
     }
 
-    [JsonConstructor]
-    private FullyConnectedLayer() : base()
+    public void SetOutputDimensions(int dimensions)
     {
+        _outputDimensions = dimensions;
+    }
+
+    public void SetOutputMultiplier(int multiplier)
+    {
+        _dimensionMultiplier = multiplier;
     }
 
     public override string Name => "Fully Connected Layer";
@@ -260,7 +266,13 @@ public class FullyConnectedLayer : Layer, IPrimaryLayer
     {
         if (_matrixRed == null)
         {
-            BaseStartup(inputs, outGradients, -inputs.GetLength(0) / _outputDimensions);
+            if (_outputDimensions != 0)
+                BaseStartup(inputs, outGradients, -inputs.GetLength(0) / _outputDimensions);
+            else if (_dimensionMultiplier != 0)
+                BaseStartup(inputs, outGradients, _dimensionMultiplier);
+            else
+                BaseStartup(inputs, outGradients, 1);
+
             float variance = 0.666f / (_inputDimensions + _outputDimensions);
             float stdDev = MathF.Sqrt(variance);
             _matrixRed = new FeatureMap(_inputDimensions, _outputDimensions);
