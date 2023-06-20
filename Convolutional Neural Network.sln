@@ -3,7 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.6.33801.468
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Convolutional Neural Network", "Convolutional Neural Network.csproj", "{BBCBEF29-3AE8-4186-8F7D-AC10F9016945}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Convolutional Neural Network", "Convolutional Neural Network.csproj", "{BBCBEF29-3AE8-4186-8F7D-AC10F9016945}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CNNAuxilary", "CNN-Testing\CNNAuxilary.csproj", "{4616F605-1BD5-4AE7-8995-F6562DBC3BDD}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +17,10 @@ Global
 		{BBCBEF29-3AE8-4186-8F7D-AC10F9016945}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BBCBEF29-3AE8-4186-8F7D-AC10F9016945}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BBCBEF29-3AE8-4186-8F7D-AC10F9016945}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4616F605-1BD5-4AE7-8995-F6562DBC3BDD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4616F605-1BD5-4AE7-8995-F6562DBC3BDD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4616F605-1BD5-4AE7-8995-F6562DBC3BDD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4616F605-1BD5-4AE7-8995-F6562DBC3BDD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
