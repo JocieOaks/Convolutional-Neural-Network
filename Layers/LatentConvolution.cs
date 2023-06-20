@@ -110,15 +110,16 @@ namespace ConvolutionalNeuralNetwork.Layers
                         Color gradient = new Color(_filterGradients[i, j][k * 3], _filterGradients[i, j][k * 3 + 1], _filterGradients[i, j][k * 3 + 2]).Clamp(CLAMP);
                         for (int l = 0; l < _boolFilterVector[i, k].Length; l++)
                         {
-                            Color first = _boolsFirstMoment[i, k][l] = firstMomentDecay * _boolsFirstMoment[i, k][l] + (Bools[j][l] ? (1 - firstMomentDecay) * gradient : new Color());
-                            Color second = _boolsSecondMoment[i, k][l] = secondMomentDecay * _boolsSecondMoment[i, k][l] + (1 - secondMomentDecay) * Color.Pow(first, 2);
+                            Color gradientColor = Bools[j][l] ? (1 - firstMomentDecay) * gradient : new Color();
+                            Color first = _boolsFirstMoment[i, k][l] = firstMomentDecay * _boolsFirstMoment[i, k][l] + gradientColor;
+                            Color second = _boolsSecondMoment[i, k][l] = secondMomentDecay * _boolsSecondMoment[i, k][l] + (1 - secondMomentDecay) * Color.Pow(gradientColor, 2);
                             _boolFilterVector[i, k][l] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
                         }
 
                         for (int l = 0; l < _floatFilterVector[i, k].Length; l++)
                         {
                             Color first = _floatsFirstMoment[i, k][l] = firstMomentDecay * _floatsFirstMoment[i, k][l] + (1 - firstMomentDecay) * gradient * Floats[j][l];
-                            Color second = _floatsSecondMoment[i, k][l] = secondMomentDecay * _floatsSecondMoment[i, k][l] + (1 - secondMomentDecay) * Color.Pow(first, 2);
+                            Color second = _floatsSecondMoment[i, k][l] = secondMomentDecay * _floatsSecondMoment[i, k][l] + (1 - secondMomentDecay) * Color.Pow(gradient * Floats[j][l], 2);
                             _floatFilterVector[i, k][l] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
                         }
                     }

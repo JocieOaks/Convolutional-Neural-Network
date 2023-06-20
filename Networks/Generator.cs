@@ -69,7 +69,7 @@ namespace ConvolutionalNeuralNetwork.Networks
             }
 
             _updateStep++;
-            float correctionLearningRate = CorrectionLearningRate(learningRate, 0.9f, 0.99f);
+            float correctionLearningRate = CorrectionLearningRate(learningRate, 0.9f, 0.999f);
 
             for (int i = Depth - 1; i > 0; i--)
             {

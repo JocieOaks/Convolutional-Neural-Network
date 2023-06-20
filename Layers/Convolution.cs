@@ -467,9 +467,11 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for(int j = 0; j < _filterSize * _filterSize; j++)
                 {
-                    Color first = _filtersFirstMoment[i, j] = firstMomentDecay * _filtersFirstMoment[i, j] + (1 - firstMomentDecay) * new Color(_filterGradients[i][j * 3], _filterGradients[i][j * 3 + 1], _filterGradients[i][j * 3 + 2]);
-                    Color second = _filterSecondMoment[i, j] = secondMomentDecay * _filterSecondMoment[i, j] + (1 - secondMomentDecay) * Color.Pow(first, 2);
-                    _filters[i][j] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+                    Color gradient = new Color(_filterGradients[i][j * 3], _filterGradients[i][j * 3 + 1], _filterGradients[i][j * 3 + 2]);
+                    Color first = _filtersFirstMoment[i, j] = firstMomentDecay * _filtersFirstMoment[i, j] + (1 - firstMomentDecay) * gradient;
+                    Color second = _filterSecondMoment[i, j] = secondMomentDecay * _filterSecondMoment[i, j] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
+                    Color result = learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+                    _filters[i][j] -= result;
                 }
             }
         }
