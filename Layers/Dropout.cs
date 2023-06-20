@@ -36,7 +36,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         public override string Name => "Dropout Layer";
 
         /// <inheritdoc/>
-        public override void Backwards(float learningRate)
+        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
             Context context = ConvolutionalNeuralNetwork.Utility.Context;
             Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;

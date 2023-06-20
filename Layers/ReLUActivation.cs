@@ -17,7 +17,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         public override string Name => "Activation Layer";
 
-        public override void Backwards(float learningRate)
+        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
             Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
 

@@ -3,6 +3,7 @@ using ILGPU;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
 using System.Runtime.InteropServices;
+using System.Runtime.Serialization;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
@@ -14,6 +15,8 @@ namespace ConvolutionalNeuralNetwork.Layers
     public class BatchNormalization : Layer, ISecondaryLayer
     {
         [JsonProperty] private ColorVector _bias;
+        [JsonProperty] private ColorVector _biasFirstMoment;
+        [JsonProperty] private ColorVector _biasSecondMoment;
         private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceGradients;
         private MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] _deviceInfos;
         private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceMeans;
@@ -23,6 +26,8 @@ namespace ConvolutionalNeuralNetwork.Layers
         private ColorVector _mean;
         private ColorVector _sigma;
         [JsonProperty] private ColorVector _weight;
+        [JsonProperty] private ColorVector _weightFirstMoment;
+        [JsonProperty] private ColorVector _weightSecondMoment;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BatchNormalization"/> class.
@@ -36,7 +41,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         [JsonIgnore] public override string Name => "Batch Normalization Layer";
 
         /// <inheritdoc/>
-        public override void Backwards(float learningRate)
+        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
             Context context = ConvolutionalNeuralNetwork.Utility.Context;
             Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
@@ -102,8 +107,13 @@ namespace ConvolutionalNeuralNetwork.Layers
                     _deviceOutputs[i, j].Dispose();
                 }
 
-                _weight[i] -= learningRate * gradients[i].WeightGradient.Clamp(1);
-                _bias[i] -= learningRate * gradients[i].BiasGradient.Clamp(1);
+                Color first = _weightFirstMoment[i] = firstMomentDecay * _weightFirstMoment[i] + (1 - firstMomentDecay) * gradients[i].WeightGradient;
+                Color second = _weightSecondMoment[i] = secondMomentDecay * _weightSecondMoment[i] + (1 - secondMomentDecay) * Color.Pow(first, 2);
+                _weight[i] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+
+                first = _biasFirstMoment[i] = firstMomentDecay * _biasFirstMoment[i] + (1 - firstMomentDecay) * gradients[i].BiasGradient;
+                second = _biasSecondMoment[i] = secondMomentDecay * _biasSecondMoment[i] + (1 - secondMomentDecay) * Color.Pow(first, 2);
+                _weight[i] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
 
                 _deviceInfos[i].Dispose();
                 _deviceMeans[i].Dispose();
@@ -159,7 +169,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _sigma[i] = Color.Pow((Color)_deviceVariances[i] / (Infos(i).Area * _batchSize) + new Color(ConvolutionalNeuralNetwork.Utility.ASYMPTOTEERRORFACTOR), 0.5f);
+                _sigma[i] = Color.Pow((Color)_deviceVariances[i] / (Infos(i).Area * _batchSize) + new Color(ConvolutionalNeuralNetwork.Utility.ASYMPTOTEERRORCORRECTION), 0.5f);
 
                 Index2D index = new(Infos(i).Width, Infos(i).Length);
                 _deviceValues[i] = accelerator.Allocate1D(new Color[] { _mean[i], _weight[i] / _sigma[i], _bias[i] });
@@ -189,6 +199,23 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
+        /// <summary>
+        /// Called when the layer is deserialized.
+        /// Temporary function to allow for loading models that were created before Adam optimization was used implemented.
+        /// </summary>
+        /// <param name="context">The streaming context for deserialization.</param>
+        [OnDeserialized]
+        public void OnDeserialized(StreamingContext context)
+        {
+            if (_weightFirstMoment == null || _weightSecondMoment == null || _biasFirstMoment == null || _biasSecondMoment == null)
+            {
+                _weightFirstMoment = new ColorVector(_weight.Length);
+                _weightSecondMoment = new ColorVector(_weight.Length);
+                _biasFirstMoment = new ColorVector(_bias.Length);
+                _biasSecondMoment = new ColorVector(_bias.Length);
+            }
+        }
+
         /// <inheritdoc/>
         public override void Reset()
         {
@@ -199,6 +226,8 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
+
+
         /// <inheritdoc/>
         public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients)
         {
@@ -207,11 +236,14 @@ namespace ConvolutionalNeuralNetwork.Layers
             if (_weight == null)
             {
                 _weight = new ColorVector(_inputDimensions);
+                _weightFirstMoment = new ColorVector(_inputDimensions);
+                _weightSecondMoment = new ColorVector(_inputDimensions);
                 _bias = new ColorVector(_inputDimensions);
+                _biasFirstMoment = new ColorVector(_inputDimensions);
+                _biasSecondMoment = new ColorVector(_inputDimensions);
                 for (int i = 0; i < _inputDimensions; i++)
                 {
                     _weight[i] = new Color(1);
-                    _bias[i] = new Color(0);
                 }
             }
 

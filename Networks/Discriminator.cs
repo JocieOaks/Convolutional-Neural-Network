@@ -89,24 +89,27 @@ namespace ConvolutionalNeuralNetwork.Networks
                 images[0, i] = input[i].Image;
             }
 
+            _updateStep++;
+            float correctionLearningRate = CorrectionLearningRate(learningRate, 0.9f, 0.99f);
+
             FeatureMap[,] transposedGradient = new FeatureMap[0, 0];
-            Utility.StopWatch(() => _vectorizationLayer.Backwards(VectorNormalization.Backwards(_imageVectors, gradients), learningRate), $"Backwards {_vectorizationLayer.Name}", PRINTSTOPWATCH);
+            Utility.StopWatch(() => _vectorizationLayer.Backwards(VectorNormalization.Backwards(_imageVectors, gradients), correctionLearningRate), $"Backwards {_vectorizationLayer.Name}", PRINTSTOPWATCH);
 
             FeatureMap[,] currentGradient = Utility.TransposeArray(transposedGradient);
 
             for (int j = Depth - 1; j > 0; j--)
             {
-                Utility.StopWatch(() => _layers[j].Backwards(learningRate), $"Backwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
+                Utility.StopWatch(() => _layers[j].Backwards(correctionLearningRate, 0.9f, 0.999f), $"Backwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
             }
 
             //A learning rate of 0 indicates that the gradient is going to be used by a generator.
-            if (learningRate == 0 || _layers[0] is not Convolution convolution)
+            if (correctionLearningRate == 0 || _layers[0] is not Convolution convolution)
             {
-                Utility.StopWatch(() => _layers[0].Backwards(learningRate), $"Backwards {0} {_layers[0].Name}", PRINTSTOPWATCH);
+                Utility.StopWatch(() => _layers[0].Backwards(correctionLearningRate, 0.9f, 0.999f), $"Backwards {0} {_layers[0].Name}", PRINTSTOPWATCH);
             }
             else
             {
-                Utility.StopWatch(() => convolution.BackwardsUpdateOnly(learningRate), $"Backwards {0} {_layers[0].Name}", PRINTSTOPWATCH);
+                Utility.StopWatch(() => convolution.BackwardsUpdateOnly(correctionLearningRate, 0.9f, 0.999f), $"Backwards {0} {_layers[0].Name}", PRINTSTOPWATCH);
             }
         }
 

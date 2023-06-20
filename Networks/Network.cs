@@ -24,6 +24,7 @@ namespace ConvolutionalNeuralNetwork
 
         private ActivationPattern _activationPattern;
         [JsonProperty] private List<(int, int)> _skipConnections;
+        [JsonProperty] protected int _updateStep;
 
         /// <value>Enumerates over the <see cref="IPrimaryLayer"/>'s of the <see cref="Network"/> that define its structure.</value>
         [JsonIgnore]
@@ -74,6 +75,18 @@ namespace ConvolutionalNeuralNetwork
             SkipConnectionConcatenate concatenationLayer = skipLayer.GetConcatenationLayer();
             _primaryLayers.Insert(index2, concatenationLayer);
             _primaryLayers.Insert(index1, skipLayer);
+        }
+
+        /// <summary>
+        /// Calculates the learning rate with the correction for moment bias.
+        /// </summary>
+        /// <param name="learningRate">The overall learning rate for the layer updates, corrected for the influence of bias in the first and second moments.</param>
+        /// <param name="firstMomentDecay">The exponential decay rate for the first moment.</param>
+        /// <param name="secondMomentDecay">The exponential decay rate for the second moment.</param>
+        /// <returns>Returns the learning rate multiplied by the correction term.</returns>
+        protected float CorrectionLearningRate(float learningRate, float firstMomentDecay, float secondMomentDecay)
+        {
+            return learningRate * MathF.Sqrt(1 - MathF.Pow(secondMomentDecay, _updateStep)) / (1 - MathF.Pow(firstMomentDecay, _updateStep));
         }
 
         /// <summary>

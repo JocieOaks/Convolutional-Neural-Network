@@ -24,7 +24,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             return _concatenationLayer;
         }
 
-        public override void Backwards(float learningRate)
+        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
             Context context = ConvolutionalNeuralNetwork.Utility.Context;
             Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;

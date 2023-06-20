@@ -28,7 +28,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         public override string Name => "Scaling Layer";
 
-        public override void Backwards(float learningRatee)
+        public override void Backwards(float learningRatee, float firstMomentDecay, float secondMomentDecay)
         {
             Context context = ConvolutionalNeuralNetwork.Utility.Context;
             Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;

@@ -10,7 +10,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         public int OutputDimensions { get; }
 
-        void Backwards(float learningRate);
+        void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay);
 
         void Forward();
 

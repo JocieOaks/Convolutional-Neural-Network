@@ -10,7 +10,10 @@ namespace ConvolutionalNeuralNetwork
     public static class Utility
     {
         //Used to avoid divide by zero or log of zero going to infinity.
-        public const float ASYMPTOTEERRORFACTOR = 1e-6f;
+        public const float ASYMPTOTEERRORCORRECTION = 1e-6f;
+
+        /// <value>Color with very small values. Used to avoid asymptotic behaviour when a value goes to zero.</value>
+        public static DataTypes.Color AsymptoteErrorColor { get; } = new(ASYMPTOTEERRORCORRECTION);
 
         public static Context Context { get; } = Context.Create(builder => builder.Cuda());
         public static Accelerator Accelerator { get; } = Context.CreateCudaAccelerator(0);
