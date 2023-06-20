@@ -2,6 +2,7 @@
 using ILGPU;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
+using System.Runtime.Serialization;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
@@ -23,7 +24,8 @@ namespace ConvolutionalNeuralNetwork.Layers
         private float[][] _filterGradients;
 
         [JsonProperty] private Color[][] _filters;
-
+        [JsonProperty] private Color[,] _filterSecondMoment;
+        [JsonProperty] private Color[,] _filtersFirstMoment;
         /// <summary>
         /// Initializes a new instance of the <see cref="Convolution"/> layer.
         /// </summary>
@@ -49,12 +51,12 @@ namespace ConvolutionalNeuralNetwork.Layers
         public override string Name => "Convolutional Layer";
 
         /// <inheritdoc/>
-        public override void Backwards(float learningRate)
+        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
             if (learningRate <= 0)
                 BackwardsNoUpdate();
             else
-                BackwardsUpdate(learningRate);
+                BackwardsUpdate(learningRate, firstMomentDecay, secondMomentDecay);
         }
 
         /// <summary>
@@ -62,7 +64,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// propagation. Used in the special case of the first layer of a <see cref="Network"/> to save time.
         /// </summary>
         /// <param name="learningRate">Controls how much the layer is updated with each backpropagation.</param>
-        public void BackwardsUpdateOnly(float learningRate)
+        public void BackwardsUpdateOnly(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
             Context context = ConvolutionalNeuralNetwork.Utility.Context;
             Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
@@ -106,16 +108,13 @@ namespace ConvolutionalNeuralNetwork.Layers
                 _deviceFilterGradients[i].CopyToCPU(_filterGradients[i]);
                 _deviceFilterGradients[i].Dispose();
 
-                for (int j = 0; j < _filterSize * _filterSize; j++)
-                {
-                    _filters[i][j] -= learningRate * LEARNINGMULTIPLIER * new Color(_filterGradients[i][j * 3], _filterGradients[i][j * 3 + 1], _filterGradients[i][j * 3 + 2]).Clamp(CLAMP);
-                }
-
                 for (int j = 0; j < _batchSize; j++)
                 {
                     _deviceInGradients[i, j].Dispose();
                 }
             }
+
+            UpdateFilter(learningRate, firstMomentDecay, secondMomentDecay);
         }
 
         /// <inheritdoc/>
@@ -169,6 +168,21 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
+        /// <summary>
+        /// Called when the layer is deserialized.
+        /// Temporary function to allow for loading models that were created before Adam optimization was used implemented.
+        /// </summary>
+        /// <param name="context">The streaming context for deserialization.</param>
+        [OnDeserialized]
+        public void OnDeserialized(StreamingContext context)
+        {
+            if (_filtersFirstMoment == null || _filterSecondMoment == null)
+            {
+                _filtersFirstMoment = new Color[_filters.Length, _filterSize * _filterSize];
+                _filterSecondMoment = new Color[_filters.Length, _filterSize * _filterSize];
+            }
+        }
+
         /// <inheritdoc/>
         public override void Reset()
         {
@@ -191,6 +205,8 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 BaseStartup(input, outGradients, _dimensionsMultiplier);
                 _filters = new Color[_outputDimensions][];
+                _filtersFirstMoment = new Color[_outputDimensions, _filterSize * _filterSize];
+                _filterSecondMoment = new Color[_outputDimensions, _filterSize * _filterSize];
 
                 float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize + _inputDimensions * _filterSize * _filterSize);
                 float stdDev = MathF.Sqrt(variance);
@@ -376,8 +392,10 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <summary>
         /// Perform standard backpropagation through the layer, updating it's weights. Called when learning rate is greater than 0.
         /// </summary>
-        /// <param name="learningRate">Controls how much the layer is updated with each backpropagation.</param>
-        private void BackwardsUpdate(float learningRate)
+        /// <param name="learningRate">The overall learning rate for the layer updates, corrected for the influence of bias in the first and second moments.</param>
+        /// <param name="firstMomentDecay">The exponential decay rate for the first moment.</param>
+        /// <param name="secondMomentDecay">The exponential decay rate for the second moment.</param>
+        private void BackwardsUpdate(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
             Context context = ConvolutionalNeuralNetwork.Utility.Context;
             Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
@@ -428,14 +446,32 @@ namespace ConvolutionalNeuralNetwork.Layers
                 _deviceFilterGradients[i].Dispose();
                 _deviceFilters[i].Dispose();
 
-                for (int j = 0; j < _filterSize * _filterSize; j++)
-                {
-                    _filters[i][j] -= learningRate * LEARNINGMULTIPLIER * new Color(_filterGradients[i][j * 3], _filterGradients[i][j * 3 + 1], _filterGradients[i][j * 3 + 2]).Clamp(CLAMP);
-                }
-
                 for (int j = 0; j < _batchSize; j++)
                 {
                     _deviceInGradients[i, j].Dispose();
+                }
+            }
+
+            UpdateFilter(learningRate, firstMomentDecay, secondMomentDecay);
+        }
+
+        /// <summary>
+        /// Updates the filter weights along with the first and second moments.
+        /// </summary>
+        /// <param name="learningRate">The overall learning rate for the layer updates, corrected for the influence of bias in the first and second moments.</param>
+        /// <param name="firstMomentDecay">The exponential decay rate for the first moment.</param>
+        /// <param name="secondMomentDecay">The exponential decay rate for the second moment.</param>
+        private void UpdateFilter(float learningRate, float firstMomentDecay, float secondMomentDecay)
+        {
+            for(int i = 0; i < _outputDimensions; i++)
+            {
+                for(int j = 0; j < _filterSize * _filterSize; j++)
+                {
+                    Color gradient = new Color(_filterGradients[i][j * 3], _filterGradients[i][j * 3 + 1], _filterGradients[i][j * 3 + 2]);
+                    Color first = _filtersFirstMoment[i, j] = firstMomentDecay * _filtersFirstMoment[i, j] + (1 - firstMomentDecay) * gradient;
+                    Color second = _filterSecondMoment[i, j] = secondMomentDecay * _filterSecondMoment[i, j] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
+                    Color result = learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+                    _filters[i][j] -= result;
                 }
             }
         }

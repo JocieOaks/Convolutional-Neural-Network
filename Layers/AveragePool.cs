@@ -34,7 +34,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         [JsonIgnore] public override string Name => "Average Pool Layer";
 
         /// <inheritdoc/>
-        public override void Backwards(float learningRate)
+        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
             Context context = ConvolutionalNeuralNetwork.Utility.Context;
             Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;

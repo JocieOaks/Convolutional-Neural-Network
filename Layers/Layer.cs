@@ -60,8 +60,10 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// Backpropagates through the <see cref="Layer"/> updating any layer weights, and calculating the outgoing gradient that is
         /// shared with the previous layer.
         /// </summary>
-        /// <param name="learningRate">Controls how much the layer is updated with each backpropagation.</param>
-        public abstract void Backwards(float learningRate);
+        /// <param name="learningRate">The overall learning rate for the layer updates, corrected for the influence of bias in the first and second moments.</param>
+        /// <param name="firstMomentDecay">The exponential decay rate for the first moment.</param>
+        /// <param name="secondMomentDecay">The exponential decay rate for the second moment.</param>
+        public abstract void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay);
 
         /// <summary>
         /// Forward propagates through the <see cref="Layer"/> calculating the output <see cref="FeatureMap"/> that is shared with

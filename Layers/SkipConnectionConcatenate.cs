@@ -33,7 +33,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
-        public override void Backwards(float learningRate)
+        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
             for (int i = 0; i < _inputDimensions; i++)
             {

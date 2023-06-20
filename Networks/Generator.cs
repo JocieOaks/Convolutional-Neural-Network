@@ -68,18 +68,21 @@ namespace ConvolutionalNeuralNetwork.Networks
                 FirstInGradients[0, i] = gradients[0, i];
             }
 
+            _updateStep++;
+            float correctionLearningRate = CorrectionLearningRate(learningRate, 0.9f, 0.999f);
+
             for (int i = Depth - 1; i > 0; i--)
             {
-                Utility.StopWatch(() => _layers[i].Backwards(learningRate), $"Backwards {i} {_layers[i].Name}", PRINTSTOPWATCH);
+                Utility.StopWatch(() => _layers[i].Backwards(correctionLearningRate, 0.9f, 0.999f), $"Backwards {i} {_layers[i].Name}", PRINTSTOPWATCH);
             }
 
             if (_layers[0] is not Convolution convolution)
             {
-                Utility.StopWatch(() => _layers[0].Backwards(learningRate), $"Backwards {0} {_layers[0].Name}", PRINTSTOPWATCH);
+                Utility.StopWatch(() => _layers[0].Backwards(correctionLearningRate, 0.9f, 0.999f), $"Backwards {0} {_layers[0].Name}", PRINTSTOPWATCH);
             }
             else
             {
-                Utility.StopWatch(() => convolution.BackwardsUpdateOnly(learningRate), $"Backwards {0} {_layers[0].Name}", PRINTSTOPWATCH);
+                Utility.StopWatch(() => convolution.BackwardsUpdateOnly(correctionLearningRate, 0.9f, 0.999f), $"Backwards {0} {_layers[0].Name}", PRINTSTOPWATCH);
             }
         }
 
