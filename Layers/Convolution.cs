@@ -26,6 +26,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         [JsonProperty] private Color[][] _filters;
         [JsonProperty] private Color[,] _filterSecondMoment;
         [JsonProperty] private Color[,] _filtersFirstMoment;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="Convolution"/> layer.
         /// </summary>
@@ -49,6 +50,93 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         /// <inheritdoc/>
         public override string Name => "Convolutional Layer";
+
+        /// <summary>
+        /// An ILGPU kernal to update the <see cref="Convolution"/>'s filters.
+        /// </summary>
+        /// <param name="index">The index of the current kernal calculation to be made.</param>
+        /// <param name="inGradient">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the incoming
+        /// gradient from the following <see cref="Layer"/>.</param>
+        /// <param name="input">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the input from the
+        /// previous <see cref="Layer"/>.</param>
+        /// <param name="filterGradient">An <see cref="ArrayView1D{T, TStride}"/> of floats to sum the gradient of the filters.
+        /// Because <see cref="Color"/> cannot be summed atomically, every three floats represents a single
+        /// <see cref="Color"/> in the gradient.</param>
+        /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
+        public static void BackwardsFilterKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> input, ArrayView<float> filterGradient, ArrayView<LayerInfo> info)
+        {
+            float dL = inGradient[info[0].OutputIndex(index.X, index.Y)][index.Z] * info[0].InverseKSquared;
+
+            for (int j = 0; j < info[0].FilterSize; j++)
+            {
+                for (int i = 0; i < info[0].FilterSize; i++)
+                {
+                    if (info[0].TryGetInputIndex(index.X, i, index.Y, j, out int inputIndex))
+                    {
+                        int filterIndex = info[0].FilterIndex(i, j);
+                        float dK = dL * input[inputIndex][index.Z];
+                        Atomic.Add(ref filterGradient[filterIndex * 3 + index.Z], dK);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// An ILGPU kernal to calculate the gradients for backpropagating the previous layer.
+        /// </summary>
+        /// <param name="index">The index of the current kernal calculation to be made.</param>
+        /// <param name="inGradient">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the incoming
+        /// gradient from the following <see cref="Layer"/>.</param>
+        /// <param name="filter">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing one of the
+        /// <see cref="Convolution"/>'s filters.</param>
+        /// <param name="outGradient">An <see cref="ArrayView1D{T, TStride}"/> of floats to sum the outgoing gradient.
+        /// Because <see cref="Color"/> cannot be summed atomically, every three floats represents a single
+        /// <see cref="Color"/> in the gradient.</param>
+        /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
+        public static void BackwardsGradientKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> filter, ArrayView<float> outGradient, ArrayView<LayerInfo> info)
+        {
+            float dL = inGradient[info[0].OutputIndex(index.X, index.Y)][index.Z] * info[0].InverseKSquared;
+
+            for (int j = 0; j < info[0].FilterSize; j++)
+            {
+                for (int i = 0; i < info[0].FilterSize; i++)
+                {
+                    if (info[0].TryGetInputIndex(index.X, i, index.Y, j, out int inputIndex))
+                    {
+                        int filterIndex = info[0].FilterIndex(i, j);
+                        float dP = dL * filter[filterIndex][index.Z];
+                        Atomic.Add(ref outGradient[inputIndex * 3 + index.Z], dP);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// An ILGPU kernal for convoluting a <see cref="FeatureMap"/>.
+        /// </summary>
+        /// <param name="index">The index of the current kernal calculation to be made.</param>
+        /// <param name="input">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the input from the
+        /// previous <see cref="Layer"/>.</param>
+        /// <param name="convoluted">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s to set for the outgoing
+        /// convoluted <see cref="FeatureMap"/>.</param>
+        /// <param name="filter">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing one of the
+        /// <see cref="Convolution"/>'s filters.</param>
+        /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
+        public static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> convoluted, ArrayView<Color> filter, ArrayView<LayerInfo> info)
+        {
+            Color sum = new();
+
+            for (int j = 0; j < info[0].FilterSize; j++)
+            {
+                for (int i = 0; i < info[0].FilterSize; i++)
+                {
+                    if (info[0].TryGetInputIndex(index.X, i, index.Y, j, out int inputIndex))
+                        sum += filter[info[0].FilterIndex(i, j)] * input[inputIndex];
+                }
+            }
+
+            convoluted[info[0].OutputIndex(index.X, index.Y)] = sum * info[0].InverseKSquared;
+        }
 
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
@@ -237,94 +325,6 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             return (_outputs, _inGradients);
         }
-
-        /// <summary>
-        /// An ILGPU kernal to update the <see cref="Convolution"/>'s filters.
-        /// </summary>
-        /// <param name="index">The index of the current kernal calculation to be made.</param>
-        /// <param name="inGradient">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the incoming
-        /// gradient from the following <see cref="Layer"/>.</param>
-        /// <param name="input">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the input from the
-        /// previous <see cref="Layer"/>.</param>
-        /// <param name="filterGradient">An <see cref="ArrayView1D{T, TStride}"/> of floats to sum the gradient of the filters.
-        /// Because <see cref="Color"/> cannot be summed atomically, every three floats represents a single
-        /// <see cref="Color"/> in the gradient.</param>
-        /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        protected static void BackwardsFilterKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> input, ArrayView<float> filterGradient, ArrayView<LayerInfo> info)
-        {
-            float dL = inGradient[info[0].OutputIndex(index.X, index.Y)][index.Z] * info[0].InverseKSquared;
-
-            for (int j = 0; j < info[0].FilterSize; j++)
-            {
-                for (int i = 0; i < info[0].FilterSize; i++)
-                {
-                    if (info[0].TryGetInputIndex(index.X, i, index.Y, j, out int inputIndex))
-                    {
-                        int filterIndex = info[0].FilterIndex(i, j);
-                        float dK = dL * input[inputIndex][index.Z];
-                        Atomic.Add(ref filterGradient[filterIndex * 3 + index.Z], dK);
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// An ILGPU kernal to calculate the gradients for backpropagating the previous layer.
-        /// </summary>
-        /// <param name="index">The index of the current kernal calculation to be made.</param>
-        /// <param name="inGradient">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the incoming
-        /// gradient from the following <see cref="Layer"/>.</param>
-        /// <param name="filter">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing one of the
-        /// <see cref="Convolution"/>'s filters.</param>
-        /// <param name="outGradient">An <see cref="ArrayView1D{T, TStride}"/> of floats to sum the outgoing gradient.
-        /// Because <see cref="Color"/> cannot be summed atomically, every three floats represents a single
-        /// <see cref="Color"/> in the gradient.</param>
-        /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        protected static void BackwardsGradientKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> filter, ArrayView<float> outGradient, ArrayView<LayerInfo> info)
-        {
-            float dL = inGradient[info[0].OutputIndex(index.X, index.Y)][index.Z] * info[0].InverseKSquared;
-
-            for (int j = 0; j < info[0].FilterSize; j++)
-            {
-                for (int i = 0; i < info[0].FilterSize; i++)
-                {
-                    if (info[0].TryGetInputIndex(index.X, i, index.Y, j, out int inputIndex))
-                    {
-                        int filterIndex = info[0].FilterIndex(i, j);
-                        float dP = dL * filter[filterIndex][index.Z];
-                        Atomic.Add(ref outGradient[inputIndex * 3 + index.Z], dP);
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// An ILGPU kernal to convolute a <see cref="FeatureMap"/>.
-        /// </summary>
-        /// <param name="index">The index of the current kernal calculation to be made.</param>
-        /// <param name="input">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the input from the
-        /// previous <see cref="Layer"/>.</param>
-        /// <param name="convoluted">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s to set for the outgoing
-        /// convoluted <see cref="FeatureMap"/>.</param>
-        /// <param name="filter">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing one of the
-        /// <see cref="Convolution"/>'s filters.</param>
-        /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        protected static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> convoluted, ArrayView<Color> filter, ArrayView<LayerInfo> info)
-        {
-            Color sum = new();
-
-            for (int j = 0; j < info[0].FilterSize; j++)
-            {
-                for (int i = 0; i < info[0].FilterSize; i++)
-                {
-                    if (info[0].TryGetInputIndex(index.X, i, index.Y, j, out int inputIndex))
-                        sum += filter[info[0].FilterIndex(i, j)] * input[inputIndex];
-                }
-            }
-
-            convoluted[info[0].OutputIndex(index.X, index.Y)] = sum * info[0].InverseKSquared;
-        }
-
         /// <summary>
         /// Gets the <see cref="LayerInfo"/> for a particular dimension.
         /// </summary>

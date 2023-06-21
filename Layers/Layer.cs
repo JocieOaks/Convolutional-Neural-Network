@@ -47,41 +47,25 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
         }
 
-        /// <value>The name of the <see cref="Layer"/>, used for logging.</value>
+        /// <inheritdoc/>
         [JsonIgnore] public abstract string Name { get; }
 
-        /// <value>The number of dimensions in the <see cref="Layer"/>'s output.</value>
+        /// <inheritdoc/>
         [JsonIgnore] public int OutputDimensions => _outputDimensions;
 
-        /// <value>The output of the latest forward propagation through the <see cref="Layer"/>.</value>
+        /// <inheritdoc/>
         [JsonIgnore] public FeatureMap[,] Outputs => _outputs;
 
-        /// <summary>
-        /// Backpropagates through the <see cref="Layer"/> updating any layer weights, and calculating the outgoing gradient that is
-        /// shared with the previous layer.
-        /// </summary>
-        /// <param name="learningRate">The overall learning rate for the layer updates, corrected for the influence of bias in the first and second moments.</param>
-        /// <param name="firstMomentDecay">The exponential decay rate for the first moment.</param>
-        /// <param name="secondMomentDecay">The exponential decay rate for the second moment.</param>
+        /// <inheritdoc/>
         public abstract void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay);
 
-        /// <summary>
-        /// Forward propagates through the <see cref="Layer"/> calculating the output <see cref="FeatureMap"/> that is shared with
-        /// the next layer.
-        /// </summary>
+        /// <inheritdoc/>
         public abstract void Forward();
 
-        /// <summary>
-        /// Reset's the current <see cref="Layer"/> to it's initial weights or initial random weights.
-        /// </summary>
+        /// <inheritdoc/>
         public abstract void Reset();
 
-        /// <summary>
-        /// Initializes the <see cref="Layer"/> for the data set being used.
-        /// </summary>
-        /// <param name="inputs">The previous <see cref="Layer"/>'s output.</param>
-        /// <param name="outGradients">The previous <see cref="Layer"/>'s inGradient.</param>
-        /// <returns>Returns the output and inGradient to share with the next <see cref="Layer"/>.</returns>
+        /// <inheritdoc/>
         public abstract (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients);
 
         /// <summary>

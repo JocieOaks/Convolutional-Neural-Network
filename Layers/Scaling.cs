@@ -5,29 +5,20 @@ using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
+    /// <summary>
+    /// The <see cref="Scaling"/> class is a <see cref="Layer"/> for upsampling or downsampling a <see cref="FeatureMap"/>.
+    /// </summary>
     public class Scaling : Layer, IStructuralLayer
     {
-        private float _scaleWidth;
-        private float _scaleLength;
-        [JsonProperty] private int _outputWidth;
-        [JsonProperty] private int _outputLength;
         private MemoryBuffer1D<ScalingLayerInfo, Stride1D.Dense>[] _deviceInfos;
-        private FeatureMap[,] Scaled => _outputs;
-
-        public void SetScale(float width, float length)
-        {
-            _scaleWidth = width;
-            _scaleLength = length;
-        }
-
-        public void SetDimensions(int width, int length)
-        {
-            _outputWidth = width;
-            _outputLength = length;
-        }
-
+        [JsonProperty] private int _outputLength;
+        [JsonProperty] private int _outputWidth;
+        private float _scaleLength;
+        private float _scaleWidth;
+        /// <inheritdoc/>
         public override string Name => "Scaling Layer";
 
+        /// <inheritdoc/>
         public override void Backwards(float learningRatee, float firstMomentDecay, float secondMomentDecay)
         {
             Context context = ConvolutionalNeuralNetwork.Utility.Context;
@@ -63,6 +54,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
+        /// <inheritdoc/>
         public override void Forward()
         {
             Context context = ConvolutionalNeuralNetwork.Utility.Context;
@@ -84,7 +76,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceOutputs[i, j] = Scaled[i, j].AllocateEmpty(accelerator);
+                    _deviceOutputs[i, j] = _outputs[i, j].AllocateEmpty(accelerator);
 
                     forwardKernal(index, _deviceInputs[i, j].View, _deviceOutputs[i, j].View, _deviceInfos[i].View);
                 }
@@ -96,7 +88,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    Scaled[i, j].CopyFromBuffer(_deviceOutputs[i, j]);
+                    _outputs[i, j].CopyFromBuffer(_deviceOutputs[i, j]);
                     _deviceOutputs[i, j].Dispose();
                     _deviceInputs[i, j].Dispose();
                 }
@@ -104,10 +96,34 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
+        /// <inheritdoc/>
         public override void Reset()
         {
         }
 
+        /// <summary>
+        /// Sets all outgoing <see cref="FeatureMap"/>'s to have the same static dimensions.
+        /// </summary>
+        /// <param name="width">The width of the outgoing <see cref="FeatureMap"/>s.</param>
+        /// <param name="length">The length of the outgoing <see cref="FeatureMap"/>s.</param>
+        public void SetDimensions(int width, int length)
+        {
+            _outputWidth = width;
+            _outputLength = length;
+        }
+
+        /// <summary>
+        /// Sets the scales to rescale the incoming <see cref="FeatureMap"/>s.
+        /// </summary>
+        /// <param name="width">The ratio of the outgoing <see cref="FeatureMap"/>'s width to the incoming <see cref="FeatureMap"/>'s width.</param>
+        /// <param name="length">The ratio of the outgoing <see cref="FeatureMap"/>'s length to the incoming <see cref="FeatureMap"/>'s length.</param>
+        public void SetScale(float width, float length)
+        {
+            _scaleWidth = width;
+            _scaleLength = length;
+        }
+
+        /// <inheritdoc/>
         public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients)
         {
             _outputDimensions = _inputDimensions = inputs.GetLength(0);
@@ -115,7 +131,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             _batchSize = inputs.GetLength(1);
             _layerInfos = new ILayerInfo[_inputDimensions];
             _outGradients = outGradients;
-            _outputs = new FeatureMap[_outputDimensions, _batchSize];
+            base._outputs = new FeatureMap[_outputDimensions, _batchSize];
             _inGradients = new FeatureMap[_outputDimensions, _batchSize];
 
             _deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
@@ -132,6 +148,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 {
                     if (_scaleWidth == 0)
                     {
+                        //If the scaling is not set, Scaling defaults to making all FeatureMaps the same size.
                         outputWidth = inputs[0, 0].Width;
                         outputLength = inputs[0, 0].Length;
                         scaleWidth = outputWidth / (float)inputs[i, 0].Width;
@@ -167,7 +184,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 for (int j = 0; j < _batchSize; j++)
                 {
                     _outGradients[i, j] = new FeatureMap(layer.InputWidth, layer.InputLength);
-                    _outputs[i, j] = new FeatureMap(outputWidth, outputLength);
+                    base._outputs[i, j] = new FeatureMap(outputWidth, outputLength);
                 }
             }
             return (_outputs, _inGradients);
@@ -215,31 +232,27 @@ namespace ConvolutionalNeuralNetwork.Layers
             output[outputIndex] = color;
         }
 
+        /// <summary>
+        /// Gets the <see cref="ScalingLayerInfo"/> for a particular dimension.
+        /// </summary>
+        /// <param name="index">The dimension who <see cref="ScalingLayerInfo"/> is needed.</param>
+        /// <returns>Return the <see cref="ScalingLayerInfo"/> corresponding to an input dimension.</returns>
         private ScalingLayerInfo Infos(int index)
         {
             return (ScalingLayerInfo)_layerInfos[index];
         }
 
-        public readonly struct ScalingLayerInfo : ILayerInfo
+        private readonly struct ScalingLayerInfo : ILayerInfo
         {
-            public int InputWidth { get; init; }
-
-            public int InputLength { get; init; }
-
-            public float InverseKSquared { get; init; }
-
             public int FilterSize => throw new NotImplementedException();
-
-            public int OutputWidth { get; init; }
-
-            public int OutputLength { get; init; }
-
-            public int Stride => throw new NotImplementedException();
-
-            public float InvWidthScaling { get; init; }
-
+            public int InputLength { get; init; }
+            public int InputWidth { get; init; }
+            public float InverseKSquared { get; init; }
             public float InvLengthScaling { get; init; }
-
+            public float InvWidthScaling { get; init; }
+            public int OutputLength { get; init; }
+            public int OutputWidth { get; init; }
+            public int Stride => throw new NotImplementedException();
             public int InputIndex(int x, int y)
             {
                 return y * InputWidth + x;

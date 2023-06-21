@@ -3,6 +3,10 @@ using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
+    /// <summary>
+    /// The <see cref="Vectorization"/> class is the last layer of a <see cref="Networks.Discriminator"/> that converts the set of 
+    /// <see cref="FeatureMap"/>s into a <see cref="Vector"/>.
+    /// </summary>
     [Serializable]
     public class Vectorization
     {
@@ -13,48 +17,47 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         private FeatureMap[,] _transposedInput;
 
-        [JsonConstructor]
-        public Vectorization()
-        {
-        }
-
+        /// <value>The name of the layer, used for logging.</value>
         public string Name => "Vectorization Layer";
 
+        /// <summary>
+        /// Backpropagates through the <see cref="Layer"/> updating any layer weights, and calculating the outgoing gradient that is
+        /// shared with the previous layer.
+        /// </summary>
+        /// <param name="learningRate">The overall learning rate for the layer updates.</param>
         public void Backwards(Vector[] vectorGradient, float learningRate)
         {
-            for (int i = 0; i < vectorGradient.Length; i++)
+            for (int batch = 0; batch < vectorGradient.Length; batch++)
             {
-                Backwards(i, vectorGradient[i], _vectors[i], learningRate);
-            }
-        }
+                float _xy = 1f / _transposedGradients[batch, 0].Area;
 
-        public void Backwards(int batch, Vector vectorGradient, ColorVector vector, float learningRate)
-        {
-            float _xy = 1f / _transposedGradients[batch, 0].Area;
+                ColorVector pixelGradient = _xy * vectorGradient[batch] * _matrix;
 
-            ColorVector pixelGradient = _xy * vectorGradient * _matrix;
-
-            for (int i = 0; i < _transposedGradients.GetLength(1); i++)
-            {
-                for (int j = 0; j < _transposedGradients[batch, i].Length; j++)
+                for (int dimension = 0; dimension < _transposedGradients.GetLength(1); dimension++)
                 {
-                    for (int k = 0; k < _transposedGradients[batch, i].Width; k++)
+                    for (int y = 0; y < _transposedGradients[batch, dimension].Length; y++)
                     {
-                        _transposedGradients[batch, i][k, j] = pixelGradient[i];
+                        for (int x = 0; x < _transposedGradients[batch, dimension].Width; x++)
+                        {
+                            _transposedGradients[batch, dimension][x, y] = pixelGradient[dimension];
+                        }
+                    }
+                }
+
+                for (int y = 0; y < _matrix.Length; y++)
+                {
+                    for (int x = 0; x < _matrix.Width; x++)
+                    {
+                        Color val = vectorGradient[batch][x] * _vectors[batch][y];
+                        _matrix[x, y] -= learningRate * val;
                     }
                 }
             }
-
-            for (int j = 0; j < _matrix.Length; j++)
-            {
-                for (int i = 0; i < _matrix.Width; i++)
-                {
-                    Color val = vectorGradient[i] * vector[j];
-                    _matrix[i, j] -= learningRate * val;
-                }
-            }
         }
 
+        /// <summary>
+        /// Forward propagates through the layer calculating the output <see cref="Vector"/>.
+        /// </summary>
         public Vector[] Forward()
         {
             Vector[] vectors = new Vector[_transposedInput.GetLength(0)];
@@ -72,6 +75,12 @@ namespace ConvolutionalNeuralNetwork.Layers
             return vectors;
         }
 
+        /// <summary>
+        /// Initializes the <see cref="Vectorization"/> for the data set being used.
+        /// </summary>
+        /// <param name="transposedInputs">The previous <see cref="Layer"/>'s transposed output.</param>
+        /// <param name="outGradients">The previous <see cref="Layer"/>'s inGradient.</param>
+        /// <param name="vectorDimensions">The length of the output <see cref="Vector"/> after performing vectorization.</param>
         public void StartUp(FeatureMap[,] transposedInputs, FeatureMap[,] outGradients, int vectorDimensions)
         {
             int batchSize = transposedInputs.GetLength(0);
@@ -107,6 +116,9 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
+        /// <summary>
+        /// Reset's the <see cref="Vectorization"/> layer to random initial weights.
+        /// </summary>
         public void Reset()
         {
             int featureMapDimensions = _transposedInput.GetLength(1);

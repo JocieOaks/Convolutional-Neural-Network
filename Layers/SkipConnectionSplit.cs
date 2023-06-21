@@ -5,18 +5,31 @@ using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
+    /// <summary>
+    /// The <see cref="SkipConnectionSplit"/> class is a <see cref="Layer"/> that creates two sets of the same <see cref="FeatureMap"/>s, sending
+    /// one as input to the next <see cref="Layer"/> and sending one to a <see cref="SkipConnectionConcatenate"/> later in the <see cref="Network"/>.
+    /// </summary>
     public class SkipConnectionSplit : Layer, IStructuralLayer
     {
+        /// <inheritdoc/>
         public override string Name => "Skip Connection Layer";
 
         private FeatureMap[,] _inGradientSecondary;
         [JsonProperty] private SkipConnectionConcatenate _concatenationLayer;
         private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInGradientsSecondary;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SkipConnectionSplit"/> class.
+        /// </summary>
         public SkipConnectionSplit() : base(1, 1)
         {
         }
 
+        /// <summary>
+        /// Gives the corresponding <see cref="SkipConnectionConcatenate"/> layer that connects to this <see cref="SkipConnectionSplit"/>, creating
+        /// it if it does not already exist.
+        /// </summary>
+        /// <returns>Returns the <see cref="SkipConnectionConcatenate"/>.</returns>
         public SkipConnectionConcatenate GetConcatenationLayer()
         {
             if (_concatenationLayer == null)
@@ -24,10 +37,10 @@ namespace ConvolutionalNeuralNetwork.Layers
             return _concatenationLayer;
         }
 
+        /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            Context context = ConvolutionalNeuralNetwork.Utility.Context;
-            Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
+            Accelerator accelerator = Utility.Accelerator;
 
             var backwardsKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>>(BackwardsKernal);
 
@@ -58,14 +71,18 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
+        /// <inheritdoc/>
         public override void Forward()
         {
+            //Forward propagation does nothing, because both following layers already have a reference to the previous layers output after StartUp.
         }
 
+        /// <inheritdoc/>
         public override void Reset()
         {
         }
 
+        /// <inheritdoc/>
         public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients)
         {
             _outputDimensions = _inputDimensions = inputs.GetLength(0);
@@ -108,6 +125,11 @@ namespace ConvolutionalNeuralNetwork.Layers
             outGradient[index.X * 3 + index.Y] = inGradient1[index.X][index.Y] + inGradient2[index.X][index.Y];
         }
 
+        /// <summary>
+        /// Gets the <see cref="SingleLayerInfo"/> for a particular dimension.
+        /// </summary>
+        /// <param name="index">The dimension who <see cref="SingleLayerInfo"/> is needed.</param>
+        /// <returns>Return the <see cref="SingleLayerInfo"/> corresponding to an input dimension.</returns>
         private SingleLayerInfo Infos(int index)
         {
             return (SingleLayerInfo)_layerInfos[index];

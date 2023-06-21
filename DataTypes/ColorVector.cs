@@ -62,15 +62,5 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
             return output;
         }
-
-        public Vector Magnitude()
-        {
-            Vector vector = new(Length);
-            for (int i = 0; i < Length; i++)
-            {
-                vector[i] = _values[i].Magnitude;
-            }
-            return vector;
-        }
     }
 }

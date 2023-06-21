@@ -5,18 +5,26 @@ using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
+    /// <summary>
+    /// The <see cref="ReLUActivation"/> class is a <see cref="Layer"/> is an activation to add non-linearity to the <see cref="Network"/>.
+    /// </summary>
     [Serializable]
     public class ReLUActivation : Layer, ISecondaryLayer
     {
         private MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] _deviceInfos;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ReLUActivation"/> class.
+        /// </summary>
         [JsonConstructor]
         public ReLUActivation() : base(1, 1)
         {
         }
 
+        /// <inheritdoc/>
         public override string Name => "Activation Layer";
 
+        /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
             Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
@@ -54,6 +62,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
+        /// <inheritdoc/>
         public override void Forward()
         {
             Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
@@ -90,10 +99,12 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
+        /// <inheritdoc/>
         public override void Reset()
         {
         }
 
+        /// <inheritdoc/>
         public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients)
         {
             BaseStartup(inputs, outGradients);
@@ -113,6 +124,11 @@ namespace ConvolutionalNeuralNetwork.Layers
             output[mapsIndex] = input[mapsIndex].ReLU();
         }
 
+        /// <summary>
+        /// Gets the <see cref="SingleLayerInfo"/> for a particular dimension.
+        /// </summary>
+        /// <param name="index">The dimension who <see cref="SingleLayerInfo"/> is needed.</param>
+        /// <returns>Return the <see cref="SingleLayerInfo"/> corresponding to an input dimension.</returns>
         private SingleLayerInfo Infos(int index)
         {
             return (SingleLayerInfo)_layerInfos[index];

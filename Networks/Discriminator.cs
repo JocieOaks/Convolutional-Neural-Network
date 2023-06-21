@@ -5,7 +5,8 @@ using Newtonsoft.Json;
 namespace ConvolutionalNeuralNetwork.Networks
 {
     /// <summary>
-    /// The <see cref="Discriminator"/> class is a <see cref="Network"/> used to evaluate how closely an image matches it's label.
+    /// The <see cref="Discriminator"/> class is a <see cref="Network"/> used to evaluate how closely an image matches it's label for a
+    /// Least Square Conditional GAN.
     /// </summary>
     public class Discriminator : Network
     {
@@ -57,9 +58,9 @@ namespace ConvolutionalNeuralNetwork.Networks
         /// <summary>
         /// Converts an images label into a <see cref="Vector"/>.
         /// </summary>
-        /// <param name="bools"></param>
-        /// <param name="floats"></param>
-        /// <returns></returns>
+        /// <param name="bools">The bool portion of the label.</param>
+        /// <param name="floats">The float portion of the label.</param>
+        /// <returns>Returns a vector that represents an image's labels.</returns>
         public static Vector VectorizeLabel(bool[] bools, float[] floats)
         {
             Vector vector = new(bools.Length + floats.Length);
@@ -200,6 +201,13 @@ namespace ConvolutionalNeuralNetwork.Networks
 
         /// <summary>
         /// Performs one training iteration.
+        /// The discriminator calculates the cosine similarity between the vector output of the network, and the images label.
+        /// The loss is the square difference between the similarity and either 1 or -1 depending on whether the step is trying to maximize
+        /// or minimize the similarity between the label and the vector.
+        /// Note: Image labels should have at least two labels. If only one label is used, the cosine similarity between the image vector and the
+        /// label vector will only have values of either 1 or -1 due to normalization. If only one label is desire, add a second label that has the
+        /// same value for every image to avoid loss of information from normalization.
+        /// The <see cref="Discriminator"/> can be used for a Non-Conditional GAN by using the same labels for every image.
         /// </summary>
         /// <param name="images">The images and their labels in the batch.</param>
         /// <param name="learningRate">The current learning rate for backpropagation.</param>

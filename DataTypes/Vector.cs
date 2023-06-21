@@ -86,19 +86,6 @@
             return new Vector(values);
         }
 
-        public void Add(Vector v2)
-        {
-            if (Length != v2.Length)
-            {
-                throw new ArgumentException("Vector's not the same length.");
-            }
-
-            for (int i = 0; i < Length; i++)
-            {
-                _values[i] += v2[i];
-            }
-        }
-
         public static Vector operator *(Vector vector, float mult)
         {
             float[] values = new float[vector.Length];
@@ -107,47 +94,6 @@
                 values[i] = vector[i] * mult;
             }
             return new Vector(values);
-        }
-
-        public void Mult(float mult)
-        {
-            for (int i = 0; i < Length; i++)
-            {
-                _values[i] *= mult;
-            }
-        }
-
-        public static Vector operator *(float[,] matrix, Vector vector)
-        {
-            if (matrix.GetLength(1) != vector.Length)
-                throw new ArgumentException("Matrix and vector are not compatible.");
-
-            Vector output = new(matrix.GetLength(0));
-            for (int i = 0; i < matrix.GetLength(0); i++)
-            {
-                for (int j = 0; j < matrix.GetLength(1); j++)
-                {
-                    output[i] += matrix[i, j] * vector[j];
-                }
-            }
-
-            return output;
-        }
-
-        public static Vector operator *(Vector vector, float[,] matrix)
-        {
-            if (matrix.GetLength(0) != vector.Length)
-                throw new ArgumentException("Matrix and vector are not compatible.");
-            Vector output = new(matrix.GetLength(1));
-            for (int i = 0; i < matrix.GetLength(0); i++)
-            {
-                for (int j = 0; j < matrix.GetLength(1); j++)
-                {
-                    output[j] += matrix[i, j] * vector[i];
-                }
-            }
-
-            return output;
         }
 
         public static ColorVector operator *(Vector vector, FeatureMap matrix)
@@ -166,23 +112,6 @@
             return output;
         }
 
-        public static Vector operator *(Vector v1, Vector v2)
-        {
-            if (v1.Length != v2.Length)
-            {
-                throw new ArgumentException("Vector's not the same length.");
-            }
-
-            Vector vector = new(v1.Length);
-
-            for (int i = 0; i < v1.Length; i++)
-            {
-                vector[i] = v1[i] * v2[i];
-            }
-
-            return vector;
-        }
-
         public static Vector operator *(float mult, Vector vector)
         {
             float[] values = new float[vector.Length];
@@ -191,46 +120,6 @@
                 values[i] = vector[i] * mult;
             }
             return new Vector(values);
-        }
-
-        public static Vector operator -(Vector v1, Vector v2)
-        {
-            if (v1.Length != v2.Length)
-            {
-                throw new ArgumentException("Vector's not the same length.");
-            }
-
-            Vector values = new(v1.Length);
-
-            for (int i = 0; i < v1.Length; i++)
-            {
-                values[i] = v1[i] - v2[i];
-            }
-            return values;
-        }
-
-        public void Subtract(Vector v2)
-        {
-            if (Length != v2.Length)
-            {
-                throw new ArgumentException("Vector's not the same length.");
-            }
-
-            for (int i = 0; i < Length; i++)
-            {
-                _values[i] -= v2[i];
-            }
-        }
-
-        public static Vector operator -(Vector vector)
-        {
-            Vector values = new(vector.Length);
-
-            for (int i = 0; i < vector.Length; i++)
-            {
-                values[i] = -vector[i];
-            }
-            return values;
         }
     }
 }

@@ -101,44 +101,48 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return Sum() / Area;
         }
 
-        public float AverageMagnitude()
-        {
-            return SumMagnitude() / Area;
-        }
-
         public Bitmap ConstructBitmap(Accelerator accelerator, bool setNormalized = false)
         {
-            Bitmap bitmap = new(Width, Length);
 
-            Color[] normalizedMap = Normalize(accelerator);
-
-            if (setNormalized)
-                _map = normalizedMap;
-
-            for (int y = 0; y < Length; y++)
+            if (OperatingSystem.IsWindows())
             {
-                for (int x = 0; x < Width; x++)
-                {
-                    bitmap.SetPixel(x, Length - y - 1, (System.Drawing.Color)(normalizedMap[y * Width + x] * 255));
-                }
-            }
+                Bitmap bitmap = new(Width, Length);
 
-            return bitmap;
+                Color[] normalizedMap = Normalize(accelerator);
+
+                if (setNormalized)
+                    _map = normalizedMap;
+
+                for (int y = 0; y < Length; y++)
+                {
+                    for (int x = 0; x < Width; x++)
+                    {
+                        bitmap.SetPixel(x, Length - y - 1, (System.Drawing.Color)(normalizedMap[y * Width + x] * 255));
+                    }
+                }
+
+                return bitmap; 
+            }
+            return null;
         }
 
         public static FeatureMap FromBitmap(Bitmap bitmap)
         {
-            FeatureMap map = new(bitmap.Width, bitmap.Height);
+            if (OperatingSystem.IsWindows())
             {
-                for (int y = 0; y < bitmap.Height; y++)
+                FeatureMap map = new(bitmap.Width, bitmap.Height);
                 {
-                    for (int x = 0; x < bitmap.Width; x++)
+                    for (int y = 0; y < bitmap.Height; y++)
                     {
-                        map[x, bitmap.Height - y - 1] = (Color)bitmap.GetPixel(x, y);
+                        for (int x = 0; x < bitmap.Width; x++)
+                        {
+                            map[x, bitmap.Height - y - 1] = (Color)bitmap.GetPixel(x, y);
+                        }
                     }
                 }
+                return map;
             }
-            return map;
+            return null;
         }
 
         public void CopyFromBuffer(MemoryBuffer1D<Color, Stride1D.Dense> buffer)
@@ -172,30 +176,20 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return color;
         }
 
-        public float SumMagnitude()
-        {
-            float sum = 0;
-            for (int i = 0; i < Length; i++)
-            {
-                for (int j = 0; j < Width; j++)
-                {
-                    sum += _map[i * Width + j].Magnitude;
-                }
-            }
-
-            return sum;
-        }
-
         public void PrintFeatureMap(string file, Accelerator accelerator)
         {
             Bitmap image = ConstructBitmap(accelerator);
-            try
+
+            if (OperatingSystem.IsWindows())
             {
-                image.Save(file, System.Drawing.Imaging.ImageFormat.Png);
-            }
-            catch (System.Exception e)
-            {
-                Console.WriteLine("Error occured when trying to save image: " + file + "\n" + e.ToString());
+                try
+                {
+                    image.Save(file, System.Drawing.Imaging.ImageFormat.Png);
+                }
+                catch (System.Exception e)
+                {
+                    Console.WriteLine("Error occured when trying to save image: " + file + "\n" + e.ToString());
+                } 
             }
         }
 
@@ -211,7 +205,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
             var deviceInput = Allocate(accelerator);
 
-            //Console.Write("Sum");
             sumKernal(index, deviceInput.View, deviceSum.View);
 
             accelerator.Synchronize();
@@ -221,7 +214,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             var deviceMean = accelerator.Allocate1D(new Color[] { mean });
             var deviceVariance = accelerator.Allocate1D<float>(3);
 
-            //Console.WriteLine("Variance");
+
             varianceKernal(index, deviceInput.View, deviceMean.View, deviceVariance.View);
 
             accelerator.Synchronize();
@@ -231,7 +224,8 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             var deviceValues = accelerator.Allocate1D(new Color[] { mean, s_normalStandardDeviation / sigma, s_normalMean });
 
             var deviceOutput = AllocateEmpty(accelerator);
-            //Console.WriteLine("Normalize");
+
+
             normalizeKernal(new Index1D(Area), deviceInput.View, deviceOutput.View, deviceValues.View);
 
             accelerator.Synchronize();

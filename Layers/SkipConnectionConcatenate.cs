@@ -2,6 +2,10 @@
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
+    /// <summary>
+    /// The <see cref="SkipConnectionConcatenate"/> class is a <see cref="Layer"/> for combining a set of <see cref="FeatureMap"/>s from the previous
+    /// <see cref="Layer"/> with the <see cref="FeatureMap"/>s from its corresponding <see cref="SkipConnectionSplit"/>.
+    /// </summary>
     public class SkipConnectionConcatenate : Layer, IStructuralLayer
     {
         private FeatureMap[,] _inputsSecondary;
@@ -9,30 +13,17 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         private int _secondaryDimensions;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SkipConnectionConcatenate"/> class.
+        /// </summary>
         public SkipConnectionConcatenate() : base(1, 1)
         {
         }
 
+        /// <inheritdoc/>
         public override string Name => "Concatenation Layer";
 
-        public void Connect(FeatureMap[,] inputs, FeatureMap[,] outGradients)
-        {
-            _inputsSecondary = inputs;
-            _secondaryDimensions = inputs.GetLength(0);
-            _batchSize = inputs.GetLength(1);
-            _outGradientsSecondary = outGradients;
-
-            for (int i = 0; i < _secondaryDimensions; i++)
-            {
-                int width = inputs[i, 0].Width;
-                int length = inputs[i, 0].Length;
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _outGradientsSecondary[i, j] = new FeatureMap(width, length);
-                }
-            }
-        }
-
+        /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
             for (int i = 0; i < _inputDimensions; i++)
@@ -52,6 +43,30 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
+        /// <summary>
+        /// Connects the <see cref="SkipConnectionConcatenate"/> with its <see cref="SkipConnectionSplit"/> sharing the <see cref="FeatureMap"/>s
+        /// between them.
+        /// </summary>
+        /// <param name="inputs">The split outputs of the <see cref="SkipConnectionSplit"/>.</param>
+        /// <param name="outGradients">The split inGradients of the <see cref="SkipConnectionSplit"/>.</param>
+        public void Connect(FeatureMap[,] inputs, FeatureMap[,] outGradients)
+        {
+            _inputsSecondary = inputs;
+            _secondaryDimensions = inputs.GetLength(0);
+            _batchSize = inputs.GetLength(1);
+            _outGradientsSecondary = outGradients;
+
+            for (int i = 0; i < _secondaryDimensions; i++)
+            {
+                int width = inputs[i, 0].Width;
+                int length = inputs[i, 0].Length;
+                for (int j = 0; j < _batchSize; j++)
+                {
+                    _outGradientsSecondary[i, j] = new FeatureMap(width, length);
+                }
+            }
+        }
+        /// <inheritdoc/>
         public override void Forward()
         {
             for (int i = 0; i < _inputDimensions; i++)
@@ -71,10 +86,12 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
+        /// <inheritdoc/>
         public override void Reset()
         {
         }
 
+        /// <inheritdoc/>
         public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients)
         {
             _inputDimensions = inputs.GetLength(0);
