@@ -66,6 +66,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
         }
+
         /// <inheritdoc/>
         public override void Forward()
         {

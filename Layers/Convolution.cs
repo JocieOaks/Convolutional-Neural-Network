@@ -325,6 +325,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             return (_outputs, _inGradients);
         }
+
         /// <summary>
         /// Gets the <see cref="LayerInfo"/> for a particular dimension.
         /// </summary>
@@ -463,9 +464,9 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="secondMomentDecay">The exponential decay rate for the second moment.</param>
         private void UpdateFilter(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            for(int i = 0; i < _outputDimensions; i++)
+            for (int i = 0; i < _outputDimensions; i++)
             {
-                for(int j = 0; j < _filterSize * _filterSize; j++)
+                for (int j = 0; j < _filterSize * _filterSize; j++)
                 {
                     Color gradient = new Color(_filterGradients[i][j * 3], _filterGradients[i][j * 3 + 1], _filterGradients[i][j * 3 + 2]);
                     Color first = _filtersFirstMoment[i, j] = firstMomentDecay * _filtersFirstMoment[i, j] + (1 - firstMomentDecay) * gradient;

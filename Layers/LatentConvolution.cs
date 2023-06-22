@@ -2,7 +2,6 @@
 using ILGPU;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
-using System.Collections.Generic;
 using System.Runtime.Serialization;
 
 namespace ConvolutionalNeuralNetwork.Layers
@@ -20,7 +19,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         protected MemoryBuffer1D<float, Stride1D.Dense>[,] _deviceFilterGradients;
         protected MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceFilters;
         protected MemoryBuffer1D<LayerInfo, Stride1D.Dense>[] _deviceInfos;
-        
+
         protected int _dimensionsMultiplier;
 
         [JsonProperty] private ColorVector[,] _boolsFilterVectors;
@@ -269,6 +268,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
         }
+
         /// <inheritdoc/>
         public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] input, FeatureMap[,] outGradients)
         {

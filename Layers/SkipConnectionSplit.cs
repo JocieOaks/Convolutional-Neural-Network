@@ -99,7 +99,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             for (int i = 0; i < _inputDimensions; i++)
             {
                 ILayerInfo layer;
-                layer = _layerInfos[i] = new SingleLayerInfo()
+                layer = _layerInfos[i] = new StaticLayerInfo()
                 {
                     Width = inputs[i, 0].Width,
                     Length = inputs[i, 0].Length,
@@ -126,13 +126,13 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <summary>
-        /// Gets the <see cref="SingleLayerInfo"/> for a particular dimension.
+        /// Gets the <see cref="StaticLayerInfo"/> for a particular dimension.
         /// </summary>
-        /// <param name="index">The dimension who <see cref="SingleLayerInfo"/> is needed.</param>
-        /// <returns>Return the <see cref="SingleLayerInfo"/> corresponding to an input dimension.</returns>
-        private SingleLayerInfo Infos(int index)
+        /// <param name="index">The dimension who <see cref="StaticLayerInfo"/> is needed.</param>
+        /// <returns>Return the <see cref="StaticLayerInfo"/> corresponding to an input dimension.</returns>
+        private StaticLayerInfo Infos(int index)
         {
-            return (SingleLayerInfo)_layerInfos[index];
+            return (StaticLayerInfo)_layerInfos[index];
         }
     }
 }

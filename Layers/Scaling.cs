@@ -15,6 +15,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         [JsonProperty] private int _outputWidth;
         private float _scaleLength;
         private float _scaleWidth;
+
         /// <inheritdoc/>
         public override string Name => "Scaling Layer";
 
@@ -190,6 +191,16 @@ namespace ConvolutionalNeuralNetwork.Layers
             return (_outputs, _inGradients);
         }
 
+        /// <summary>
+        /// An ILGPU kernal to calculate the gradients for backpropagating the previous layer.
+        /// </summary>
+        /// <param name="index">The index of the current kernal calculation to be made.</param>
+        /// <param name="inGradient">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the incoming
+        /// gradient from the following <see cref="Layer"/>.</param>
+        /// <param name="outGradient">An <see cref="ArrayView1D{T, TStride}"/> of floats to sum the outgoing gradient.
+        /// Because <see cref="Color"/> cannot be summed atomically, every three floats represents a single
+        /// <see cref="Color"/> in the gradient.</param>
+        /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
         private static void BackwardsKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<float> outGradient, ArrayView<ScalingLayerInfo> info)
         {
             int inGradientIndex = info[0].OutputIndex(index.X, index.Y);
@@ -209,6 +220,15 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
+        /// <summary>
+        /// An <see cref="ILGPU"/> kernal for resampling a <see cref="FeatureMap"/>.
+        /// </summary>
+        /// <param name="index">The index of the current kernal calculation to be made.</param>
+        /// <param name="input">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the input from the
+        /// previous <see cref="Layer"/>.</param>
+        /// <param name="output">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s to set for the outgoing
+        /// resampled <see cref="FeatureMap"/>.</param>
+        /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
         private static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> output, ArrayView<ScalingLayerInfo> info)
         {
             Color color = new(0);
@@ -242,22 +262,56 @@ namespace ConvolutionalNeuralNetwork.Layers
             return (ScalingLayerInfo)_layerInfos[index];
         }
 
+        /// <summary>
+        /// The <see cref="ScalingLayerInfo"/> struct contains a variety of data about <see cref="Scaling"/> layers
+        /// and <see cref="FeatureMap"/>s for use by an <see cref="ILGPU"/> kernal.
+        /// </summary>
         private readonly struct ScalingLayerInfo : ILayerInfo
         {
-            public int FilterSize => throw new NotImplementedException();
+            /// <inheritdoc/>
+            public int FilterSize => throw new NotImplementedException(); //Should not be used.
+
+            /// <inheritdoc/>
             public int InputLength { get; init; }
+
+            /// <inheritdoc/>
             public int InputWidth { get; init; }
+
+            /// <inheritdoc/>
             public float InverseKSquared { get; init; }
+
+            /// <value>The ratio of the <see cref="OutputLength"/> to the <see cref="InputLength"/>.</value>
             public float InvLengthScaling { get; init; }
+
+            /// <value>The ratio of the <see cref="OutputWidth"/> to the <see cref="InputWidth"/>.</value>
             public float InvWidthScaling { get; init; }
+
+            /// <inheritdoc/>
             public int OutputLength { get; init; }
+
+            /// <inheritdoc/>
             public int OutputWidth { get; init; }
-            public int Stride => throw new NotImplementedException();
+
+            /// <inheritdoc/>
+            public int Stride => throw new NotImplementedException();   //Should not be used.
+
+            /// <summary>
+            /// Calculates the single dimensional array index for a flattened input <see cref="FeatureMap"/>.
+            /// </summary>
+            /// <param name="x">The x coordinate of the desired index.</param>
+            /// <param name="y">The y coordinate of the desired index.</param>
+            /// <returns>Returns the index corresponding to (<paramref name="x"/>, <paramref name="y"/>).</returns>
             public int InputIndex(int x, int y)
             {
                 return y * InputWidth + x;
             }
 
+            /// <summary>
+            /// Calculates the single dimensional array index for a flattened output <see cref="FeatureMap"/>.
+            /// </summary>
+            /// <param name="x">The x coordinate of the desired index.</param>
+            /// <param name="y">The y coordinate of the desired index.</param>
+            /// <returns>Returns the index corresponding to (<paramref name="x"/>, <paramref name="y"/>).</returns>
             public int OutputIndex(int x, int y)
             {
                 return y * OutputWidth + x;

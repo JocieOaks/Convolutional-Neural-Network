@@ -13,7 +13,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class FullyConnected : Layer, IPrimaryLayer
     {
-        private MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] _deviceInfos;
+        private MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[] _deviceInfos;
         private MemoryBuffer1D<float, Stride1D.Dense>[,] _deviceMultiplierGradients;
         private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceMultipliers;
         private new MemoryBuffer1D<float, Stride1D.Dense>[,] _deviceOutputs;
@@ -53,7 +53,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
 
-            var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);
+            var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<StaticLayerInfo>>(ForwardKernal);
 
             for (int i = 0; i < _outputDimensions; i++)
             {
@@ -65,7 +65,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
+                _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
 
                 for (int j = 0; j < _batchSize; j++)
                 {
@@ -187,7 +187,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 BaseStartup(inputs, outGradients, -_matrixRed.Width / _matrixRed.Length);
             }
-            _deviceInfos = new MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[_inputDimensions];
+            _deviceInfos = new MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[_inputDimensions];
             _deviceMultiplierGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions, _outputDimensions];
             _deviceMultipliers = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _outputDimensions];
             _deviceOutputs = new MemoryBuffer1D<float, Stride1D.Dense>[_outputDimensions, _batchSize];
@@ -213,7 +213,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
-        private static void BackwardsGradientKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> input, ArrayView<float> multiplierGradient, ArrayView<SingleLayerInfo> info)
+        private static void BackwardsGradientKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> input, ArrayView<float> multiplierGradient, ArrayView<StaticLayerInfo> info)
         {
             int mapsIndex = info[0].Index(index.X, index.Y);
             for (int i = 0; i < 3; i++)
@@ -222,7 +222,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
-        private static void BackwardsOutKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> multiplier, ArrayView<float> outGradient, ArrayView<SingleLayerInfo> info)
+        private static void BackwardsOutKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> multiplier, ArrayView<float> outGradient, ArrayView<StaticLayerInfo> info)
         {
             int mapsIndex = info[0].Index(index.X, index.Y);
             float transposeDot = 0;
@@ -233,7 +233,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             Atomic.Add(ref outGradient[mapsIndex * 3 + index.Z], transposeDot);
         }
 
-        private static void ForwardKernal(Index3D index, ArrayView<Color> input, ArrayView<float> output, ArrayView<Color> multiplier, ArrayView<SingleLayerInfo> info)
+        private static void ForwardKernal(Index3D index, ArrayView<Color> input, ArrayView<float> output, ArrayView<Color> multiplier, ArrayView<StaticLayerInfo> info)
         {
             int mapsIndex = info[0].Index(index.X, index.Y);
             Atomic.Add(ref output[mapsIndex * 3 + index.Z], Color.Dot(input[mapsIndex], multiplier[index.Z]));
@@ -247,11 +247,11 @@ namespace ConvolutionalNeuralNetwork.Layers
             Context context = ConvolutionalNeuralNetwork.Utility.Context;
             Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
 
-            var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(BackwardsOutKernal);
+            var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsOutKernal);
 
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
+                _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
                 for (int j = 0; j < _batchSize; j++)
                 {
                     _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator);
@@ -304,6 +304,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 _deviceInfos[i].Dispose();
             }
         }
+
         /// Perform standard backpropagation through the layer, updating it's weights. Called when learning rate is greater than 0.
         /// </summary>
         /// <param name="learningRate">The overall learning rate for the layer updates, corrected for the influence of bias in the first and second moments.</param>
@@ -314,13 +315,13 @@ namespace ConvolutionalNeuralNetwork.Layers
             Context context = ConvolutionalNeuralNetwork.Utility.Context;
             Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
 
-            var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(BackwardsOutKernal);
+            var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsOutKernal);
 
-            var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(BackwardsGradientKernal);
+            var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsGradientKernal);
 
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
+                _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
                 for (int j = 0; j < _batchSize; j++)
                 {
                     _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator);
@@ -410,17 +411,16 @@ namespace ConvolutionalNeuralNetwork.Layers
             first = _redFirstMoment[index1, index2] = firstMomentDecay * _redFirstMoment[index1, index2] + (1 - firstMomentDecay) * gradient;
             second = _redSecondMoment[index1, index2] = secondMomentDecay * _redSecondMoment[index1, index2] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
             _matrixRed[index1, index2] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
-
         }
 
         /// <summary>
-        /// Gets the <see cref="SingleLayerInfo"/> for a particular dimension.
+        /// Gets the <see cref="StaticLayerInfo"/> for a particular dimension.
         /// </summary>
-        /// <param name="index">The dimension who <see cref="SingleLayerInfo"/> is needed.</param>
-        /// <returns>Return the <see cref="SingleLayerInfo"/> corresponding to an input dimension.</returns>
-        private SingleLayerInfo Infos(int index)
+        /// <param name="index">The dimension who <see cref="StaticLayerInfo"/> is needed.</param>
+        /// <returns>Return the <see cref="StaticLayerInfo"/> corresponding to an input dimension.</returns>
+        private StaticLayerInfo Infos(int index)
         {
-            return (SingleLayerInfo)_layerInfos[index];
+            return (StaticLayerInfo)_layerInfos[index];
         }
     }
 }

@@ -11,7 +11,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class ReLUActivation : Layer, ISecondaryLayer
     {
-        private MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] _deviceInfos;
+        private MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[] _deviceInfos;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ReLUActivation"/> class.
@@ -29,11 +29,11 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
 
-            var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(BackwardsKernal);
+            var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsKernal);
 
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
+                _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
                 Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
@@ -67,11 +67,11 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
 
-            var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);
+            var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<StaticLayerInfo>>(ForwardKernal);
 
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
+                _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
                 Index2D index = new(Infos(i).Width, Infos(i).Length);
 
                 for (int j = 0; j < _batchSize; j++)
@@ -108,30 +108,30 @@ namespace ConvolutionalNeuralNetwork.Layers
         public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients)
         {
             BaseStartup(inputs, outGradients);
-            _deviceInfos = new MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[_inputDimensions];
+            _deviceInfos = new MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[_inputDimensions];
             return (_outputs, _inGradients);
         }
 
-        private static void BackwardsKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<float> outGradient, ArrayView<SingleLayerInfo> info)
+        private static void BackwardsKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<float> outGradient, ArrayView<StaticLayerInfo> info)
         {
             int mapsIndex = info[0].Index(index.X, index.Y);
             outGradient[3 * mapsIndex + index.Z] = input[mapsIndex].ReLUPropogation()[index.Z] * inGradient[mapsIndex][index.Z];
         }
 
-        private static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> output, ArrayView<SingleLayerInfo> info)
+        private static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> output, ArrayView<StaticLayerInfo> info)
         {
             int mapsIndex = info[0].Index(index.X, index.Y);
             output[mapsIndex] = input[mapsIndex].ReLU();
         }
 
         /// <summary>
-        /// Gets the <see cref="SingleLayerInfo"/> for a particular dimension.
+        /// Gets the <see cref="StaticLayerInfo"/> for a particular dimension.
         /// </summary>
-        /// <param name="index">The dimension who <see cref="SingleLayerInfo"/> is needed.</param>
-        /// <returns>Return the <see cref="SingleLayerInfo"/> corresponding to an input dimension.</returns>
-        private SingleLayerInfo Infos(int index)
+        /// <param name="index">The dimension who <see cref="StaticLayerInfo"/> is needed.</param>
+        /// <returns>Return the <see cref="StaticLayerInfo"/> corresponding to an input dimension.</returns>
+        private StaticLayerInfo Infos(int index)
         {
-            return (SingleLayerInfo)_layerInfos[index];
+            return (StaticLayerInfo)_layerInfos[index];
         }
     }
 }

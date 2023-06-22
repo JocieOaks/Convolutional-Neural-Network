@@ -4,7 +4,7 @@ using Newtonsoft.Json;
 namespace ConvolutionalNeuralNetwork.Layers
 {
     /// <summary>
-    /// The <see cref="Vectorization"/> class is the last layer of a <see cref="Networks.Discriminator"/> that converts the set of 
+    /// The <see cref="Vectorization"/> class is the last layer of a <see cref="Networks.Discriminator"/> that converts the set of
     /// <see cref="FeatureMap"/>s into a <see cref="Vector"/>.
     /// </summary>
     [Serializable]

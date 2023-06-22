@@ -6,7 +6,7 @@ using Newtonsoft.Json;
 namespace ConvolutionalNeuralNetwork.Layers
 {
     /// <summary>
-    /// The <see cref="AveragePool"/> class is a <see cref="Layer"/> that outputs a downscaled 
+    /// The <see cref="AveragePool"/> class is a <see cref="Layer"/> that outputs a downscaled
     /// <see cref="FeatureMap"/> of the previous <see cref="Layer"/>'s outputs.
     /// </summary>
     [Serializable]
@@ -116,6 +116,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             _deviceInfos = new MemoryBuffer1D<LayerInfo, Stride1D.Dense>[_inputDimensions];
             return (_outputs, _inGradients);
         }
+
         /// <summary>
         /// An ILGPU kernal to calculate the gradients for backpropagating the previous layer.
         /// </summary>

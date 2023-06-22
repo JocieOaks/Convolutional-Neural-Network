@@ -1,5 +1,4 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
-using ILGPU.Runtime.Cuda;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {

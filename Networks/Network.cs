@@ -25,6 +25,7 @@ namespace ConvolutionalNeuralNetwork
 
         private ActivationPattern _activationPattern;
         [JsonProperty] private List<(int, int)> _skipConnections;
+
         /// <value>Enumerates over the <see cref="IPrimaryLayer"/>'s of the <see cref="Network"/> that define its structure.</value>
         [JsonIgnore]
         public IEnumerable<IPrimaryLayer> PrimaryLayers
@@ -166,7 +167,7 @@ namespace ConvolutionalNeuralNetwork
                     Directory.CreateDirectory(layerDirectory);
                     for (int j = 0; j < _layers[i].OutputDimensions; j++)
                     {
-                        _layers[i].Outputs[j, batchIndex].PrintFeatureMap(Path.Combine(layerDirectory, $"{name} {j}.png"), Utility.Accelerator);
+                        _layers[i].Outputs[j, batchIndex].PrintFeatureMap(Path.Combine(layerDirectory, $"{name} {j}.png"));
                     }
                 }
             }

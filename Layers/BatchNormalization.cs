@@ -18,7 +18,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         [JsonProperty] private ColorVector _biasFirstMoment;
         [JsonProperty] private ColorVector _biasSecondMoment;
         private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceGradients;
-        private MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[] _deviceInfos;
+        private MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[] _deviceInfos;
         private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceMeans;
         private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceSums;
         private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceValues;
@@ -48,11 +48,11 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             Gradients[] gradients = new Gradients[_inputDimensions];
 
-            var gradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(GradientsKernal);
+            var gradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(GradientsKernal);
 
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
+                _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
                 _deviceGradients[i] = accelerator.Allocate1D<float>(9);
                 _deviceMeans[i] = accelerator.Allocate1D(new Color[] { _mean[i] });
                 Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
@@ -69,7 +69,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             accelerator.Synchronize();
 
-            var backwardsKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(BackwardsKernal);
+            var backwardsKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<StaticLayerInfo>>(BackwardsKernal);
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -127,11 +127,11 @@ namespace ConvolutionalNeuralNetwork.Layers
             Context context = ConvolutionalNeuralNetwork.Utility.Context;
             Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
 
-            var sumKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(MeanKernal);
+            var sumKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(MeanKernal);
 
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = accelerator.Allocate1D(new SingleLayerInfo[] { Infos(i) });
+                _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
                 _deviceSums[i] = accelerator.Allocate1D<float>(3);
 
                 Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
@@ -146,7 +146,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             accelerator.Synchronize();
 
-            var varianceKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<SingleLayerInfo>>(VarianceKernal);
+            var varianceKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(VarianceKernal);
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -165,7 +165,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             accelerator.Synchronize();
 
-            var normalizeKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<SingleLayerInfo>>(ForwardKernal);
+            var normalizeKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<StaticLayerInfo>>(ForwardKernal);
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -226,8 +226,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
-
-
         /// <inheritdoc/>
         public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients)
         {
@@ -250,7 +248,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             _mean = new ColorVector(_inputDimensions);
             _sigma = new ColorVector(_inputDimensions);
 
-            _deviceInfos = new MemoryBuffer1D<SingleLayerInfo, Stride1D.Dense>[_inputDimensions];
+            _deviceInfos = new MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[_inputDimensions];
             _deviceMeans = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions];
             _deviceGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
             _deviceValues = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions];
@@ -273,8 +271,8 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <see cref="Color"/> in the gradient.</param>
         /// <param name="values">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s used in the equation
         /// to calculate the outGradient.</param>
-        /// <param name="info">The <see cref="SingleLayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void BackwardsKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<float> outGradient, ArrayView<Color> values, ArrayView<SingleLayerInfo> info)
+        /// <param name="info">The <see cref="StaticLayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
+        private static void BackwardsKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<float> outGradient, ArrayView<Color> values, ArrayView<StaticLayerInfo> info)
         {
             int mapsIndex = info[0].Index(index.X, index.Y);
             outGradient[mapsIndex * 3 + index.Z] = (inGradient[mapsIndex] * values[0] + values[1] * (input[mapsIndex] - values[2]) + values[3]).Clamp(1)[index.Z];
@@ -288,16 +286,16 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// previous <see cref="Layer"/>.</param>
         /// <param name="normalized">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s to set for the outgoing
         /// convoluted <see cref="FeatureMap"/>.</param>
-        /// <param name="values">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s used in the equation to 
+        /// <param name="values">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s used in the equation to
         /// calculate the normalized <see cref="Color"/>.</param>
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> normalized, ArrayView<Color> values, ArrayView<SingleLayerInfo> info)
+        private static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> normalized, ArrayView<Color> values, ArrayView<StaticLayerInfo> info)
         {
             int mapsIndex = info[0].Index(index.X, index.Y);
             normalized[mapsIndex] = (input[mapsIndex] - values[0]) * values[1] + values[2];
         }
 
-        private static void GradientsKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<Color> normalized, ArrayView<Color> mean, ArrayView<float> gradients, ArrayView<SingleLayerInfo> layer)
+        private static void GradientsKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<Color> normalized, ArrayView<Color> mean, ArrayView<float> gradients, ArrayView<StaticLayerInfo> layer)
         {
             int gradientIndex = layer[0].Index(index.X, index.Y);
             float gradient = inGradient[gradientIndex][index.Z];
@@ -306,13 +304,13 @@ namespace ConvolutionalNeuralNetwork.Layers
             Atomic.Add(ref gradients[index.Z + 6], gradient * (input[gradientIndex][index.Z] - mean[0][index.Z]));
         }
 
-        private static void MeanKernal(Index3D index, ArrayView<Color> input, ArrayView<float> mean, ArrayView<SingleLayerInfo> info)
+        private static void MeanKernal(Index3D index, ArrayView<Color> input, ArrayView<float> mean, ArrayView<StaticLayerInfo> info)
         {
             int inputIndex = info[0].Index(index.X, index.Y);
             Atomic.Add(ref mean[index.Z], input[inputIndex][index.Z]);
         }
 
-        private static void VarianceKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> mean, ArrayView<float> variance, ArrayView<SingleLayerInfo> info)
+        private static void VarianceKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> mean, ArrayView<float> variance, ArrayView<StaticLayerInfo> info)
         {
             int inputIndex = info[0].Index(index.X, index.Y);
             float difference = input[inputIndex][index.Z] - mean[0][index.Z];
@@ -320,34 +318,50 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <summary>
-        /// Gets the <see cref="SingleLayerInfo"/> for a particular dimension.
+        /// Gets the <see cref="StaticLayerInfo"/> for a particular dimension.
         /// </summary>
-        /// <param name="index">The dimension who <see cref="SingleLayerInfo"/> is needed.</param>
-        /// <returns>Return the <see cref="SingleLayerInfo"/> corresponding to an input dimension.</returns>
-        private SingleLayerInfo Infos(int index)
+        /// <param name="index">The dimension who <see cref="StaticLayerInfo"/> is needed.</param>
+        /// <returns>Return the <see cref="StaticLayerInfo"/> corresponding to an input dimension.</returns>
+        private StaticLayerInfo Infos(int index)
         {
-            return (SingleLayerInfo)_layerInfos[index];
+            return (StaticLayerInfo)_layerInfos[index];
         }
 
+        /// <summary>
+        /// The <see cref="Gradients"/> struct is a collection of different gradients used for backpropagating through <see cref="BatchNormalization"/> layers.
+        /// </summary>
         [StructLayout(LayoutKind.Sequential)]
         private struct Gradients
         {
             private Color _weightGradient;
             private Color _biasGradient;
             private Color _sigmaGradient;
-            public Color WeightGradient => _weightGradient;
-            public Color BiasGradient => _biasGradient;
-            public Color SigmaGradient { get => _sigmaGradient; set => _sigmaGradient = value; }
-            public Color MeanGradient { get; set; }
-            public Color Sigma { get; set; }
-            public Color Mean { get; set; }
 
-            public void CopyFromBuffer(MemoryBuffer1D<float, Stride1D.Dense> floats)
+            /// <value>The gradient for the dimensions weight.</value>
+            public Color WeightGradient => _weightGradient;
+
+            /// <value>The gradient for the dimensions bias.</value>
+            public Color BiasGradient => _biasGradient;
+
+            /// <value>The gradient for the dimensions standard deviation.</value>
+            public Color SigmaGradient { get => _sigmaGradient; set => _sigmaGradient = value; }
+
+            /// <value>The gradient for the dimensions mean.</value>
+            public Color MeanGradient { get; set; }
+
+            /// <summary>
+            /// Copies the pixel data from a <see cref="MemoryBuffer1D{T, TStride}"/> of floats.
+            /// Because <see cref="Color"/> cannot be summed atomically on an <see cref="ILGPU"/> kernal, every three floats represents a single
+            /// <see cref="Color"/> in the gradient. The <see cref="Gradients"/> is then treated as a <see cref="Span{T}"/> of floats, instead of
+            /// a struct of <see cref="Color"/>.
+            /// </summary>
+            /// <param name="buffer">The <see cref="MemoryBuffer1D{T, TStride}"/> with the source floats.</param>
+            public void CopyFromBuffer(MemoryBuffer1D<float, Stride1D.Dense> buffer)
             {
                 unsafe
                 {
                     fixed (void* startAddress = &_weightGradient)
-                        floats.AsArrayView<float>(0, 9).CopyToCPU(new Span<float>(startAddress, 9));
+                        buffer.AsArrayView<float>(0, 9).CopyToCPU(new Span<float>(startAddress, 9));
                 }
             }
         }

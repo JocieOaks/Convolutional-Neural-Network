@@ -5,7 +5,6 @@ using System.Runtime.InteropServices;
 
 namespace ConvolutionalNeuralNetwork.DataTypes
 {
-
     /// <summary>
     /// The <see cref="Color"/> struct contains color data for <see cref="FeatureMap"/>s. However, <see cref="Color"/> does not represent
     /// real world colors, but stores data related to the RGB channels of a <see cref="FeatureMap"/>. Values can be negative or greated than 1.
@@ -15,7 +14,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
     [StructLayout(LayoutKind.Sequential, Size = 12)]
     public readonly struct Color
     {
-
         /// <summary>
         /// Initializes a new instance of the <see cref="Color"/> struct.
         /// </summary>
@@ -69,7 +67,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// </summary>
         /// <param name="index">The index of the value.</param>
         /// <returns>Returns the value corresponding to the index given. Defaults to blue for any value besides 0, 1 or 2.</returns>
-        /// Note: Using the modulus operator in an external function creates an error when used in an <see cref="ILGPU"/> kernal, 
+        /// Note: Using the modulus operator in an external function creates an error when used in an <see cref="ILGPU"/> kernal,
         /// so the value defaults to blue.
         public float this[int index]
         {

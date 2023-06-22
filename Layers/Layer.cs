@@ -14,6 +14,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         //All FeatureMaps are constant throughout the programs lifetime, and are updated with each pass through the network.
         //Arrays of FeatureMaps are shared between layers as references.
         protected int _batchSize;
+
         protected MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInGradients;
         protected MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInputs;
         protected MemoryBuffer1D<float, Stride1D.Dense>[,] _deviceOutGradients;
@@ -107,7 +108,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 ILayerInfo layer;
                 if (_stride == 1 && _filterSize == 1)
                 {
-                    layer = _layerInfos[i] = new SingleLayerInfo()
+                    layer = _layerInfos[i] = new StaticLayerInfo()
                     {
                         Width = inputs[i, 0].Width,
                         Length = inputs[i, 0].Length,

@@ -106,7 +106,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <summary>
-        /// Forward propogates through the <see cref="Dropout"/> layer, but instead of randomly dropping values, it just adjusts 
+        /// Forward propogates through the <see cref="Dropout"/> layer, but instead of randomly dropping values, it just adjusts
         /// every <see cref="Color"/> based on it's dropout rate so that the output is scaled similar to while training.
         /// </summary>
         public void ForwardInference()
@@ -180,13 +180,13 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <summary>
-        /// Gets the <see cref="SingleLayerInfo"/> for a particular dimension.
+        /// Gets the <see cref="StaticLayerInfo"/> for a particular dimension.
         /// </summary>
-        /// <param name="index">The dimension who <see cref="SingleLayerInfo"/> is needed.</param>
-        /// <returns>Return the <see cref="SingleLayerInfo"/> corresponding to an input dimension.</returns>
-        private SingleLayerInfo Infos(int index)
+        /// <param name="index">The dimension who <see cref="StaticLayerInfo"/> is needed.</param>
+        /// <returns>Return the <see cref="StaticLayerInfo"/> corresponding to an input dimension.</returns>
+        private StaticLayerInfo Infos(int index)
         {
-            return (SingleLayerInfo)_layerInfos[index];
+            return (StaticLayerInfo)_layerInfos[index];
         }
     }
 }
