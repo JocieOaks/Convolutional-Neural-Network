@@ -69,13 +69,12 @@ namespace ConvolutionalNeuralNetwork.Layers
             Vector[] vectors = new Vector[_transposedInput.GetLength(0)];
             for (int i = 0; i < _transposedInput.GetLength(0); i++)
             {
-                ColorVector vector = new(_transposedInput.GetLength(1));
                 for (int j = 0; j < _transposedInput.GetLength(1); j++)
                 {
-                    vector[j] = _transposedInput[i, j].Average();
+                    _vectors[i][j] = _transposedInput[i, j].Average();
                 }
 
-                vectors[i] = _tensor * vector;
+                vectors[i] = _tensor * _vectors[i];
             }
 
             return vectors;
