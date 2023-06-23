@@ -281,9 +281,12 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize + _inputDimensions * _filterSize * _filterSize);
             float stdDev = MathF.Sqrt(variance);
+
             for (int i = 0; i < _outputDimensions; i++)
             {
                 _filters[i] = ColorTensor.Random(_filterSize, _filterSize, 0, stdDev);
+                _filtersFirstMoment[i] = new ColorTensor(_filterSize, _filterSize);
+                _filtersSecondMoment[i] = new ColorTensor(_filterSize, _filterSize);
             }
         }
 

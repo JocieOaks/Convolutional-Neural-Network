@@ -119,15 +119,17 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             float variance = 0.666f / (_inputDimensions + _outputDimensions);
             float stdDev = MathF.Sqrt(variance);
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _outputDimensions; j++)
-                {
-                    _matrixRed[i, j] = Color.RandomGauss(0, stdDev);
-                    _matrixGreen[i, j] = Color.RandomGauss(0, stdDev);
-                    _matrixBlue[i, j] = Color.RandomGauss(0, stdDev);
-                }
-            }
+            _matrixRed = ColorTensor.Random(_inputDimensions, _outputDimensions, 0, stdDev);
+            _matrixGreen = ColorTensor.Random(_inputDimensions, _outputDimensions, 0, stdDev);
+            _matrixBlue = ColorTensor.Random(_inputDimensions, _outputDimensions, 0, stdDev);
+
+            _blueFirstMoment = new ColorTensor(_inputDimensions, _outputDimensions);
+            _blueSecondMoment = new ColorTensor(_inputDimensions, _outputDimensions);
+            _greenFirstMoment = new ColorTensor(_inputDimensions, _outputDimensions);
+
+            _greenSecondMoment = new ColorTensor(_inputDimensions, _outputDimensions);
+            _redFirstMoment = new ColorTensor(_inputDimensions, _outputDimensions);
+            _redSecondMoment = new ColorTensor(_inputDimensions, _outputDimensions);
         }
 
         /// <summary>

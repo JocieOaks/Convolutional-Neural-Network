@@ -11,7 +11,11 @@ namespace ConvolutionalNeuralNetwork.Layers
     public class Vectorization
     {
         [JsonProperty] private ColorTensor _tensor;
+        [JsonProperty] private ColorTensor _tensorFirstMoment;
+        [JsonProperty] private ColorTensor _tensorSecondMoment;
+
         private FeatureMap[,] _transposedGradients;
+
         [JsonProperty] private int _vectorDimensions;
         private ColorVector[] _vectors;
 
@@ -25,7 +29,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// shared with the previous layer.
         /// </summary>
         /// <param name="learningRate">The overall learning rate for the layer updates.</param>
-        public void Backwards(Vector[] vectorGradient, float learningRate)
+        public void Backwards(Vector[] vectorGradient, float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
             for (int batch = 0; batch < vectorGradient.Length; batch++)
             {
@@ -48,8 +52,10 @@ namespace ConvolutionalNeuralNetwork.Layers
                 {
                     for (int x = 0; x < _tensor.Width; x++)
                     {
-                        Color val = vectorGradient[batch][x] * _vectors[batch][y];
-                        _tensor[x, y] -= learningRate * val;
+                        Color gradient = vectorGradient[batch][x] * _vectors[batch][y];
+                        Color first = _tensorFirstMoment[x, y] = firstMomentDecay * _tensorFirstMoment[x, y] + (1 - firstMomentDecay) * gradient;
+                        Color second = _tensorSecondMoment[x, y] = secondMomentDecay * _tensorSecondMoment[x, y] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
+                        _tensor[x, y] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
                     }
                 }
             }
@@ -93,15 +99,9 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 float variance = 2f / (3 * featureMapDimensions + vectorDimensions);
                 float stdDev = MathF.Sqrt(variance);
-                _tensor = new ColorTensor(vectorDimensions, featureMapDimensions);
-
-                for (int j = 0; j < featureMapDimensions; j++)
-                {
-                    for (int i = 0; i < vectorDimensions; i++)
-                    {
-                        _tensor[i, j] = Color.RandomGauss(0, stdDev);
-                    }
-                }
+                _tensor = ColorTensor.Random(vectorDimensions, featureMapDimensions, 0, stdDev);
+                _tensorFirstMoment = new ColorTensor(_vectorDimensions, featureMapDimensions);
+                _tensorSecondMoment = new ColorTensor(_vectorDimensions, featureMapDimensions);
             }
 
             _vectors = new ColorVector[batchSize];
@@ -124,15 +124,9 @@ namespace ConvolutionalNeuralNetwork.Layers
             int featureMapDimensions = _transposedInput.GetLength(1);
             float variance = 2f / (3 * featureMapDimensions + _vectorDimensions);
             float stdDev = MathF.Sqrt(variance);
-            _tensor = new ColorTensor(_vectorDimensions, featureMapDimensions);
-
-            for (int j = 0; j < featureMapDimensions; j++)
-            {
-                for (int i = 0; i < _vectorDimensions; i++)
-                {
-                    _tensor[i, j] = Color.RandomGauss(0, stdDev);
-                }
-            }
+            _tensor = ColorTensor.Random(_vectorDimensions, featureMapDimensions, 0, stdDev);
+            _tensorFirstMoment = new ColorTensor(_vectorDimensions, featureMapDimensions);
+            _tensorSecondMoment = new ColorTensor(_vectorDimensions, featureMapDimensions);
         }
     }
 }

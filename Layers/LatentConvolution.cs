@@ -259,11 +259,16 @@ namespace ConvolutionalNeuralNetwork.Layers
                     for (int k = 0; k < _boolsFilterVectors[i, j].Length; k++)
                     {
                         _boolsFilterVectors[i, j][k] = Color.RandomGauss(0, stdDev);
+                        _boolsFirstMoment[i, j][k] = new Color();
+                        _boolsSecondMoment[i, j][k] = new Color();
                     }
 
                     for (int k = 0; k < _floatsFilterVectors[i, j].Length; k++)
                     {
                         _floatsFilterVectors[i, j][k] = Color.RandomGauss(0, stdDev);
+
+                        _floatsFirstMoment[i, j][k] = new Color();
+                        _floatsSecondMoment[i, j][k] = new Color();
                     }
                 }
             }

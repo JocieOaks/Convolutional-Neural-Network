@@ -219,10 +219,14 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Reset()
         {
+            _weightFirstMoment = new ColorVector(_inputDimensions);
+            _weightSecondMoment = new ColorVector(_inputDimensions);
+            _bias = new ColorVector(_inputDimensions);
+            _biasFirstMoment = new ColorVector(_inputDimensions);
+            _biasSecondMoment = new ColorVector(_inputDimensions);
             for (int i = 0; i < _inputDimensions; i++)
             {
                 _weight[i] = new Color(1);
-                _bias[i] = new Color(0);
             }
         }
 

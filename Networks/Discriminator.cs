@@ -94,7 +94,7 @@ namespace ConvolutionalNeuralNetwork.Networks
             float correctionLearningRate = CorrectionLearningRate(learningRate, 0.9f, 0.999f);
 
             FeatureMap[,] transposedGradient = new FeatureMap[0, 0];
-            Utility.StopWatch(() => _vectorizationLayer.Backwards(VectorNormalization.Backwards(_imageVectors, gradients), learningRate), $"Backwards {_vectorizationLayer.Name}", PRINTSTOPWATCH);
+            Utility.StopWatch(() => _vectorizationLayer.Backwards(VectorNormalization.Backwards(_imageVectors, gradients), correctionLearningRate, 0.9f, 0.99f), $"Backwards {_vectorizationLayer.Name}", PRINTSTOPWATCH);
 
             FeatureMap[,] currentGradient = Utility.TransposeArray(transposedGradient);
 
