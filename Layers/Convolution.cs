@@ -21,12 +21,12 @@ namespace ConvolutionalNeuralNetwork.Layers
         protected MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceFilters;
         protected MemoryBuffer1D<LayerInfo, Stride1D.Dense>[] _deviceInfos;
         protected int _dimensionsMultiplier;
-        private float[][] _filterGradients;
 
-        [JsonProperty] private Color[][] _filters;
-        [JsonProperty] private Color[,] _filterSecondMoment;
-        [JsonProperty] private Color[,] _filtersFirstMoment;
+        private ColorTensor[] _filterGradients;
 
+        [JsonProperty] private ColorTensor[] _filters;
+        [JsonProperty] private ColorTensor[] _filtersFirstMoment;
+        [JsonProperty] private ColorTensor[] _filtersSecondMoment;
         /// <summary>
         /// Initializes a new instance of the <see cref="Convolution"/> layer.
         /// </summary>
@@ -170,7 +170,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             for (int i = 0; i < _outputDimensions; i++)
             {
-                _deviceFilterGradients[i] = accelerator.Allocate1D<float>(_filterGradients[i].Length);
+                _deviceFilterGradients[i] = _filterGradients[i].AllocateFloat(accelerator);
                 Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
@@ -193,7 +193,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             for (int i = 0; i < _outputDimensions; i++)
             {
-                _deviceFilterGradients[i].CopyToCPU(_filterGradients[i]);
+                _filterGradients[i].CopyFromBuffer(_deviceFilterGradients[i]);
                 _deviceFilterGradients[i].Dispose();
 
                 for (int j = 0; j < _batchSize; j++)
@@ -224,7 +224,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             for (int i = 0; i < _outputDimensions; i++)
             {
-                _deviceFilters[i] = accelerator.Allocate1D(_filters[i]);
+                _deviceFilters[i] = _filters[i].Allocate(accelerator);
                 Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
                 for (int j = 0; j < _batchSize; j++)
                 {
@@ -264,10 +264,15 @@ namespace ConvolutionalNeuralNetwork.Layers
         [OnDeserialized]
         public void OnDeserialized(StreamingContext context)
         {
-            if (_filtersFirstMoment == null || _filterSecondMoment == null)
+            if (_filtersFirstMoment == null || _filtersSecondMoment == null)
             {
-                _filtersFirstMoment = new Color[_filters.Length, _filterSize * _filterSize];
-                _filterSecondMoment = new Color[_filters.Length, _filterSize * _filterSize];
+                _filtersFirstMoment = new ColorTensor[_filters.Length];
+                _filtersSecondMoment = new ColorTensor[_filters.Length];
+                for(int i = 0; i < _filters.Length; i++)
+                {
+                    _filtersFirstMoment[i] = new ColorTensor(_filterSize, _filterSize);
+                    _filtersSecondMoment[i] = new ColorTensor(_filterSize, _filterSize);
+                }
             }
         }
 
@@ -276,13 +281,9 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize + _inputDimensions * _filterSize * _filterSize);
             float stdDev = MathF.Sqrt(variance);
-
             for (int i = 0; i < _outputDimensions; i++)
             {
-                for (int j = 0; j < _filterSize * _filterSize; j++)
-                {
-                    _filters[i][j] = Color.RandomGauss(0, stdDev);
-                }
+                _filters[i] = ColorTensor.Random(_filterSize, _filterSize, 0, stdDev);
             }
         }
 
@@ -292,32 +293,33 @@ namespace ConvolutionalNeuralNetwork.Layers
             if (_filters == null)
             {
                 BaseStartup(input, outGradients, _dimensionsMultiplier);
-                _filters = new Color[_outputDimensions][];
-                _filtersFirstMoment = new Color[_outputDimensions, _filterSize * _filterSize];
-                _filterSecondMoment = new Color[_outputDimensions, _filterSize * _filterSize];
+                _filters = new ColorTensor[_outputDimensions];
+                _filterGradients = new ColorTensor[_outputDimensions];
+                _filtersFirstMoment = new ColorTensor[_outputDimensions];
+                _filtersSecondMoment = new ColorTensor[_outputDimensions];
 
                 float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize + _inputDimensions * _filterSize * _filterSize);
                 float stdDev = MathF.Sqrt(variance);
 
-                for (int i = 0; i < _outputDimensions; i++)
+                for (int i = 0; i < _filters.Length; i++)
                 {
-                    _filters[i] = new Color[_filterSize * _filterSize];
-                    for (int j = 0; j < _filterSize * _filterSize; j++)
-                    {
-                        _filters[i][j] = Color.RandomGauss(0, stdDev);
-                    }
+                    _filters[i] = ColorTensor.Random(_filterSize, _filterSize, 0, stdDev);
+                    _filterGradients[i] = new ColorTensor(_filterSize, _filterSize);
+                    _filtersFirstMoment[i] = new ColorTensor(_filterSize, _filterSize);
+                    _filtersSecondMoment[i] = new ColorTensor(_filterSize, _filterSize);
                 }
             }
             else
             {
                 BaseStartup(input, outGradients, _filters.Length / input.GetLength(0));
-            }
-            _filterGradients = new float[_outputDimensions][];
+                _filterGradients = new ColorTensor[_outputDimensions];
 
-            for (int i = 0; i < _outputDimensions; i++)
-            {
-                _filterGradients[i] = new float[_filterSize * _filterSize * 3];
+                for (int i = 0; i < _outputDimensions; i++)
+                {
+                    _filterGradients[i] = new ColorTensor(_filterSize, _filterSize);
+                }
             }
+
 
             _deviceInfos = new MemoryBuffer1D<LayerInfo, Stride1D.Dense>[_inputDimensions];
             _deviceFilters = new MemoryBuffer1D<Color, Stride1D.Dense>[_outputDimensions];
@@ -357,7 +359,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             for (int i = 0; i < _outputDimensions; i++)
             {
-                _deviceFilters[i] = accelerator.Allocate1D(_filters[i]);
+                _deviceFilters[i] = _filters[i].Allocate(accelerator);
                 Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
@@ -398,8 +400,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="secondMomentDecay">The exponential decay rate for the second moment.</param>
         private void BackwardsUpdate(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            Context context = ConvolutionalNeuralNetwork.Utility.Context;
-            Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
+            Accelerator accelerator = Utility.Accelerator;
 
             var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsGradientKernal);
             var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsFilterKernal);
@@ -416,8 +417,8 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             for (int i = 0; i < _outputDimensions; i++)
             {
-                _deviceFilters[i] = accelerator.Allocate1D(_filters[i]);
-                _deviceFilterGradients[i] = accelerator.Allocate1D<float>(_filterGradients[i].Length);
+                _deviceFilters[i] = _filters[i].Allocate(accelerator);
+                _deviceFilterGradients[i] = _filterGradients[i].AllocateFloat(accelerator);
                 Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
@@ -443,7 +444,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             for (int i = 0; i < _outputDimensions; i++)
             {
-                _deviceFilterGradients[i].CopyToCPU(_filterGradients[i]);
+                _filterGradients[i].CopyFromBuffer(_deviceFilterGradients[i]);
                 _deviceFilterGradients[i].Dispose();
                 _deviceFilters[i].Dispose();
 
@@ -466,13 +467,15 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             for (int i = 0; i < _outputDimensions; i++)
             {
-                for (int j = 0; j < _filterSize * _filterSize; j++)
+                for (int j = 0; j < _filterSize; j++)
                 {
-                    Color gradient = new Color(_filterGradients[i][j * 3], _filterGradients[i][j * 3 + 1], _filterGradients[i][j * 3 + 2]);
-                    Color first = _filtersFirstMoment[i, j] = firstMomentDecay * _filtersFirstMoment[i, j] + (1 - firstMomentDecay) * gradient;
-                    Color second = _filterSecondMoment[i, j] = secondMomentDecay * _filterSecondMoment[i, j] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
-                    Color result = learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
-                    _filters[i][j] -= result;
+                    for (int k = 0; k < _filterSize; k++)
+                    {
+                        Color first = _filtersFirstMoment[i][j, k] = firstMomentDecay * _filtersFirstMoment[i][j, k] + (1 - firstMomentDecay) * _filterGradients[i][j,k];
+                        Color second = _filtersSecondMoment[i][j, k] = secondMomentDecay * _filtersSecondMoment[i][j, k] + (1 - secondMomentDecay) * Color.Pow(_filterGradients[i][j, k], 2);
+                        Color result = learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+                        _filters[i][j, k] -= result; 
+                    }
                 }
             }
         }

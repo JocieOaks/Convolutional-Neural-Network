@@ -19,15 +19,15 @@ namespace ConvolutionalNeuralNetwork.Layers
         private new MemoryBuffer1D<float, Stride1D.Dense>[,] _deviceOutputs;
 
         private int _dimensionMultiplier;
-        [JsonProperty] private FeatureMap _matrixBlue;
-        [JsonProperty] private FeatureMap _matrixGreen;
-        [JsonProperty] private FeatureMap _matrixRed;
-        [JsonProperty] private FeatureMap _blueFirstMoment;
-        [JsonProperty] private FeatureMap _blueSecondMoment;
-        [JsonProperty] private FeatureMap _greenFirstMoment;
-        [JsonProperty] private FeatureMap _greenSecondMoment;
-        [JsonProperty] private FeatureMap _redFirstMoment;
-        [JsonProperty] private FeatureMap _redSecondMoment;
+        [JsonProperty] private ColorTensor _matrixBlue;
+        [JsonProperty] private ColorTensor _matrixGreen;
+        [JsonProperty] private ColorTensor _matrixRed;
+        [JsonProperty] private ColorTensor _blueFirstMoment;
+        [JsonProperty] private ColorTensor _blueSecondMoment;
+        [JsonProperty] private ColorTensor _greenFirstMoment;
+        [JsonProperty] private ColorTensor _greenSecondMoment;
+        [JsonProperty] private ColorTensor _redFirstMoment;
+        [JsonProperty] private ColorTensor _redSecondMoment;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FeatureMap"/> class.
@@ -164,24 +164,18 @@ namespace ConvolutionalNeuralNetwork.Layers
 
                 float variance = 0.666f / (_inputDimensions + _outputDimensions);
                 float stdDev = MathF.Sqrt(variance);
-                _matrixRed = new FeatureMap(_inputDimensions, _outputDimensions);
-                _matrixGreen = new FeatureMap(_inputDimensions, _outputDimensions);
-                _matrixBlue = new FeatureMap(_inputDimensions, _outputDimensions);
-                _blueFirstMoment = new FeatureMap(_inputDimensions, _outputDimensions);
-                _blueSecondMoment = new FeatureMap(_inputDimensions, _outputDimensions);
-                _greenFirstMoment = new FeatureMap(_inputDimensions, _outputDimensions);
-                _greenSecondMoment = new FeatureMap(_inputDimensions, _outputDimensions);
-                _redFirstMoment = new FeatureMap(_inputDimensions, _outputDimensions);
-                _redSecondMoment = new FeatureMap(_inputDimensions, _outputDimensions);
-                for (int i = 0; i < _inputDimensions; i++)
-                {
-                    for (int j = 0; j < _outputDimensions; j++)
-                    {
-                        _matrixRed[i, j] = Color.RandomGauss(0, stdDev);
-                        _matrixGreen[i, j] = Color.RandomGauss(0, stdDev);
-                        _matrixBlue[i, j] = Color.RandomGauss(0, stdDev);
-                    }
-                }
+
+                _matrixRed = ColorTensor.Random(_inputDimensions, _outputDimensions, 0, stdDev);
+                _matrixGreen = ColorTensor.Random(_inputDimensions, _outputDimensions, 0, stdDev);
+                _matrixBlue = ColorTensor.Random(_inputDimensions, _outputDimensions, 0, stdDev);
+
+                _blueFirstMoment = new ColorTensor(_inputDimensions, _outputDimensions);
+                _blueSecondMoment = new ColorTensor(_inputDimensions, _outputDimensions);
+                _greenFirstMoment = new ColorTensor(_inputDimensions, _outputDimensions);
+
+                _greenSecondMoment = new ColorTensor(_inputDimensions, _outputDimensions);
+                _redFirstMoment = new ColorTensor(_inputDimensions, _outputDimensions);
+                _redSecondMoment = new ColorTensor(_inputDimensions, _outputDimensions);
             }
             else
             {
@@ -204,12 +198,12 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             if (_blueFirstMoment == null || _blueSecondMoment == null || _greenFirstMoment == null || _greenSecondMoment == null || _redFirstMoment == null || _redSecondMoment == null)
             {
-                _blueFirstMoment = new FeatureMap(_matrixBlue.Width, _matrixBlue.Length);
-                _blueSecondMoment = new FeatureMap(_matrixBlue.Width, _matrixBlue.Length);
-                _greenFirstMoment = new FeatureMap(_matrixGreen.Width, _matrixGreen.Length);
-                _greenSecondMoment = new FeatureMap(_matrixGreen.Width, _matrixGreen.Length);
-                _redFirstMoment = new FeatureMap(_matrixRed.Width, _matrixRed.Length);
-                _redSecondMoment = new FeatureMap(_matrixRed.Width, _matrixRed.Length);
+                _blueFirstMoment = new ColorTensor(_matrixBlue.Width, _matrixBlue.Length);
+                _blueSecondMoment = new ColorTensor(_matrixBlue.Width, _matrixBlue.Length);
+                _greenFirstMoment = new ColorTensor(_matrixGreen.Width, _matrixGreen.Length);
+                _greenSecondMoment = new ColorTensor(_matrixGreen.Width, _matrixGreen.Length);
+                _redFirstMoment = new ColorTensor(_matrixRed.Width, _matrixRed.Length);
+                _redSecondMoment = new ColorTensor(_matrixRed.Width, _matrixRed.Length);
             }
         }
 

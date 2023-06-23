@@ -11,24 +11,17 @@ namespace ConvolutionalNeuralNetwork.DataTypes
     /// can be confusing, so it may be better to create a Tensor class of which <see cref="FeatureMap"/> is a child.)
     /// </summary>
     [Serializable]
-    public class FeatureMap
+    public class FeatureMap : ColorTensor
     {
-        private static Color s_normalMean = new(0.5f);
-        private static Color s_normalStandardDeviation = new(0.23f);
-        [JsonProperty] private Color[] _map;
+        private readonly static Color s_colorMean = new(0.5f);
+        private readonly static Color s_colorDeviation = new(MathF.Sqrt(1f / 12));
 
         /// <summary>
         /// Initializes a new <see cref="FeatureMap"/> with the given dimensions.
         /// </summary>
         /// <param name="width">The width of the <see cref="FeatureMap"/>.</param>
         /// <param name="length">The length of the <see cref="FeatureMap"/>.</param>
-        public FeatureMap(int width, int length)
-        {
-            Width = width;
-            Length = length;
-
-            _map = new Color[width * length];
-        }
+        public FeatureMap(int width, int length) : base(width, length) { }
 
         /// <summary>
         /// A default constructor to be used when deserializing.
@@ -36,30 +29,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         [JsonConstructor]
         private FeatureMap()
         {
-        }
-
-        /// <value>The full area of the <see cref="FeatureMap"/>.</value>
-        [JsonIgnore] public int Area => _map.Length;
-
-        /// <value>The length of the <see cref="FeatureMap"/> when converted into an array of floats.</value>
-        [JsonIgnore] public int FloatLength => _map.Length * 3;
-
-        /// <value>The y length of the <see cref="FeatureMap"/>.</value>
-        [JsonProperty] public int Length { get; private set; }
-
-        /// <value>The x width of the <see cref="FeatureMap"/>.</value>
-        [JsonProperty] public int Width { get; private set; }
-
-        /// <summary>
-        /// Indexes the <see cref="FeatureMap"/> to retrieve the <see cref="Color"/> at the given coordinates.
-        /// </summary>
-        /// <param name="x">The x coordinate of the desired <see cref="Color"/>.</param>
-        /// <param name="y">The y coordinate of the desired <see cref="Color"/>.</param>
-        /// <returns>Returns the <see cref="Color"/> at (<paramref name="x"/>, <paramref name="y"/>).</returns>
-        public Color this[int x, int y]
-        {
-            get => _map[y * Width + x];
-            set => _map[y * Width + x] = value;
         }
 
         /// <summary>
@@ -107,36 +76,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         }
 
         /// <summary>
-        /// Allocates a <see cref="MemoryBuffer1D{T, TStride}"/> on the given <see cref="Accelerator"/> with <see cref="FeatureMap"/>'s values.
-        /// </summary>
-        /// <param name="accelerator">The <see cref="Accelerator"/> on which the map's data is being allocated.</param>
-        /// <returns>Returns the created <see cref="MemoryBuffer1D{T, TStride}"/>.</returns>
-        public MemoryBuffer1D<Color, Stride1D.Dense> Allocate(Accelerator accelerator)
-        {
-            return accelerator.Allocate1D(_map);
-        }
-
-        /// <summary>
-        /// Allocates a <see cref="MemoryBuffer1D{T, TStride}"/> on the given <see cref="Accelerator"/> with <see cref="FeatureMap"/>'s length.
-        /// </summary>
-        /// <param name="accelerator">The <see cref="Accelerator"/> on which the map's data is being allocated.</param>
-        /// <returns>Returns the created <see cref="MemoryBuffer1D{T, TStride}"/>.</returns>
-        public MemoryBuffer1D<Color, Stride1D.Dense> AllocateEmpty(Accelerator accelerator)
-        {
-            return accelerator.Allocate1D<Color>(Area);
-        }
-
-        /// <summary>
-        /// Allocates a <see cref="MemoryBuffer1D{T, TStride}"/> of floats on the given <see cref="Accelerator"/> with <see cref="FeatureMap"/>'s length.
-        /// </summary>
-        /// <param name="accelerator">The <see cref="Accelerator"/> on which the map's data is being allocated.</param>
-        /// <returns>Returns the created <see cref="MemoryBuffer1D{T, TStride}"/>.</returns>
-        public MemoryBuffer1D<float, Stride1D.Dense> AllocateFloat(Accelerator accelerator)
-        {
-            return accelerator.Allocate1D<float>(FloatLength);
-        }
-
-        /// <summary>
         /// Calculates the average <see cref="Color"/> of the <see cref="FeatureMap"/>.
         /// </summary>
         /// <returns>Returns the <see cref="Color"/>.</returns>
@@ -157,10 +96,10 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             {
                 Bitmap bitmap = new(Width, Length);
 
-                Color[] normalizedMap = Normalize();
+                Color[] normalizedMap = Normalize(s_colorMean, s_colorDeviation);
 
                 if (setNormalized)
-                    _map = normalizedMap;
+                    _tensor = normalizedMap;
 
                 for (int y = 0; y < Length; y++)
                 {
@@ -173,34 +112,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 return bitmap;
             }
             return null;
-        }
-
-        /// <summary>
-        /// Copies the pixel data from a <see cref="MemoryBuffer1D{T, TStride}"/> of <see cref="Color"/>.
-        /// </summary>
-        /// <param name="buffer">The <see cref="MemoryBuffer1D{T, TStride}"/> with the source <see cref="Color"/>s.</param>
-        public void CopyFromBuffer(MemoryBuffer1D<Color, Stride1D.Dense> buffer)
-        {
-            buffer.CopyToCPU(_map);
-        }
-
-        /// <summary>
-        /// Copies the pixel data from a <see cref="MemoryBuffer1D{T, TStride}"/> of floats.
-        /// Because <see cref="Color"/> cannot be summed atomically on an <see cref="ILGPU"/> kernal, every three floats represents a single
-        /// <see cref="Color"/> in the gradient. The <see cref="FeatureMap"/> is then treated as a <see cref="Span{T}"/> of floats, instead of
-        /// an array of <see cref="Color"/>s, copying to memory.
-        /// </summary>
-        /// <param name="buffer">The <see cref="MemoryBuffer1D{T, TStride}"/> with the source floats.</param>
-        public void CopyFromBuffer(MemoryBuffer1D<float, Stride1D.Dense> buffer)
-        {
-            unsafe
-            {
-                fixed (void* ptr = &_map[0])
-                {
-                    Span<float> span = new(ptr, Area * 3);
-                    buffer.AsArrayView<float>(0, Area * 3).CopyToCPU(span);
-                }
-            }
         }
 
         /// <summary>
@@ -237,7 +148,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             {
                 for (int j = 0; j < Width; j++)
                 {
-                    color += _map[i * Width + j];
+                    color += _tensor[i * Width + j];
                 }
             }
 
@@ -248,7 +159,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// Normalizes the <see cref="FeatureMap"/>.
         /// </summary>
         /// <returns>Returns the normalized <see cref="FeatureMap"/> as a single dimensional array of <see cref="Color"/>s.</returns>
-        private Color[] Normalize()
+        public Color[] Normalize(Color normalMean, Color normalDeviation)
         {
             Accelerator accelerator = Utility.Accelerator;
 
@@ -277,7 +188,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
             Color sigma = Color.Pow((Color)deviceVariance / Area + new Color(ConvolutionalNeuralNetwork.Utility.ASYMPTOTEERRORCORRECTION), 0.5f);
 
-            var deviceValues = accelerator.Allocate1D(new Color[] { mean, s_normalStandardDeviation / sigma, s_normalMean });
+            var deviceValues = accelerator.Allocate1D(new Color[] { mean, normalDeviation / sigma, normalMean });
 
             var deviceOutput = AllocateEmpty(accelerator);
 

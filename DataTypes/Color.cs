@@ -20,6 +20,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="r">The red channel value.</param>
         /// <param name="g">The green channel value.</param>
         /// <param name="b">The blue channel value.</param>
+        [JsonConstructor]
         public Color(float r, float g, float b)
         {
             _1r = r;
@@ -30,7 +31,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <summary>
         /// Initializes a new instance of the <see cref="Color"/> struct with default values of 0.
         /// </summary>
-        [JsonConstructor]
         public Color()
         {
             _1r = 0;

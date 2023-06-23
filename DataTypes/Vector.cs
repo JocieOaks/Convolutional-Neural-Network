@@ -96,33 +96,6 @@
         }
 
         /// <summary>
-        /// Multiplies a <see cref="Vector"/> and a matrix represented by a <see cref="FeatureMap"/>. This is functionally matrix multiplication
-        /// where the <see cref="Vector"/> is a 1 x n matrix and the <see cref="FeatureMap"/> is an n x m matrix, resulting in a 1 x m vector.
-        /// (However, this only holds if you treat <see cref="Color"/> as a scaler. Since the "matrix" is actually a 3 dimensional tensor,
-        /// this is more accurately a tensor contraction resulting in a 1 x m x 3 tensor. However, throughout the project, <see cref="Color"/> is
-        /// primarily treated as a scaler quantity for simplification)
-        /// </summary>
-        /// <param name="vector">The <see cref="Vector"/> of length n.</param>
-        /// <param name="matrix">The <see cref="FeatureMap"/> of dimensions n x m.</param>
-        /// <returns>Returns a <see cref="ColorVector"/> of length m, where m is the <see cref="FeatureMap.Length"/> of <paramref name="matrix"/>.</returns>
-        /// <exception cref="ArgumentException">Thrown if <paramref name="vector"/> length is not equal to <paramref name="matrix"/> width.</exception>
-        public static ColorVector operator *(Vector vector, FeatureMap matrix)
-        {
-            if (matrix.Width != vector.Length)
-                throw new ArgumentException("Matrix and vector are not compatible.");
-            ColorVector output = new(matrix.Length);
-            for (int i = 0; i < matrix.Width; i++)
-            {
-                for (int j = 0; j < matrix.Length; j++)
-                {
-                    output[j] += matrix[i, j] * vector[i];
-                }
-            }
-
-            return output;
-        }
-
-        /// <summary>
         /// Multiplies the vector by a scaler.
         /// </summary>
         /// <param name="scaler">The scaler factor.</param>

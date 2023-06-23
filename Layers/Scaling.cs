@@ -266,7 +266,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// The <see cref="ScalingLayerInfo"/> struct contains a variety of data about <see cref="Scaling"/> layers
         /// and <see cref="FeatureMap"/>s for use by an <see cref="ILGPU"/> kernal.
         /// </summary>
-        private readonly struct ScalingLayerInfo : ILayerInfo
+        public readonly struct ScalingLayerInfo : ILayerInfo
         {
             /// <inheritdoc/>
             public int FilterSize => throw new NotImplementedException(); //Should not be used.

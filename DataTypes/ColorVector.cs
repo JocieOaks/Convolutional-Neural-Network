@@ -44,31 +44,5 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             get => _values[index];
             set => _values[index] = value;
         }
-
-        /// <summary>
-        /// Multiplies a <see cref="FeatureMap"/> tensor of dimensions n x m x 3, by a <see cref="ColorVector"/> of dimensions m x 3,
-        /// performing double tensor contraction to get a vector of length n.
-        /// </summary>
-        /// <param name="matrix">The first tensor of dimensions n x m x 3.</param>
-        /// <param name="vector">The <see cref="ColorVector"/>, a  tensor of dimensions m x 3.</param>
-        /// <returns>Returns a new <see cref="Vector"/> of length equal to <paramref name="matrix"/> width.</returns>
-        /// <exception cref="ArgumentException">Thrown if <paramref name="matrix"/> <see cref="FeatureMap.Length"/> is not equal to
-        /// <paramref name="vector"/>'s length.</exception>
-        public static Vector operator *(FeatureMap matrix, ColorVector vector)
-        {
-            if (matrix.Length != vector.Length)
-                throw new ArgumentException("Matrix and vector are not compatible.");
-
-            Vector output = new(matrix.Width);
-            for (int i = 0; i < matrix.Width; i++)
-            {
-                for (int j = 0; j < matrix.Length; j++)
-                {
-                    output[i] += Color.Dot(matrix[i, j], vector[j]);
-                }
-            }
-
-            return output;
-        }
     }
 }

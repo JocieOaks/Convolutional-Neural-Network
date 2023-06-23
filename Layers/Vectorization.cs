@@ -10,7 +10,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class Vectorization
     {
-        [JsonProperty] private FeatureMap _matrix;
+        [JsonProperty] private ColorTensor _tensor;
         private FeatureMap[,] _transposedGradients;
         [JsonProperty] private int _vectorDimensions;
         private ColorVector[] _vectors;
@@ -31,7 +31,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 float _xy = 1f / _transposedGradients[batch, 0].Area;
 
-                ColorVector pixelGradient = _xy * vectorGradient[batch] * _matrix;
+                ColorVector pixelGradient = _xy * vectorGradient[batch] * _tensor;
 
                 for (int dimension = 0; dimension < _transposedGradients.GetLength(1); dimension++)
                 {
@@ -44,12 +44,12 @@ namespace ConvolutionalNeuralNetwork.Layers
                     }
                 }
 
-                for (int y = 0; y < _matrix.Length; y++)
+                for (int y = 0; y < _tensor.Length; y++)
                 {
-                    for (int x = 0; x < _matrix.Width; x++)
+                    for (int x = 0; x < _tensor.Width; x++)
                     {
                         Color val = vectorGradient[batch][x] * _vectors[batch][y];
-                        _matrix[x, y] -= learningRate * val;
+                        _tensor[x, y] -= learningRate * val;
                     }
                 }
             }
@@ -69,7 +69,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                     vector[j] = _transposedInput[i, j].Average();
                 }
 
-                vectors[i] = _matrix * vector;
+                vectors[i] = _tensor * vector;
             }
 
             return vectors;
@@ -89,17 +89,17 @@ namespace ConvolutionalNeuralNetwork.Layers
             _transposedInput = transposedInputs;
             _vectorDimensions = vectorDimensions;
 
-            if (_matrix == null || _matrix.Width != vectorDimensions)
+            if (_tensor == null || _tensor.Width != vectorDimensions)
             {
                 float variance = 2f / (3 * featureMapDimensions + vectorDimensions);
                 float stdDev = MathF.Sqrt(variance);
-                _matrix = new FeatureMap(vectorDimensions, featureMapDimensions);
+                _tensor = new ColorTensor(vectorDimensions, featureMapDimensions);
 
                 for (int j = 0; j < featureMapDimensions; j++)
                 {
                     for (int i = 0; i < vectorDimensions; i++)
                     {
-                        _matrix[i, j] = Color.RandomGauss(0, stdDev);
+                        _tensor[i, j] = Color.RandomGauss(0, stdDev);
                     }
                 }
             }
@@ -124,13 +124,13 @@ namespace ConvolutionalNeuralNetwork.Layers
             int featureMapDimensions = _transposedInput.GetLength(1);
             float variance = 2f / (3 * featureMapDimensions + _vectorDimensions);
             float stdDev = MathF.Sqrt(variance);
-            _matrix = new FeatureMap(_vectorDimensions, featureMapDimensions);
+            _tensor = new ColorTensor(_vectorDimensions, featureMapDimensions);
 
             for (int j = 0; j < featureMapDimensions; j++)
             {
                 for (int i = 0; i < _vectorDimensions; i++)
                 {
-                    _matrix[i, j] = Color.RandomGauss(0, stdDev);
+                    _tensor[i, j] = Color.RandomGauss(0, stdDev);
                 }
             }
         }
