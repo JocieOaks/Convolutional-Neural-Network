@@ -215,7 +215,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// (Currently modified to use Leaky ReLU instead of ReLU).
         /// </summary>
         /// <returns>Returns the coefficients multiplied by the activation function when performing activation.</returns>
-        public Color ReLUPropogation()
+        public Color ReLUPropagation()
         {
             return new Color(R < 0 ? 0.01f : 1, G < 0 ? 0.01f : 1, B < 0 ? 0.01f : 1);
         }

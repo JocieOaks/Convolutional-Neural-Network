@@ -84,6 +84,23 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return Sum() / Area;
         }
 
+        public void Sum(out MemoryBuffer1D<float, Stride1D.Dense> deviceSum)
+        {
+            Accelerator accelerator = Utility.Accelerator;
+
+            var sumKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<float>>(SumKernal);
+            using var deviceInput = Allocate(accelerator);
+            deviceSum = accelerator.Allocate1D<float>(3);
+            Index2D index = new(Width, 3);
+
+            sumKernal(index, deviceInput.View, deviceSum.View);
+        }
+
+        private static void SumKernal(Index2D index, ArrayView<Color> map, ArrayView<float> sum)
+        {
+            Atomic.Add(ref sum[index.Y], map[index.X][index.Y]);
+        }
+
         /// <summary>
         /// Creates a <see cref="Bitmap"/> representation of the <see cref="FeatureMap"/>.
         /// The map is normalized to fit in the range of <see cref="System.Drawing.Color"/>.

@@ -1,5 +1,6 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using ConvolutionalNeuralNetwork.Layers;
+using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Networks
@@ -19,6 +20,11 @@ namespace ConvolutionalNeuralNetwork.Networks
         private Vector[] _previousImageGradient;
 
         [JsonProperty] private Vectorization _vectorizationLayer;
+
+        delegate (float, Vector) LossFunction(ImageInput input, Vector vector, float targetValue);
+
+        /// <value>The function to use to calculate loss.</value>
+        private LossFunction Loss => CrossEntropyLoss;
 
         /// <summary>
         /// Loads a <see cref="Discriminator"/> from a json file.
@@ -94,7 +100,7 @@ namespace ConvolutionalNeuralNetwork.Networks
             float correctionLearningRate = CorrectionLearningRate(learningRate, 0.9f, 0.999f);
 
             FeatureMap[,] transposedGradient = new FeatureMap[0, 0];
-            Utility.StopWatch(() => _vectorizationLayer.Backwards(VectorNormalization.Backwards(_imageVectors, gradients), correctionLearningRate, 0.9f, 0.99f), $"Backwards {_vectorizationLayer.Name}", PRINTSTOPWATCH);
+            Utility.StopWatch(() => _vectorizationLayer.Backwards(VectorNormalization.Backwards(_imageVectors, gradients), correctionLearningRate, 0.9f, 0.999f), $"Backwards {_vectorizationLayer.Name}", PRINTSTOPWATCH);
 
             FeatureMap[,] currentGradient = Utility.TransposeArray(transposedGradient);
 
@@ -228,25 +234,23 @@ namespace ConvolutionalNeuralNetwork.Networks
             float totalLoss = 0;
             for (int i = 0; i < images.Length; i++)
             {
-                Vector classificationVector = VectorizeLabel(images[i].Bools, images[i].Floats);
-                float score = Vector.Dot(_imageVectorsNorm[i], classificationVector);
-                float loss = step == 1 ? MathF.Pow(score + 1, 2) : MathF.Pow(score - 1, 2);
-                totalLoss += loss;
-
+                float loss = 0;
                 switch (step)
                 {
                     case 0:
-                        _discriminatorGradients[i] = loss * (2 * score - 2) * classificationVector;
+                        (loss, _discriminatorGradients[i]) = Loss(images[i], _imageVectorsNorm[i], 1);
                         break;
 
                     case 1:
-                        _discriminatorGradients[i] = loss * (2 * score + 2) * classificationVector;
+                        (loss, _discriminatorGradients[i]) = Loss(images[i], _imageVectorsNorm[i], -1);
                         break;
 
                     case 2:
-                        _generatorGradients[i] = loss * (2 * score - 2) * classificationVector;
+                        (loss, _generatorGradients[i]) = Loss(images[i], _imageVectorsNorm[i], 1);
                         break;
                 }
+
+                totalLoss += loss;
             }
 
             if (step != 2)
@@ -264,6 +268,40 @@ namespace ConvolutionalNeuralNetwork.Networks
             }
 
             return totalLoss / images.Length;
+        }
+        /// <summary>
+        /// Caculates loss based on the log of the probability of the image being real or fake, where the probability is based on the angle 
+        /// between the image vector and the classification vector.
+        /// </summary>
+        /// <param name="input">The <see cref="ImageInput"/> corresponding to <paramref name="vector"/>.</param>
+        /// <param name="vector">The <see cref="Vector"/> produced by the <see cref="Discriminator"/>.</param>
+        /// <param name="sign">Should be 1 or -1. -1 Inverts the probability for when the discriminator is testing the probability that a value is fake.</param>
+        /// <returns>Returns the current loss, and the gradient <see cref="Vector"/>.</returns>
+        private (float, Vector) CrossEntropyLoss(ImageInput input, Vector vector, float sign)
+        {
+            Vector classificationVector = VectorizeLabel(input.Bools, input.Floats);
+            float score = Vector.Dot(vector, classificationVector);
+            float angle = MathF.Acos(sign * score) / MathF.PI;
+            float loss = -MathF.Log(angle);
+            Vector gradient = sign / (angle * MathF.Sqrt(1 - score * score)) * classificationVector;
+
+            return (loss, gradient);
+        }
+
+        /// <summary>
+        /// Caculates loss based on the square difference between the cosine similarity of the image vector and it's classification vector, and a give target value.
+        /// </summary>
+        /// <param name="input">The <see cref="ImageInput"/> corresponding to <paramref name="vector"/>.</param>
+        /// <param name="vector">The <see cref="Vector"/> produced by the <see cref="Discriminator"/>.</param>
+        /// <param name="targetValue">The target value that the cosine similarity should be equal to.</param>
+        /// <returns>Returns the current loss, and the gradient <see cref="Vector"/>.</returns>
+        private (float, Vector) LeastSquareLoss(ImageInput input, Vector vector, float targetValue)
+        {
+            Vector classificationVector = VectorizeLabel(input.Bools, input.Floats);
+            float score = Vector.Dot(vector, classificationVector);
+            float loss = MathF.Pow(score - targetValue, 2);
+
+            return (loss, loss * 2 * (score - targetValue) * classificationVector);
         }
     }
 }

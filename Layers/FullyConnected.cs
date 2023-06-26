@@ -394,9 +394,10 @@ namespace ConvolutionalNeuralNetwork.Layers
         private void UpdateWeight(float learningRate, float firstMomentDecay, float secondMomentDecay, int index1, int index2, float[] multiplierGradients)
         {
             Color gradient = new Color(multiplierGradients[0], multiplierGradients[1], multiplierGradients[2]);
-            Color first = _blueFirstMoment[index1, index2] = firstMomentDecay * _blueFirstMoment[index1, index2] + (1 - firstMomentDecay) * gradient;
-            Color second = _blueSecondMoment[index1, index2] = secondMomentDecay * _blueSecondMoment[index1, index2] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
-            _matrixBlue[index1, index2] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+            Color first = _redFirstMoment[index1, index2] = firstMomentDecay * _redFirstMoment[index1, index2] + (1 - firstMomentDecay) * gradient;
+            Color second = _redSecondMoment[index1, index2] = secondMomentDecay * _redSecondMoment[index1, index2] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
+            _matrixRed[index1, index2] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+
 
             gradient = new Color(multiplierGradients[3], multiplierGradients[4], multiplierGradients[5]);
             first = _greenFirstMoment[index1, index2] = firstMomentDecay * _greenFirstMoment[index1, index2] + (1 - firstMomentDecay) * gradient;
@@ -404,9 +405,10 @@ namespace ConvolutionalNeuralNetwork.Layers
             _matrixGreen[index1, index2] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
 
             gradient = new Color(multiplierGradients[6], multiplierGradients[7], multiplierGradients[8]);
-            first = _redFirstMoment[index1, index2] = firstMomentDecay * _redFirstMoment[index1, index2] + (1 - firstMomentDecay) * gradient;
-            second = _redSecondMoment[index1, index2] = secondMomentDecay * _redSecondMoment[index1, index2] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
-            _matrixRed[index1, index2] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+            first = _blueFirstMoment[index1, index2] = firstMomentDecay * _blueFirstMoment[index1, index2] + (1 - firstMomentDecay) * gradient;
+            second = _blueSecondMoment[index1, index2] = secondMomentDecay * _blueSecondMoment[index1, index2] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
+            _matrixBlue[index1, index2] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+
         }
 
         /// <summary>

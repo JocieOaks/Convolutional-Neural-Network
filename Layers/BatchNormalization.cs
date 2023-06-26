@@ -113,7 +113,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
                 first = _biasFirstMoment[i] = firstMomentDecay * _biasFirstMoment[i] + (1 - firstMomentDecay) * gradients[i].BiasGradient;
                 second = _biasSecondMoment[i] = secondMomentDecay * _biasSecondMoment[i] + (1 - secondMomentDecay) * Color.Pow(gradients[i].BiasGradient, 2);
-                _weight[i] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+                _bias[i] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
 
                 _deviceInfos[i].Dispose();
                 _deviceMeans[i].Dispose();

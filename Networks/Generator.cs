@@ -120,9 +120,15 @@ namespace ConvolutionalNeuralNetwork.Networks
         {
             base.StartUp(batchSize, width, length, boolsLength, floatsLength);
 
-            //_layers.Insert(0, new DropoutLayer(0.5f));
-            _layers.Remove(_layers.FindLast(x => x is ReLUActivation));
-            _layers.Remove(_layers.FindLast(x => x is BatchNormalization));
+            for(int i = _layers.Count - 1; i >= 0; i++)
+            {
+                if (_layers[i] is IPrimaryLayer && _layers[i] is not IStructuralLayer)
+                {
+                    break;
+                }
+                if (_layers[i] is ReLUActivation || _layers[i] is BatchNormalization)
+                    _layers.Remove(_layers[i]);
+            }
 
             _classificationBools = new bool[_batchSize][];
             _classificationFloats = new float[_batchSize][];
