@@ -46,7 +46,7 @@ namespace ConvolutionalNeuralNetwork
         /// <param name="func">The <see cref="Action"/> to be performed and measured.</param>
         /// <param name="processName">The name of the action, for logging purposes.</param>
         /// <param name="print">When true, the time taken for the <see cref="Action"/> to be completed will be printed to the console.</param>
-        public static void StopWatch(Action func, string processName, bool print)
+        public static float StopWatch(Action func, string processName, bool print)
         {
             var watch = System.Diagnostics.Stopwatch.StartNew();
             func();
@@ -54,6 +54,7 @@ namespace ConvolutionalNeuralNetwork
             var elapsedMs = watch.ElapsedMilliseconds;
             if (print)
                 Console.WriteLine($"Time: {elapsedMs / 1000f:F3} s {processName}");
+            return elapsedMs / 1000f;
         }
 
         /// <summary>

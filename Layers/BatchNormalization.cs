@@ -43,8 +43,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            Context context = ConvolutionalNeuralNetwork.Utility.Context;
-            Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
+            Accelerator accelerator = Utility.Accelerator;
 
             Gradients[] gradients = new Gradients[_inputDimensions];
 
@@ -124,79 +123,125 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Forward()
         {
-            Context context = ConvolutionalNeuralNetwork.Utility.Context;
-            Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
+            Accelerator accelerator = Utility.Accelerator;
 
-            var sumKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(MeanKernal);
-
-            for (int i = 0; i < _inputDimensions; i++)
+            if (false)
             {
-                _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
-                _deviceSums[i] = accelerator.Allocate1D<float>(3);
+                var sumKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(MeanKernal);
 
-                Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
-
-                for (int j = 0; j < _batchSize; j++)
+                for (int i = 0; i < _inputDimensions; i++)
                 {
-                    _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
+                    _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
+                    _deviceSums[i] = accelerator.Allocate1D<float>(3);
 
-                    sumKernal(index, _deviceInputs[i, j].View, _deviceSums[i].View, _deviceInfos[i].View);
+                    Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
+
+                    for (int j = 0; j < _batchSize; j++)
+                    {
+                        _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
+
+                        sumKernal(index, _deviceInputs[i, j].View, _deviceSums[i].View, _deviceInfos[i].View);
+                    }
+                }
+
+                accelerator.Synchronize();
+                for (int i = 0; i < _inputDimensions; i++)
+                {
+                    _mean[i] = (Color)_deviceSums[i] / (Infos(i).Area * _batchSize);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < _inputDimensions; i++)
+                {
+                    _mean[i] = new Color(0);
+                    for (int j = 0; j < _batchSize; j++)
+                    {
+                        _mean[i] += _inputs[i, j].Average();
+                    }
+                    _mean[i] /= _batchSize;
                 }
             }
 
-            accelerator.Synchronize();
-
-            var varianceKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(VarianceKernal);
-
-            for (int i = 0; i < _inputDimensions; i++)
+            if (false)
             {
-                _mean[i] = (Color)_deviceSums[i] / (Infos(i).Area * _batchSize);
+                var varianceKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(VarianceKernal);
 
-                _deviceMeans[i] = accelerator.Allocate1D(new Color[] { _mean[i] });
-                _deviceVariances[i] = accelerator.Allocate1D<float>(3);
-
-                Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
-
-                for (int j = 0; j < _batchSize; j++)
+                for (int i = 0; i < _inputDimensions; i++)
                 {
-                    varianceKernal(index, _deviceInputs[i, j].View, _deviceMeans[i].View, _deviceVariances[i].View, _deviceInfos[i].View);
+                    _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
+                    _deviceMeans[i] = accelerator.Allocate1D(new Color[] { _mean[i] });
+                    _deviceVariances[i] = accelerator.Allocate1D<float>(3);
+
+                    Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
+
+                    for (int j = 0; j < _batchSize; j++)
+                    {
+                        _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
+                        varianceKernal(index, _deviceInputs[i, j].View, _deviceMeans[i].View, _deviceVariances[i].View, _deviceInfos[i].View);
+                    }
+                }
+
+                accelerator.Synchronize();
+                for (int i = 0; i < _inputDimensions; i++)
+                {
+                    _sigma[i] = Color.Pow((Color)_deviceVariances[i] / (Infos(i).Area * _batchSize) + Utility.AsymptoteErrorColor, 0.5f);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < _inputDimensions; i++)
+                {
+                    _sigma[i] = new Color(0);
+                    for (int j = 0; j < _batchSize; j++)
+                    {
+                        for (int k = 0; k < _inputs[i, j].Length; k++)
+                        {
+                            for (int l = 0; l < _inputs[i, j].Width; l++)
+                            {
+                                _sigma[i] += Color.Pow(_inputs[i, j][l, k] - _mean[i], 2);
+                            }
+                        }
+                    }
+                    _sigma[i] = Color.Pow(_sigma[i] / (Infos(i).Area * _batchSize) + Utility.AsymptoteErrorColor, 0.5f);
                 }
             }
 
-            accelerator.Synchronize();
-
-            var normalizeKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<StaticLayerInfo>>(ForwardKernal);
-
-            for (int i = 0; i < _inputDimensions; i++)
+            Utility.StopWatch(() =>
             {
-                _sigma[i] = Color.Pow((Color)_deviceVariances[i] / (Infos(i).Area * _batchSize) + new Color(ConvolutionalNeuralNetwork.Utility.ASYMPTOTEERRORCORRECTION), 0.5f);
+                var normalizeKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<StaticLayerInfo>>(ForwardKernal);
 
-                Index2D index = new(Infos(i).Width, Infos(i).Length);
-                _deviceValues[i] = accelerator.Allocate1D(new Color[] { _mean[i], _weight[i] / _sigma[i], _bias[i] });
-
-                for (int j = 0; j < _batchSize; j++)
+                for (int i = 0; i < _inputDimensions; i++)
                 {
-                    _deviceOutputs[i, j] = _outputs[i, j].AllocateEmpty(accelerator);
+                    _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
+                    Index2D index = new(Infos(i).Width, Infos(i).Length);
+                    _deviceValues[i] = accelerator.Allocate1D(new Color[] { _mean[i], _weight[i] / _sigma[i], _bias[i] });
 
-                    normalizeKernal(index, _deviceInputs[i, j].View, _deviceOutputs[i, j].View, _deviceValues[i].View, _deviceInfos[i].View);
+                    for (int j = 0; j < _batchSize; j++)
+                    {
+                        _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
+                        _deviceOutputs[i, j] = _outputs[i, j].AllocateEmpty(accelerator);
+
+                        normalizeKernal(index, _deviceInputs[i, j].View, _deviceOutputs[i, j].View, _deviceValues[i].View, _deviceInfos[i].View);
+                    }
                 }
-            }
 
-            accelerator.Synchronize();
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
+                accelerator.Synchronize();
+                for (int i = 0; i < _inputDimensions; i++)
                 {
-                    _outputs[i, j].CopyFromBuffer(_deviceOutputs[i, j]);
-                    _deviceOutputs[i, j].Dispose();
-                    _deviceInputs[i, j].Dispose();
+                    for (int j = 0; j < _batchSize; j++)
+                    {
+                        _outputs[i, j].CopyFromBuffer(_deviceOutputs[i, j]);
+                        _deviceOutputs[i, j].Dispose();
+                        _deviceInputs[i, j].Dispose();
+                    }
+                    _deviceInfos[i].Dispose();
+                    //_deviceSums[i].Dispose();
+                    //_deviceMeans[i].Dispose();
+                    //_deviceVariances[i].Dispose();
+                    _deviceValues[i].Dispose();
                 }
-                _deviceInfos[i].Dispose();
-                _deviceSums[i].Dispose();
-                _deviceMeans[i].Dispose();
-                _deviceVariances[i].Dispose();
-                _deviceValues[i].Dispose();
-            }
+            }, "Normalize", false);
         }
 
         /// <summary>
