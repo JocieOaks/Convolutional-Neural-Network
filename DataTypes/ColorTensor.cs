@@ -1,6 +1,7 @@
 ﻿using ILGPU;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
+using System.Diagnostics;
 
 namespace ConvolutionalNeuralNetwork.DataTypes
 {
@@ -149,9 +150,12 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// </summary>
         /// <param name="accelerator">The <see cref="Accelerator"/> on which the map's data is being allocated.</param>
         /// <returns>Returns the created <see cref="MemoryBuffer1D{T, TStride}"/>.</returns>
-        public MemoryBuffer1D<float, Stride1D.Dense> AllocateFloat(Accelerator accelerator)
+        public MemoryBuffer1D<float, Stride1D.Dense> AllocateFloat(Accelerator accelerator, bool zero)
         {
-            return accelerator.Allocate1D<float>(FloatLength);
+            var buffer = accelerator.Allocate1D<float>(FloatLength);
+            if (zero)
+                buffer.MemSetToZero();
+            return buffer;
         }
 
         /// <summary>

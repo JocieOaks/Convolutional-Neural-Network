@@ -34,7 +34,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 for (int j = 0; j < _batchSize; j++)
                 {
                     _deviceInGradients[i, j] = _inGradients[i, j].Allocate(accelerator);
-                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator);
+                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator, true);
 
                     backwardsKernal(index, _deviceInGradients[i, j].View, _deviceOutGradients[i, j].View, _deviceInfos[i].View);
                 }

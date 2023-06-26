@@ -47,7 +47,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index3D index = new(Infos(i).InputWidth, Infos(i).InputLength, 3);
                 for (int j = 0; j < _inGradients.GetLength(1); j++)
                 {
-                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator);
+                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator, false);
                     _deviceInGradients[i, j] = _inGradients[i, j].Allocate(accelerator);
 
                     backwardsKernal(index, _deviceInGradients[i, j].View, _deviceOutGradients[i, j].View, _deviceInfos[i].View);

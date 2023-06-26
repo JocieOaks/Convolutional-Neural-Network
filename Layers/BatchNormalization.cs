@@ -53,6 +53,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
                 _deviceGradients[i] = accelerator.Allocate1D<float>(9);
+                _deviceGradients[i].MemSetToZero();
                 _deviceMeans[i] = accelerator.Allocate1D(new Color[] { _mean[i] });
                 Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
 
@@ -87,7 +88,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator);
+                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator, false);
 
                     backwardsKernal(index, _deviceInputs[i, j].View, _deviceInGradients[i, j].View, _deviceOutGradients[i, j].View, _deviceValues[i].View, _deviceInfos[i].View);
                 }
@@ -133,6 +134,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 {
                     _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
                     _deviceSums[i] = accelerator.Allocate1D<float>(3);
+                    _deviceSums[i].MemSetToZero();
 
                     Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
 
@@ -172,6 +174,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                     _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
                     _deviceMeans[i] = accelerator.Allocate1D(new Color[] { _mean[i] });
                     _deviceVariances[i] = accelerator.Allocate1D<float>(3);
+                    _deviceVariances[i].MemSetToZero();
 
                     Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
 

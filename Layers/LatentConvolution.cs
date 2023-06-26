@@ -26,8 +26,8 @@ namespace ConvolutionalNeuralNetwork.Layers
         [JsonProperty] private ColorVector[,] _boolsFirstMoment;
         [JsonProperty] private ColorVector[,] _boolsSecondMoment;
 
-        private float[,][] _filterGradients;
-        private Color[,][] _filters;
+        private ColorTensor[,] _filterGradients;
+        private ColorTensor[,] _filters;
 
         [JsonProperty] private ColorVector[,] _floatsFilterVectors;
         [JsonProperty] private ColorVector[,] _floatsFirstMoment;
@@ -77,7 +77,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 for (int j = 0; j < _batchSize; j++)
                 {
                     _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
-                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator);
+                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator, true);
                 }
             }
 
@@ -86,8 +86,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceFilters[i, j] = accelerator.Allocate1D(_filters[i, j]);
-                    _deviceFilterGradients[i, j] = accelerator.Allocate1D<float>(_filterGradients[i, j].Length);
+                    _deviceFilters[i, j] = _filters[i,j].Allocate(accelerator);
+                    _deviceFilterGradients[i, j] = _filterGradients[i, j].AllocateFloat(accelerator, true);
                     _deviceInGradients[i, j] = _inGradients[i, j].Allocate(accelerator);
 
                     backwardsOutKernal(index, _deviceInGradients[i, j].View, _deviceFilters[i, j].View, _deviceOutGradients[i % _inputDimensions, j].View, _deviceInfos[i % _inputDimensions].View);
@@ -113,7 +113,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 for (int j = 0; j < _batchSize; j++)
                 {
                     _deviceInGradients[i, j].Dispose();
-                    _deviceFilterGradients[i, j].CopyToCPU(_filterGradients[i, j]);
+                    _filterGradients[i, j].CopyFromBuffer(_deviceFilterGradients[i, j]);
                     _deviceFilterGradients[i, j].Dispose();
                     _deviceFilters[i, j].Dispose();
                 }
@@ -123,22 +123,27 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    for (int k = 0; k < _filterSize * _filterSize; k++)
+                    for (int x = 0; x < _filterSize; x++)
                     {
-                        Color gradient = new Color(_filterGradients[i, j][k * 3], _filterGradients[i, j][k * 3 + 1], _filterGradients[i, j][k * 3 + 2]).Clamp(CLAMP);
-                        for (int l = 0; l < _boolsFilterVectors[i, k].Length; l++)
+                        for (int y = 0; y < _filterSize; y++)
                         {
-                            Color gradientColor = Bools[j][l] ? (1 - firstMomentDecay) * gradient : new Color();
-                            Color first = _boolsFirstMoment[i, k][l] = firstMomentDecay * _boolsFirstMoment[i, k][l] + gradientColor;
-                            Color second = _boolsSecondMoment[i, k][l] = secondMomentDecay * _boolsSecondMoment[i, k][l] + (1 - secondMomentDecay) * Color.Pow(gradientColor, 2);
-                            _boolsFilterVectors[i, k][l] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
-                        }
+                            Color gradient = _filterGradients[i, j][x,y].Clamp(CLAMP);
 
-                        for (int l = 0; l < _floatsFilterVectors[i, k].Length; l++)
-                        {
-                            Color first = _floatsFirstMoment[i, k][l] = firstMomentDecay * _floatsFirstMoment[i, k][l] + (1 - firstMomentDecay) * gradient * Floats[j][l];
-                            Color second = _floatsSecondMoment[i, k][l] = secondMomentDecay * _floatsSecondMoment[i, k][l] + (1 - secondMomentDecay) * Color.Pow(gradient * Floats[j][l], 2);
-                            _floatsFilterVectors[i, k][l] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+                            int index = y * _filterSize + x;
+                            for (int l = 0; l < _boolsFilterVectors[i, index].Length; l++)
+                            {
+                                Color gradientColor = Bools[j][l] ? (1 - firstMomentDecay) * gradient : new Color();
+                                Color first = _boolsFirstMoment[i, index][l] = firstMomentDecay * _boolsFirstMoment[i, index][l] + gradientColor;
+                                Color second = _boolsSecondMoment[i, index][l] = secondMomentDecay * _boolsSecondMoment[i, index][l] + (1 - secondMomentDecay) * Color.Pow(gradientColor, 2);
+                                _boolsFilterVectors[i, index][l] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+                            }
+
+                            for (int l = 0; l < _floatsFilterVectors[i, index].Length; l++)
+                            {
+                                Color first = _floatsFirstMoment[i, index][l] = firstMomentDecay * _floatsFirstMoment[i, index][l] + (1 - firstMomentDecay) * gradient * Floats[j][l];
+                                Color second = _floatsSecondMoment[i, index][l] = secondMomentDecay * _floatsSecondMoment[i, index][l] + (1 - secondMomentDecay) * Color.Pow(gradient * Floats[j][l], 2);
+                                _floatsFilterVectors[i, index][l] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+                            }
                         }
                     }
                 }
@@ -153,17 +158,21 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    for (int k = 0; k < _filterSize * _filterSize; k++)
+                    for (int y = 0; y < _filterSize; y++)
                     {
-                        _filters[i, j][k] = new Color(0);
-                        for (int l = 0; l < _boolsFilterVectors[i, k].Length; l++)
+                        for (int x = 0; x < _filterSize; x++)
                         {
-                            if (Bools[j][l])
-                                _filters[i, j][k] += _boolsFilterVectors[i, k][l];
-                        }
-                        for (int l = 0; l < _floatsFilterVectors[i, k].Length; l++)
-                        {
-                            _filters[i, j][k] += _floatsFilterVectors[i, k][l] * Floats[j][l];
+                            _filters[i, j][x,y] = new Color(0);
+                            int index = y * _filterSize + x;
+                            for (int l = 0; l < _boolsFilterVectors[i, index].Length; l++)
+                            {
+                                if (Bools[j][l])
+                                    _filters[i, j][x,y] += _boolsFilterVectors[i, index][l];
+                            }
+                            for (int l = 0; l < _floatsFilterVectors[i, index].Length; l++)
+                            {
+                                _filters[i, j][x, y] += _floatsFilterVectors[i, index][l] * Floats[j][l];
+                            }
                         }
                     }
                 }
@@ -187,7 +196,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceFilters[i, j] = accelerator.Allocate1D(_filters[i, j]);
+                    _deviceFilters[i, j] = _filters[i,j].Allocate(accelerator);
                     _deviceOutputs[i, j] = _outputs[i, j].AllocateEmpty(accelerator);
 
                     forwardKernal(index, _deviceInputs[i % _inputDimensions, j].View, _deviceOutputs[i, j].View, _deviceFilters[i, j].View, _deviceInfos[i % _inputDimensions].View);
@@ -349,15 +358,15 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
-            _filters = new Color[_outputDimensions, _batchSize][];
-            _filterGradients = new float[_outputDimensions, _batchSize][];
+            _filters = new ColorTensor[_outputDimensions, _batchSize];
+            _filterGradients = new ColorTensor[_outputDimensions, _batchSize];
 
             for (int i = 0; i < _outputDimensions; i++)
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _filters[i, j] = new Color[_filterSize * _filterSize];
-                    _filterGradients[i, j] = new float[_filterSize * _filterSize * 3];
+                    _filters[i, j] = new ColorTensor(_filterSize, _filterSize);
+                    _filterGradients[i, j] = new ColorTensor(_filterSize, _filterSize * 3);
                 }
             }
 

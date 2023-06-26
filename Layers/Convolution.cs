@@ -154,8 +154,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="learningRate">Controls how much the layer is updated with each backpropagation.</param>
         public void BackwardsUpdateOnly(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            Context context = ConvolutionalNeuralNetwork.Utility.Context;
-            Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
+            Accelerator accelerator = Utility.Accelerator;
 
             var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsFilterKernal);
 
@@ -170,7 +169,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             for (int i = 0; i < _outputDimensions; i++)
             {
-                _deviceFilterGradients[i] = _filterGradients[i].AllocateFloat(accelerator);
+                _deviceFilterGradients[i] = _filterGradients[i].AllocateFloat(accelerator, true);
                 Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
@@ -356,7 +355,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 _deviceInfos[i] = accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator);
+                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator, true);
                 }
             }
 
@@ -414,14 +413,14 @@ namespace ConvolutionalNeuralNetwork.Layers
                 for (int j = 0; j < _batchSize; j++)
                 {
                     _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
-                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator);
+                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator, true);
                 }
             }
 
             for (int i = 0; i < _outputDimensions; i++)
             {
                 _deviceFilters[i] = _filters[i].Allocate(accelerator);
-                _deviceFilterGradients[i] = _filterGradients[i].AllocateFloat(accelerator);
+                _deviceFilterGradients[i] = _filterGradients[i].AllocateFloat(accelerator, true);
                 Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
