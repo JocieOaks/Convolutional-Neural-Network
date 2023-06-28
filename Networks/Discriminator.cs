@@ -24,7 +24,7 @@ namespace ConvolutionalNeuralNetwork.Networks
         delegate (float, Vector) LossFunction(ImageInput input, Vector vector, float targetValue);
 
         /// <value>The function to use to calculate loss.</value>
-        private LossFunction Loss => CrossEntropyLoss;
+        private LossFunction Loss => LeastSquareLoss;
 
         /// <summary>
         /// Loads a <see cref="Discriminator"/> from a json file.

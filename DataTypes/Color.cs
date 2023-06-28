@@ -111,8 +111,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="color">The <see cref="System.Drawing.Color"/> being converted into a <see cref="Color"/>.</param>
         public static explicit operator Color(System.Drawing.Color color)
         {
-            int inverseAlpha = 255 - color.A;
-            return new Color((color.R + inverseAlpha) / 255f, (color.G + inverseAlpha) / 255f, (color.B + inverseAlpha) / 255f);
+            return new Color(color.R / 255f, color.G / 255f, color.B / 255f) * (color.A / 255f);
         }
 
         /// <summary>

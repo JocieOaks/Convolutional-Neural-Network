@@ -335,6 +335,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                         for (int j = 0; j < _filterSize * _filterSize; j++)
                         {
                             ColorVector newBoolVector = new(Bools[0].Length);
+                            _boolsFirstMoment[i, j] = new ColorVector(Bools[0].Length);
+                            _boolsSecondMoment[i, j] = new ColorVector(Bools[0].Length);
                             for (int k = 0; k < Bools[0].Length; k++)
                             {
                                 if (_boolsFilterVectors[i, j].Length > k)
@@ -345,6 +347,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                             _boolsFilterVectors[i, j] = newBoolVector;
 
                             ColorVector newFloatVector = new(Floats[0].Length);
+                            _floatsFirstMoment[i, j] = new ColorVector(Floats[0].Length);
+                            _floatsSecondMoment[i, j] = new ColorVector(Floats[0].Length);
                             for (int k = 0; k < Floats[0].Length; k++)
                             {
                                 if (_floatsFilterVectors[i, j].Length > k)
