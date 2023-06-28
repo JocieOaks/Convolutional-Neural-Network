@@ -31,11 +31,11 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    for (int k = 0; k < _inputs[i, j].Length; k++)
+                    for (int y = 0; y < _inputs[i, j].Length; y++)
                     {
-                        for (int l = 0; l < _inputs[i, j].Width; l++)
+                        for (int x = 0; x < _inputs[i, j].Width; x++)
                         {
-                            _outGradients[i, j][l, k] = _inputs[i, j][l, k].ReLUPropagation() * _inGradients[i, j][l, k];
+                            _outGradients[i, j][x, y] = _inputs[i, j][x, y].ReLUPropagation() * _inGradients[i, j][x, y];
                         }
                     }
                 }
@@ -49,11 +49,11 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    for(int k = 0; k < _inputs[i,j].Length; k++)
+                    for(int y = 0; y < _inputs[i,j].Length; y++)
                     {
-                        for(int l = 0; l < _inputs[i,j].Width; l++)
+                        for(int x = 0; x < _inputs[i,j].Width; x++)
                         {
-                            _outputs[i, j][l, k] = _inputs[i, j][l, k].ReLU();
+                            _outputs[i, j][x, y] = _inputs[i, j][x, y].ReLU();
                         }
                     }
                 }

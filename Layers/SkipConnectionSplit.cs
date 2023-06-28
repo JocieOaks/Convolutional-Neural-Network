@@ -51,7 +51,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 {
                     _deviceInGradients[i, j] = _inGradients[i, j].Allocate(accelerator);
                     _deviceInGradientsSecondary[i, j] = _inGradientSecondary[i, j].Allocate(accelerator);
-                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator);
+                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator, false);
 
                     backwardsKernal(index, _deviceInGradients[i, j].View, _deviceInGradientsSecondary[i, j].View, _deviceOutGradients[i, j].View);
                 }

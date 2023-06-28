@@ -133,6 +133,26 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return new Color(color1.R - color2.R, color1.G - color2.G, color1.B - color2.B);
         }
 
+        public static bool operator ==(Color color1, Color color2)
+        {
+            for(int i = 0; i <3; i++)
+            {
+                if (MathF.Abs(color1[i] - color2[i]) > MathF.Max(1e-3f, 1e-3f * Math.Abs(color1[i] + color2[i])))
+                    return false;
+            }
+            return true;
+        }
+
+        public static bool operator !=(Color color1, Color color2)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                if (MathF.Abs(color1[i] - color2[i]) > MathF.Max(1e-3f, 1e-3f * Math.Abs(color1[i] + color2[i])))
+                    return true;
+            }
+            return false;
+        }
+
         public static Color operator -(Color color)
         {
             return new Color(-color.R, -color.G, -color.B);

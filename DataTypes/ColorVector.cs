@@ -44,5 +44,43 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             get => _values[index];
             set => _values[index] = value;
         }
+
+        public static bool operator ==(ColorVector v1, ColorVector v2)
+        {
+            if (v1 is null)
+                return v2 is null;
+
+            if (v2 is null)
+                return v1 is null;
+
+            if (v1.Length != v2.Length)
+                return false;
+
+            for (int i = 0; i < v1.Length; i++)
+            {
+                if (v1[i] != v2[i])
+                    return false;
+            }
+            return true;
+        }
+
+        public static bool operator !=(ColorVector v1, ColorVector v2)
+        {
+            if (v1 is null)
+                return v2 is not null;
+
+            if (v2 is null)
+                return v1 is not null;
+
+            if (v1.Length != v2.Length)
+                return true;
+
+            for (int i = 0; i < v1.Length; i++)
+            {
+                if (v1[i] != v2[i])
+                    return true;
+            }
+            return false;
+        }
     }
 }

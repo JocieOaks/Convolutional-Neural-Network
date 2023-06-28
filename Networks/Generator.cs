@@ -120,7 +120,7 @@ namespace ConvolutionalNeuralNetwork.Networks
         {
             base.StartUp(batchSize, width, length, boolsLength, floatsLength);
 
-            for(int i = _layers.Count - 1; i >= 0; i++)
+            for(int i = _layers.Count - 1; i >= 0; i--)
             {
                 if (_layers[i] is IPrimaryLayer && _layers[i] is not IStructuralLayer)
                 {

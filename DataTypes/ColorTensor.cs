@@ -55,6 +55,12 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             set => _tensor[y * Width + x] = value;
         }
 
+        private Color this[int index]
+        {
+            get => _tensor[index];
+            set => _tensor[index] = value;
+        }
+
         /// <summary>
         /// Multiplies a <see cref="Vector"/> and a <see cref="ColorTensor"/> by performing tensor contraction using the <see cref="Vector"/> as 
         /// n x 3 tensor and the <see cref="ColorTensor"/> is an n x m x 3 tensor, resulting in a m x 3 tensor.
@@ -103,6 +109,43 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             }
 
             return output;
+        }
+
+        public static bool operator ==(ColorTensor v1, ColorTensor v2)
+        {
+            if (v1 is null)
+                return v2 is null;
+            if (v2 is null)
+                return v1 is null;
+
+            if (v1.Length != v2.Length || v1.Width != v2.Width)
+                return false;
+
+            for (int i = 0; i < v1.Area; i++)
+            {
+                if (v1[i] != v2[i])
+                    return false;
+            }
+            return true;
+        }
+
+        public static bool operator !=(ColorTensor v1, ColorTensor v2)
+        {
+            if (v1 is null)
+                return v2 is not null;
+
+            if (v2 is null)
+                return v1 is not null;
+
+            if (v1.Length != v2.Length || v1.Width != v2.Width)
+                return true;
+
+            for (int i = 0; i < v1.Area; i++)
+            {
+                if (v1[i] != v2[i])
+                    return true;
+            }
+            return false;
         }
 
         /// <summary>

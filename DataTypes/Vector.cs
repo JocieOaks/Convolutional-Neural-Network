@@ -107,6 +107,38 @@
             return vector * scaler;
         }
 
+        public static bool operator ==(Vector v1, Vector v2)
+        {
+            if (v1 is null)
+                return v2 is null;
+
+            if (v1.Length != v2.Length)
+                return false;
+
+            for(int i = 0; i < v1.Length; i++)
+            {
+                if (MathF.Abs(v1[i] - v2[i]) > 1e-6)
+                    return false;
+            }
+            return true;
+        }
+
+        public static bool operator !=(Vector v1, Vector v2)
+        {
+            if (v1 is null)
+                return v2 is null;
+
+            if (v1.Length != v2.Length)
+                return true;
+
+            for (int i = 0; i < v1.Length; i++)
+            {
+                if (MathF.Abs(v1[i] - v2[i]) > 1e-6)
+                    return true;
+            }
+            return false;
+        }
+
         /// <summary>
         /// Sums two <see cref="Vector"/>s.
         /// </summary>
