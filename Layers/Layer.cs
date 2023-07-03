@@ -1,6 +1,4 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
-using ILGPU;
-using ILGPU.Runtime;
 using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers
@@ -15,16 +13,10 @@ namespace ConvolutionalNeuralNetwork.Layers
         //Arrays of FeatureMaps are shared between layers as references.
         protected int _batchSize;
 
-        protected MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInGradients;
-        protected MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInputs;
-        protected MemoryBuffer1D<float, Stride1D.Dense>[,] _deviceOutGradients;
-        protected MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceOutputs;
+        protected IOBuffers _buffers;
         [JsonProperty] protected int _filterSize;
-        protected FeatureMap[,] _inGradients;
         protected int _inputDimensions;
-        protected FeatureMap[,] _inputs;
         protected ILayerInfo[] _layerInfos;
-        protected FeatureMap[,] _outGradients;
         protected int _outputDimensions;
         protected FeatureMap[,] _outputs;
         [JsonProperty] protected int _stride;
@@ -55,9 +47,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         [JsonIgnore] public int OutputDimensions => _outputDimensions;
 
         /// <inheritdoc/>
-        [JsonIgnore] public FeatureMap[,] Outputs => _outputs;
-
-        /// <inheritdoc/>
         public abstract void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay);
 
         /// <inheritdoc/>
@@ -67,7 +56,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         public abstract void Reset();
 
         /// <inheritdoc/>
-        public abstract (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients);
+        public abstract FeatureMap[,] Startup(FeatureMap[,] inputs, IOBuffers buffers);
 
         /// <summary>
         /// Initializes the <see cref="Layer"/> and many of its fields.
@@ -77,7 +66,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="outputDimensionFactor">A factor relating the number of input layers to the number of output layers.
         /// A positive number multiplies the number of input dimensions. A negative number divides the number of dimensions.</param>
         /// <exception cref="ArgumentException">Thrown if the ratio of input layers and output layers is not an integer.</exception>
-        protected void BaseStartup(FeatureMap[,] inputs, FeatureMap[,] outGradients, int outputDimensionFactor = 1)
+        protected void BaseStartup(FeatureMap[,] inputs, IOBuffers buffers, int outputDimensionFactor = 1)
         {
             _inputDimensions = inputs.GetLength(0);
             if (outputDimensionFactor >= 1)
@@ -98,10 +87,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             _batchSize = inputs.GetLength(1);
             _layerInfos = new ILayerInfo[_inputDimensions];
-            _inputs = inputs;
-            _outGradients = outGradients;
             _outputs = new FeatureMap[_outputDimensions, _batchSize];
-            _inGradients = new FeatureMap[_outputDimensions, _batchSize];
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -127,12 +113,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                         OutputLength = 2 + (inputs[i, 0].Length - _filterSize - 1) / _stride
                     };
                 }
-
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _outGradients[i, j] = new FeatureMap(layer.InputWidth, layer.InputLength);
-                }
             }
+
             for (int i = 0; i < _outputDimensions; i++)
             {
                 ILayerInfo layer;
@@ -151,10 +133,9 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
-            _deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
-            _deviceInGradients = new MemoryBuffer1D<Color, Stride1D.Dense>[_outputDimensions, _batchSize];
-            _deviceOutputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_outputDimensions, _batchSize];
-            _deviceOutGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions, _batchSize];
+            _buffers = buffers;
+            for (int i = 0; i < _outputDimensions; i++)
+                buffers.OutputDimensionArea(i, _outputs[i, 0].Area);
         }
     }
 }

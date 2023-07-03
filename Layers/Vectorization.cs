@@ -29,7 +29,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// shared with the previous layer.
         /// </summary>
         /// <param name="learningRate">The overall learning rate for the layer updates.</param>
-        public void Backwards(Vector[] vectorGradient, float learningRate, float firstMomentDecay, float secondMomentDecay)
+        public FeatureMap[,] Backwards(Vector[] vectorGradient, float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
             for (int batch = 0; batch < vectorGradient.Length; batch++)
             {
@@ -59,6 +59,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                     }
                 }
             }
+
+            return _transposedGradients;
         }
 
         /// <summary>
@@ -86,7 +88,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="transposedInputs">The previous <see cref="Layer"/>'s transposed output.</param>
         /// <param name="outGradients">The previous <see cref="Layer"/>'s inGradient.</param>
         /// <param name="vectorDimensions">The length of the output <see cref="Vector"/> after performing vectorization.</param>
-        public void StartUp(FeatureMap[,] transposedInputs, FeatureMap[,] outGradients, int vectorDimensions)
+        public void StartUp(FeatureMap[,] transposedInputs, int vectorDimensions)
         {
             int batchSize = transposedInputs.GetLength(0);
             int featureMapDimensions = transposedInputs.GetLength(1);
@@ -110,7 +112,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 _vectors[i] = new ColorVector(featureMapDimensions);
                 for (int j = 0; j < featureMapDimensions; j++)
                 {
-                    outGradients[j, i] = _transposedGradients[i, j] = new FeatureMap(transposedInputs[i, j].Width, transposedInputs[i, j].Length);
+                    _transposedGradients[i, j] = new FeatureMap(transposedInputs[i, j].Width, transposedInputs[i, j].Length);
                 }
             }
         }

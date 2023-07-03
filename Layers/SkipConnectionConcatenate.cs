@@ -1,4 +1,6 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
+using ILGPU;
+using ILGPU.Runtime;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
@@ -10,6 +12,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     {
         private FeatureMap[,] _inputsSecondary;
         private FeatureMap[,] _outGradientsSecondary;
+        private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceSecondary;
 
         private int _secondaryDimensions;
 
@@ -26,19 +29,36 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
+            Accelerator accelerator = Utility.Accelerator;
+            var copyKernal = accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>>(Utility.CopyKernal);
+
             for (int i = 0; i < _inputDimensions; i++)
             {
+                Index1D index = new(_layerInfos[i].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _outGradients[i, j] = _inGradients[i, j];
+                    copyKernal(index, _buffers.InGradientsColor[i, j], _buffers.OutGradientsColor[i, j]);
                 }
             }
 
             for (int i = 0; i < _secondaryDimensions; i++)
             {
+                Index1D index = new(_layerInfos[i + _inputDimensions].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _outGradientsSecondary[i, j] = _inGradients[_inputDimensions + i, j];
+                    _deviceSecondary[i, j] = _outGradientsSecondary[i, j].AllocateEmpty(accelerator);
+                    copyKernal(index, _buffers.InGradientsColor[_inputDimensions + i, j], _deviceSecondary[i, j].View);
+                }
+            }
+
+            accelerator.Synchronize();
+
+            for(int i = 0; i < _secondaryDimensions; i++)
+            {
+                for(int j = 0; j < _batchSize; j++)
+                {
+                    _outGradientsSecondary[i, j].CopyFromBuffer(_deviceSecondary[i, j]);
+                    _deviceSecondary[i, j].Dispose();
                 }
             }
         }
@@ -55,6 +75,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             _secondaryDimensions = inputs.GetLength(0);
             _batchSize = inputs.GetLength(1);
             _outGradientsSecondary = outGradients;
+            _deviceSecondary = new MemoryBuffer1D<Color, Stride1D.Dense>[_secondaryDimensions, _batchSize];
 
             for (int i = 0; i < _secondaryDimensions; i++)
             {
@@ -70,19 +91,35 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Forward()
         {
+            Accelerator accelerator = Utility.Accelerator;
+            var copyKernal = accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>>(Utility.CopyKernal);
+
             for (int i = 0; i < _inputDimensions; i++)
             {
+                Index1D index = new(_layerInfos[i].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _outputs[i, j] = _inputs[i, j];
+                    copyKernal(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j]);
                 }
             }
 
             for (int i = 0; i < _secondaryDimensions; i++)
             {
+                Index1D index = new(_layerInfos[i + _inputDimensions].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _outputs[_inputDimensions + i, j] = _inputsSecondary[i, j];
+                    _deviceSecondary[i, j] = _inputsSecondary[i, j].Allocate(accelerator);
+                    copyKernal(index, _deviceSecondary[i, j].View, _buffers.OutputsColor[_inputDimensions + i, j]);
+                }
+            }
+
+            accelerator.Synchronize();
+
+            for (int i = 0; i < _secondaryDimensions; i++)
+            {
+                for (int j = 0; j < _batchSize; j++)
+                {
+                    _deviceSecondary[i, j].Dispose();
                 }
             }
         }
@@ -93,38 +130,49 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients)
+        public override FeatureMap[,] Startup(FeatureMap[,] inputs, IOBuffers buffers)
         {
             _inputDimensions = inputs.GetLength(0);
-            _outputDimensions = _inputDimensions + _inputsSecondary.GetLength(0);
+            _outputDimensions = _inputDimensions + _secondaryDimensions;
 
-            _inputs = inputs;
-            _outGradients = outGradients;
             _outputs = new FeatureMap[_outputDimensions, _batchSize];
-            _inGradients = new FeatureMap[_outputDimensions, _batchSize];
 
+            _layerInfos = new ILayerInfo[_inputDimensions + _secondaryDimensions];
             for (int i = 0; i < _inputDimensions; i++)
             {
-                int width = _inputs[i, 0].Width;
-                int length = _inputs[i, 0].Length;
+                StaticLayerInfo layer = new StaticLayerInfo()
+                {
+                    Width = inputs[i, 0].Width,
+                    Length = inputs[i, 0].Length,
+                };
+
+                _layerInfos[i] = layer;
+
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _outputs[i, j] = new FeatureMap(width, length);
-                    _outGradients[i, j] = new FeatureMap(width, length);
+                    _outputs[i, j] = new FeatureMap(layer.Width, layer.Length);
                 }
             }
 
             for (int i = 0; i < _secondaryDimensions; i++)
             {
-                int width = _inputsSecondary[i, 0].Width;
-                int length = _inputsSecondary[i, 0].Length;
+                StaticLayerInfo layer = new StaticLayerInfo()
+                {
+                    Width = _inputsSecondary[i, 0].Width,
+                    Length = _inputsSecondary[i, 0].Length
+                };
+                _layerInfos[i + _inputDimensions] = layer;
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _outputs[_inputDimensions + i, j] = new FeatureMap(width, length);
+                    _outputs[_inputDimensions + i, j] = new FeatureMap(layer.Width, layer.Length);
                 }
             }
 
-            return (_outputs, _inGradients);
+            _buffers = buffers;
+            for (int i = 0; i < _outputDimensions; i++)
+                buffers.OutputDimensionArea(i, _outputs[i, 0].Area);
+
+            return _outputs;
         }
     }
 }

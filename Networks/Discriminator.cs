@@ -16,6 +16,7 @@ namespace ConvolutionalNeuralNetwork.Networks
         private Vector[] _generatorGradients;
         private Vector[] _imageVectors;
         private Vector[] _imageVectorsNorm;
+        private FeatureMap[,] _finalOutput;
 
         private Vector[] _previousImageGradient;
 
@@ -88,21 +89,23 @@ namespace ConvolutionalNeuralNetwork.Networks
         /// <param name="gradients">The gradients for each vector output by the network.</param>
         /// <param name="input">The images and their associatd labels for this iteration of training.</param>
         /// <param name="learningRate">The learning rate defining the degree to which each layer should be updated.</param>
-        public void Backwards(Vector[] gradients, ImageInput[] input, float learningRate)
+        public void Backwards(Vector[] gradients, float learningRate)
         {
-            FeatureMap[,] images = new FeatureMap[1, _batchSize];
-            for (int i = 0; i < _batchSize; i++)
-            {
-                images[0, i] = input[i].Image;
-            }
-
             _updateStep++;
             float correctionLearningRate = CorrectionLearningRate(learningRate, 0.9f, 0.999f);
 
-            FeatureMap[,] transposedGradient = new FeatureMap[0, 0];
-            Utility.StopWatch(() => _vectorizationLayer.Backwards(VectorNormalization.Backwards(_imageVectors, gradients), correctionLearningRate, 0.9f, 0.999f), $"Backwards {_vectorizationLayer.Name}", PRINTSTOPWATCH);
+            FeatureMap[,] transposedGradient = null;
+            Utility.StopWatch(() => transposedGradient = _vectorizationLayer.Backwards(VectorNormalization.Backwards(_imageVectors, gradients), correctionLearningRate, 0.9f, 0.999f), $"Backwards {_vectorizationLayer.Name}", PRINTSTOPWATCH);
 
             FeatureMap[,] currentGradient = Utility.TransposeArray(transposedGradient);
+
+            for(int i = 0; i < currentGradient.GetLength(0); i++)
+            {
+                for(int j = 0; j < _batchSize; j++)
+                {
+                    currentGradient[i, j].CopyToBuffer(_endBuffers.InGradientsColor[i,j]);
+                }
+            }
 
             for (int j = Depth - 1; j > 0; j--)
             {
@@ -129,7 +132,7 @@ namespace ConvolutionalNeuralNetwork.Networks
         {
             for (int i = 0; i < _batchSize; i++)
             {
-                _inputImages[0, i] = input[i].Image;
+                input[i].Image.CopyToBuffer(_startBuffer.InputsColor[0, i]);
             }
 
             for (int j = 0; j < Depth; j++)
@@ -141,6 +144,14 @@ namespace ConvolutionalNeuralNetwork.Networks
                 else
                 {
                     Utility.StopWatch(() => _layers[j].Forward(), $"Forwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
+                }
+            }
+
+            for(int i = 0; i < _finalOutput.GetLength(0); i++)
+            {
+                for(int j = 0; j < _batchSize; j++)
+                {
+                    _finalOutput[i, j].CopyFromBuffer(_endBuffers.OutputsColor[i, j]);
                 }
             }
 
@@ -157,12 +168,13 @@ namespace ConvolutionalNeuralNetwork.Networks
         /// </summary>
         /// <param name="inputs">The images and their associatd labels for this iteration of training.</param>
         /// <returns>Returns an array of <see cref="FeatureMap"/>s containing the <see cref="Generator"/> gradients.</returns>
-        public FeatureMap[,] GeneratorGradient(ImageInput[] inputs)
+        public FeatureMap[,] GeneratorGradient()
         {
-            Backwards(_generatorGradients, inputs, 0);
-            FeatureMap[,] gradient = new FeatureMap[1, inputs.Length];
-            for (int i = 0; i < inputs.Length; i++)
+            Backwards(_generatorGradients, 0);
+            FeatureMap[,] gradient = new FeatureMap[1, _batchSize];
+            for (int i = 0; i < _batchSize; i++)
             {
+                _finalOutGradient[0, i].CopyFromBuffer(_startBuffer.InputsColor[0, i]);
                 gradient[0, i] = _finalOutGradient[0, i];
             }
 
@@ -182,22 +194,35 @@ namespace ConvolutionalNeuralNetwork.Networks
         {
             base.StartUp(batchSize, width, length, descriptionBools, descriptionFloats);
 
+            FeatureMap[,] current = new FeatureMap[1, batchSize];
             _finalOutGradient = new FeatureMap[1, batchSize];
             for (int j = 0; j < batchSize; j++)
             {
-                _inputImages[0, j] = new FeatureMap(width, length);
+                current[0, j] = new FeatureMap(width, length);
+                _finalOutGradient[0,j] = new FeatureMap(width, length);
             }
 
-            FeatureMap[,] current = _inputImages;
-            FeatureMap[,] gradients = _finalOutGradient;
+            IOBuffers inputBuffers = _startBuffer = new IOBuffers();
+            IOBuffers outputBuffers = new IOBuffers();
+            outputBuffers.OutputDimensionArea(1, width * length);
+
             foreach (var layer in _layers)
             {
-                (current, gradients) = layer.Startup(current, gradients);
+                current = layer.Startup(current, inputBuffers);
+                (inputBuffers, outputBuffers) = (outputBuffers, inputBuffers);
             }
+
+            _endBuffers = outputBuffers;
+
+            inputBuffers.Allocate(batchSize);
+            outputBuffers.Allocate(batchSize);
+            IOBuffers.SetCompliment(inputBuffers, outputBuffers);
 
             _vectorizationLayer ??= new Vectorization();
 
-            _vectorizationLayer.StartUp(Utility.TransposeArray(current), gradients, descriptionBools + descriptionFloats);
+            _vectorizationLayer.StartUp(Utility.TransposeArray(current), descriptionBools + descriptionFloats);
+
+            _finalOutput = current;
 
             _discriminatorGradients = new Vector[_batchSize];
             _generatorGradients = new Vector[_batchSize];
@@ -264,7 +289,7 @@ namespace ConvolutionalNeuralNetwork.Networks
                 }
                 _previousImageGradient = _discriminatorGradients;
 
-                Backwards(_discriminatorGradients, images, learningRate);
+                Backwards(_discriminatorGradients, learningRate);
             }
 
             return totalLoss / images.Length;

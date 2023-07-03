@@ -1,6 +1,7 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using ILGPU;
 using ILGPU.Runtime;
+using ILGPU.Runtime.OpenCL;
 using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers
@@ -12,6 +13,8 @@ namespace ConvolutionalNeuralNetwork.Layers
     public class ReLUActivation : Layer, ISecondaryLayer
     {
         private MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[] _deviceInfos;
+        private MemoryBuffer1D<int, Stride1D.Dense>[,] _deviceZeroed;
+        private int[,][] _zeroed;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ReLUActivation"/> class.
@@ -27,36 +30,62 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
+            Accelerator accelerator = Utility.Accelerator;
+
+            var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<int>, ArrayView<float>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsKernal);
+
             for (int i = 0; i < _inputDimensions; i++)
             {
+                _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
+                Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    for (int y = 0; y < _inputs[i, j].Length; y++)
-                    {
-                        for (int x = 0; x < _inputs[i, j].Width; x++)
-                        {
-                            _outGradients[i, j][x, y] = _inputs[i, j][x, y].ReLUPropagation() * _inGradients[i, j][x, y];
-                        }
-                    }
+                    _deviceZeroed[i, j] = accelerator.Allocate1D(_zeroed[i, j]);
+                    forwardKernal(index, _deviceZeroed[i, j].View, _buffers.InGradientsFloat[i, j], _buffers.OutGradientsFloat[i, j], _deviceInfos[i].View);
                 }
+            }
+
+            accelerator.Synchronize();
+
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                for(int j = 0; j < _batchSize; j++)
+                {
+                    _deviceZeroed[i, j].Dispose();
+                }
+                _deviceInfos[i].Dispose();
             }
         }
 
         /// <inheritdoc/>
         public override void Forward()
         {
+            Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
+
+            var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<int>, ArrayView<Color>, ArrayView<StaticLayerInfo>>(ForwardKernal);
+
             for (int i = 0; i < _inputDimensions; i++)
             {
+                _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
+                Index2D index = new(Infos(i).Width, Infos(i).Length);
+
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    for(int y = 0; y < _inputs[i,j].Length; y++)
-                    {
-                        for(int x = 0; x < _inputs[i,j].Width; x++)
-                        {
-                            _outputs[i, j][x, y] = _inputs[i, j][x, y].ReLU();
-                        }
-                    }
+                    _deviceZeroed[i, j] = accelerator.Allocate1D(_zeroed[i, j]);
+
+                    forwardKernal(index, _buffers.InputsColor[i, j], _deviceZeroed[i, j].View, _buffers.OutputsColor[i, j], _deviceInfos[i].View);
                 }
+            }
+
+            accelerator.Synchronize();
+
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                for(int j = 0; j < _batchSize; j++)
+                {
+                    _deviceZeroed[i, j].Dispose();
+                }
+                _deviceInfos[i].Dispose();
             }
         }
 
@@ -66,17 +95,37 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients)
+        public override FeatureMap[,] Startup(FeatureMap[,] inputs, IOBuffers buffers)
         {
-            BaseStartup(inputs, outGradients);
+            BaseStartup(inputs, buffers);
+            _zeroed = new int[_inputDimensions, _batchSize][];
+            for(int i = 0; i < _inputDimensions; i++)
+            {
+                for(int j = 0; j < _batchSize; j++)
+                {
+                    _zeroed[i, j] = new int[inputs[i, j].Area * 3];
+                }
+            }
+
             _deviceInfos = new MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[_inputDimensions];
-            return (_outputs, _inGradients);
+            _deviceZeroed = new MemoryBuffer1D<int, Stride1D.Dense>[_inputDimensions, _batchSize];
+            return _outputs;
         }
 
-        private static void BackwardsKernal(Index3D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<float> outGradient, ArrayView<StaticLayerInfo> info)
+        private static void BackwardsKernal(Index3D index, ArrayView<int> zeroed, ArrayView<float> inGradient, ArrayView<float> outGradient, ArrayView<StaticLayerInfo> info)
         {
             int mapsIndex = info[0].Index(index.X, index.Y);
-            outGradient[3 * mapsIndex + index.Z] = input[mapsIndex].ReLUPropagation()[index.Z] * inGradient[mapsIndex][index.Z];
+            outGradient[3 * mapsIndex + index.Z] = zeroed[3 * mapsIndex + index.Z] == 1 ? 0 : inGradient[3 * mapsIndex + index.Z];
+        }
+
+        private static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<int> zeroed, ArrayView<Color> output, ArrayView<StaticLayerInfo> info)
+        {
+            int mapsIndex = info[0].Index(index.X, index.Y);
+            for(int i = 0; i < 3; i++)
+            {
+                zeroed[3 * mapsIndex + i] = input[mapsIndex][i] < 0 ? 1 : 0;
+            }
+            output[mapsIndex] = input[mapsIndex].ReLU();
         }
 
         /// <summary>

@@ -13,19 +13,19 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class FullyConnected : Layer, IPrimaryLayer
     {
+        [JsonProperty] private ColorTensor _blueFirstMoment;
+        [JsonProperty] private ColorTensor _blueSecondMoment;
         private MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[] _deviceInfos;
+        private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInputs;
         private MemoryBuffer1D<float, Stride1D.Dense>[,] _deviceMultiplierGradients;
         private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceMultipliers;
-        private new MemoryBuffer1D<float, Stride1D.Dense>[,] _deviceOutputs;
-
         private int _dimensionMultiplier;
+        [JsonProperty] private ColorTensor _greenFirstMoment;
+        [JsonProperty] private ColorTensor _greenSecondMoment;
+        private FeatureMap[,] _inputs;
         [JsonProperty] private ColorTensor _matrixBlue;
         [JsonProperty] private ColorTensor _matrixGreen;
         [JsonProperty] private ColorTensor _matrixRed;
-        [JsonProperty] private ColorTensor _blueFirstMoment;
-        [JsonProperty] private ColorTensor _blueSecondMoment;
-        [JsonProperty] private ColorTensor _greenFirstMoment;
-        [JsonProperty] private ColorTensor _greenSecondMoment;
         [JsonProperty] private ColorTensor _redFirstMoment;
         [JsonProperty] private ColorTensor _redSecondMoment;
 
@@ -59,18 +59,13 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceOutputs[i, j] = _outputs[i, j].AllocateFloat(accelerator, true);
+                    _buffers.OutputsFloat[i, j].MemSetToZero();
                 }
             }
 
             for (int i = 0; i < _inputDimensions; i++)
             {
                 _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
-
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
-                }
             }
 
             for (int i = 0; i < _inputDimensions; i++)
@@ -82,27 +77,12 @@ namespace ConvolutionalNeuralNetwork.Layers
 
                     for (int k = 0; k < _batchSize; k++)
                     {
-                        forwardKernal(index, _deviceInputs[i, k].View, _deviceOutputs[j, k].View, _deviceMultipliers[i, j].View, _deviceInfos[i].View);
+                        forwardKernal(index, _buffers.InputsColor[i, k], _buffers.OutputsFloat[j, k], _deviceMultipliers[i, j].View, _deviceInfos[i].View);
                     }
                 }
             }
 
             accelerator.Synchronize();
-
-            for (int j = 0; j < _batchSize; j++)
-            {
-                for (int i = 0; i < _outputDimensions; i++)
-                {
-                    _outputs[i, j].CopyFromBuffer(_deviceOutputs[i, j]);
-
-                    _deviceOutputs[i, j].Dispose();
-                }
-
-                for (int i = 0; i < _inputDimensions; i++)
-                {
-                    _deviceInputs[i, j].Dispose();
-                }
-            }
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -110,7 +90,31 @@ namespace ConvolutionalNeuralNetwork.Layers
                 {
                     _deviceMultipliers[i, j].Dispose();
                 }
+
+                for (int j = 0; j < _batchSize; j++)
+                {
+                    _inputs[i, j].CopyFromBuffer(_buffers.InputsColor[i, j]);
+                }
                 _deviceInfos[i].Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Called when the layer is deserialized.
+        /// Temporary function to allow for loading models that were created before Adam optimization was used implemented.
+        /// </summary>
+        /// <param name="context">The streaming context for deserialization.</param>
+        [OnDeserialized]
+        public void OnDeserialized(StreamingContext context)
+        {
+            if (_blueFirstMoment == null || _blueSecondMoment == null || _greenFirstMoment == null || _greenSecondMoment == null || _redFirstMoment == null || _redSecondMoment == null)
+            {
+                _blueFirstMoment = new ColorTensor(_matrixBlue.Width, _matrixBlue.Length);
+                _blueSecondMoment = new ColorTensor(_matrixBlue.Width, _matrixBlue.Length);
+                _greenFirstMoment = new ColorTensor(_matrixGreen.Width, _matrixGreen.Length);
+                _greenSecondMoment = new ColorTensor(_matrixGreen.Width, _matrixGreen.Length);
+                _redFirstMoment = new ColorTensor(_matrixRed.Width, _matrixRed.Length);
+                _redSecondMoment = new ColorTensor(_matrixRed.Width, _matrixRed.Length);
             }
         }
 
@@ -153,16 +157,16 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients)
+        public override FeatureMap[,] Startup(FeatureMap[,] inputs, IOBuffers buffers)
         {
             if (_matrixRed == null)
             {
                 if (_outputDimensions != 0)
-                    BaseStartup(inputs, outGradients, -inputs.GetLength(0) / _outputDimensions);
+                    BaseStartup(inputs, buffers, -inputs.GetLength(0) / _outputDimensions);
                 else if (_dimensionMultiplier != 0)
-                    BaseStartup(inputs, outGradients, _dimensionMultiplier);
+                    BaseStartup(inputs, buffers, _dimensionMultiplier);
                 else
-                    BaseStartup(inputs, outGradients, 1);
+                    BaseStartup(inputs, buffers, 1);
 
                 float variance = 0.666f / (_inputDimensions + _outputDimensions);
                 float stdDev = MathF.Sqrt(variance);
@@ -181,50 +185,32 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
             else
             {
-                BaseStartup(inputs, outGradients, -_matrixRed.Width / _matrixRed.Length);
+                BaseStartup(inputs, buffers, -_matrixRed.Width / _matrixRed.Length);
             }
+            _inputs = inputs;
+
             _deviceInfos = new MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[_inputDimensions];
             _deviceMultiplierGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions, _outputDimensions];
             _deviceMultipliers = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _outputDimensions];
-            _deviceOutputs = new MemoryBuffer1D<float, Stride1D.Dense>[_outputDimensions, _batchSize];
-            return (_outputs, _inGradients);
+            _deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
+            return _outputs;
         }
-
-        /// <summary>
-        /// Called when the layer is deserialized.
-        /// Temporary function to allow for loading models that were created before Adam optimization was used implemented.
-        /// </summary>
-        /// <param name="context">The streaming context for deserialization.</param>
-        [OnDeserialized]
-        public void OnDeserialized(StreamingContext context)
-        {
-            if (_blueFirstMoment == null || _blueSecondMoment == null || _greenFirstMoment == null || _greenSecondMoment == null || _redFirstMoment == null || _redSecondMoment == null)
-            {
-                _blueFirstMoment = new ColorTensor(_matrixBlue.Width, _matrixBlue.Length);
-                _blueSecondMoment = new ColorTensor(_matrixBlue.Width, _matrixBlue.Length);
-                _greenFirstMoment = new ColorTensor(_matrixGreen.Width, _matrixGreen.Length);
-                _greenSecondMoment = new ColorTensor(_matrixGreen.Width, _matrixGreen.Length);
-                _redFirstMoment = new ColorTensor(_matrixRed.Width, _matrixRed.Length);
-                _redSecondMoment = new ColorTensor(_matrixRed.Width, _matrixRed.Length);
-            }
-        }
-
-        private static void BackwardsGradientKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> input, ArrayView<float> multiplierGradient, ArrayView<StaticLayerInfo> info)
+        private static void BackwardsGradientKernal(Index3D index, ArrayView<float> inGradient, ArrayView<Color> input, ArrayView<float> multiplierGradient, ArrayView<StaticLayerInfo> info)
         {
             int mapsIndex = info[0].Index(index.X, index.Y);
             for (int i = 0; i < 3; i++)
             {
-                Atomic.Add(ref multiplierGradient[index.Z * 3 + i], inGradient[mapsIndex][index.Z] * input[mapsIndex][i]);
+                Atomic.Add(ref multiplierGradient[index.Z * 3 + i], inGradient[3 * mapsIndex + index.Z] * input[mapsIndex][i]);
             }
         }
 
-        private static void BackwardsOutKernal(Index3D index, ArrayView<Color> inGradient, ArrayView<Color> multiplier, ArrayView<float> outGradient, ArrayView<StaticLayerInfo> info)
+        private static void BackwardsOutKernal(Index3D index, ArrayView<float> inGradient, ArrayView<Color> multiplier, ArrayView<float> outGradient, ArrayView<StaticLayerInfo> info)
         {
             int mapsIndex = info[0].Index(index.X, index.Y);
             float transposeDot = 0;
             for (int i = 0; i < 3; i++)
             {
-                transposeDot += inGradient[mapsIndex][i] * multiplier[i][index.Z];
+                transposeDot += inGradient[3 * mapsIndex + i] * multiplier[i][index.Z];
             }
             Atomic.Add(ref outGradient[mapsIndex * 3 + index.Z], transposeDot);
         }
@@ -242,23 +228,11 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             Accelerator accelerator = Utility.Accelerator;
 
-            var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsOutKernal);
+            var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsOutKernal);
 
             for (int i = 0; i < _inputDimensions; i++)
             {
                 _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator, true);
-                }
-            }
-
-            for (int i = 0; i < _outputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _deviceInGradients[i, j] = _inGradients[i, j].Allocate(accelerator);
-                }
             }
 
             for (int i = 0; i < _inputDimensions; i++)
@@ -269,25 +243,13 @@ namespace ConvolutionalNeuralNetwork.Layers
                     _deviceMultipliers[i, j] = accelerator.Allocate1D(new Color[] { _matrixRed[i, j], _matrixGreen[i, j], _matrixBlue[i, j] });
                     for (int k = 0; k < _batchSize; k++)
                     {
-                        backwardsOutKernal(index, _deviceInGradients[j, k].View, _deviceMultipliers[i, j].View, _deviceOutGradients[i, k].View, _deviceInfos[i].View);
+                        _buffers.OutGradientsFloat[i, k].MemSetToZero();
+                        backwardsOutKernal(index, _buffers.InGradientsFloat[j, k], _deviceMultipliers[i, j].View, _buffers.OutGradientsFloat[i, k], _deviceInfos[i].View);
                     }
                 }
             }
 
             accelerator.Synchronize();
-
-            for (int j = 0; j < _batchSize; j++)
-            {
-                for (int i = 0; i < _inputDimensions; i++)
-                {
-                    _outGradients[i, j].CopyFromBuffer(_deviceOutGradients[i, j]);
-                    _deviceOutGradients[i, j].Dispose();
-                }
-                for (int i = 0; i < _outputDimensions; i++)
-                {
-                    _deviceInGradients[i, j].Dispose();
-                }
-            }
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -309,25 +271,16 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             Accelerator accelerator = Utility.Accelerator;
 
-            var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsOutKernal);
+            var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsOutKernal);
 
-            var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsGradientKernal);
+            var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsGradientKernal);
 
             for (int i = 0; i < _inputDimensions; i++)
             {
                 _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator, true);
                     _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
-                }
-            }
-
-            for (int i = 0; i < _outputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _deviceInGradients[i, j] = _inGradients[i, j].Allocate(accelerator);
                 }
             }
 
@@ -341,8 +294,9 @@ namespace ConvolutionalNeuralNetwork.Layers
                     _deviceMultiplierGradients[i, j].MemSetToZero();
                     for (int k = 0; k < _batchSize; k++)
                     {
-                        backwardsOutKernal(index, _deviceInGradients[j, k].View, _deviceMultipliers[i, j].View, _deviceOutGradients[i, k].View, _deviceInfos[i].View);
-                        backwardsGradientKernal(index, _deviceInGradients[j, k].View, _deviceInputs[i, k].View, _deviceMultiplierGradients[i, j].View, _deviceInfos[i].View);
+                        _buffers.OutGradientsFloat[i, k].MemSetToZero();
+                        backwardsOutKernal(index, _buffers.InGradientsFloat[j, k], _deviceMultipliers[i, j].View, _buffers.OutGradientsFloat[i, k], _deviceInfos[i].View);
+                        backwardsGradientKernal(index, _buffers.InGradientsFloat[j, k], _deviceInputs[i, k].View, _deviceMultiplierGradients[i, j].View, _deviceInfos[i].View);
                     }
                 }
             }
@@ -353,14 +307,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int i = 0; i < _inputDimensions; i++)
                 {
-                    _outGradients[i, j].CopyFromBuffer(_deviceOutGradients[i, j]);
-
-                    _deviceOutGradients[i, j].Dispose();
                     _deviceInputs[i, j].Dispose();
-                }
-                for (int i = 0; i < _outputDimensions; i++)
-                {
-                    _deviceInGradients[i, j].Dispose();
                 }
             }
 
@@ -379,6 +326,16 @@ namespace ConvolutionalNeuralNetwork.Layers
 
                 _deviceInfos[i].Dispose();
             }
+        }
+
+        /// <summary>
+        /// Gets the <see cref="StaticLayerInfo"/> for a particular dimension.
+        /// </summary>
+        /// <param name="index">The dimension who <see cref="StaticLayerInfo"/> is needed.</param>
+        /// <returns>Return the <see cref="StaticLayerInfo"/> corresponding to an input dimension.</returns>
+        private StaticLayerInfo Infos(int index)
+        {
+            return (StaticLayerInfo)_layerInfos[index];
         }
 
         /// <summary>
@@ -408,16 +365,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             second = _blueSecondMoment[index1, index2] = secondMomentDecay * _blueSecondMoment[index1, index2] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
             _matrixBlue[index1, index2] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
 
-        }
-
-        /// <summary>
-        /// Gets the <see cref="StaticLayerInfo"/> for a particular dimension.
-        /// </summary>
-        /// <param name="index">The dimension who <see cref="StaticLayerInfo"/> is needed.</param>
-        /// <returns>Return the <see cref="StaticLayerInfo"/> corresponding to an input dimension.</returns>
-        private StaticLayerInfo Infos(int index)
-        {
-            return (StaticLayerInfo)_layerInfos[index];
         }
     }
 }

@@ -38,9 +38,8 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            Context context = ConvolutionalNeuralNetwork.Utility.Context;
-            Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
-            var backwardsKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<int>, ArrayView<float>>(BackwardsKernal);
+            Accelerator accelerator = Utility.Accelerator;
+            var backwardsKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<float>, ArrayView<int>, ArrayView<float>>(BackwardsKernal);
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -48,9 +47,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 _deviceDropout[i] = accelerator.Allocate1D(_dropout[i]);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceInGradients[i, j] = _inGradients[i, j].Allocate(accelerator);
-                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator, false);
-                    backwardsKernal(index, _deviceInGradients[i, j].View, _deviceDropout[i].View, _deviceOutGradients[i, j].View);
+                    backwardsKernal(index, _buffers.InGradientsFloat[i, j], _deviceDropout[i].View, _buffers.OutGradientsFloat[i, j]);
                 }
             }
 
@@ -58,12 +55,6 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             for (int i = 0; i < _inputDimensions; i++)
             {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _outGradients[i, j].CopyFromBuffer(_deviceOutGradients[i, j]);
-                    _deviceInGradients[i, j].Dispose();
-                    _deviceOutGradients[i, j].Dispose();
-                }
                 _deviceDropout[i].Dispose();
             }
         }
@@ -85,9 +76,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 _deviceDropout[i] = accelerator.Allocate1D(_dropout[i]);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
-                    _deviceOutputs[i, j] = _outputs[i, j].AllocateEmpty(accelerator);
-                    forwardKernal(index, _deviceInputs[i, j].View, _deviceDropout[i].View, _deviceOutputs[i, j].View);
+                    forwardKernal(index, _buffers.InputsColor[i, j], _deviceDropout[i].View, _buffers.OutputsColor[i, j]);
                 }
             }
 
@@ -95,12 +84,6 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             for (int i = 0; i < _inputDimensions; i++)
             {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _outputs[i, j].CopyFromBuffer(_deviceOutputs[i, j]);
-                    _deviceInputs[i, j].Dispose();
-                    _deviceOutputs[i, j].Dispose();
-                }
                 _deviceDropout[i].Dispose();
             }
         }
@@ -121,23 +104,11 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(Infos(i).Area);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
-                    _deviceOutputs[i, j] = _outputs[i, j].AllocateEmpty(accelerator);
-                    inferenceKernal(index, _deviceInputs[i, j].View, deviceRatio.View, _deviceOutputs[i, j].View);
+                    inferenceKernal(index, _buffers.InputsColor[i, j], deviceRatio.View, _buffers.OutputsColor[i, j]);
                 }
             }
 
             accelerator.Synchronize();
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _outputs[i, j].CopyFromBuffer(_deviceOutputs[i, j]);
-                    _deviceInputs[i, j].Dispose();
-                    _deviceOutputs[i, j].Dispose();
-                }
-            }
         }
 
         /// <inheritdoc/>
@@ -146,9 +117,9 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] input, FeatureMap[,] outGradients)
+        public override FeatureMap[,] Startup(FeatureMap[,] input, IOBuffers buffers)
         {
-            BaseStartup(input, outGradients);
+            BaseStartup(input, buffers);
 
             _dropout = new int[_inputDimensions][];
             for (int i = 0; i < _inputDimensions; i++)
@@ -157,13 +128,13 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
             _deviceDropout = new MemoryBuffer1D<int, Stride1D.Dense>[_inputDimensions];
 
-            return (_outputs, _inGradients);
+            return _outputs;
         }
 
-        private static void BackwardsKernal(Index2D index, ArrayView<Color> inGradient, ArrayView<int> dropout, ArrayView<float> outGradient)
+        private static void BackwardsKernal(Index2D index, ArrayView<float> inGradient, ArrayView<int> dropout, ArrayView<float> outGradient)
         {
             int arrayIndex = index.X * 3 + index.Y;
-            outGradient[arrayIndex] = dropout[arrayIndex] == 0 ? 0 : inGradient[index.X][index.Y];
+            outGradient[arrayIndex] = dropout[arrayIndex] == 0 ? 0 : inGradient[arrayIndex];
         }
 
         private static void ForwardKernal(Index1D index, ArrayView<Color> input, ArrayView<int> dropout, ArrayView<Color> output)

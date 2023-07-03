@@ -15,8 +15,8 @@ namespace ConvolutionalNeuralNetwork.Layers
         public override string Name => "Skip Connection Layer";
 
         private FeatureMap[,] _inGradientSecondary;
-        [JsonProperty] private SkipConnectionConcatenate _concatenationLayer;
-        private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInGradientsSecondary;
+        private SkipConnectionConcatenate _concatenationLayer;
+        private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceSecondary;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SkipConnectionSplit"/> class.
@@ -49,11 +49,9 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index2D index = new(Infos(i).Area, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceInGradients[i, j] = _inGradients[i, j].Allocate(accelerator);
-                    _deviceInGradientsSecondary[i, j] = _inGradientSecondary[i, j].Allocate(accelerator);
-                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator, false);
+                    _deviceSecondary[i, j] = _inGradientSecondary[i, j].Allocate(accelerator);
 
-                    backwardsKernal(index, _deviceInGradients[i, j].View, _deviceInGradientsSecondary[i, j].View, _deviceOutGradients[i, j].View);
+                    backwardsKernal(index, _buffers.InGradientsColor[i, j], _deviceSecondary[i, j].View, _buffers.OutGradientsFloat[i, j]);
                 }
             }
 
@@ -63,10 +61,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _outGradients[i, j].CopyFromBuffer(_deviceOutGradients[i, j]);
-                    _deviceOutGradients[i, j].Dispose();
-                    _deviceInGradients[i, j].Dispose();
-                    _deviceInGradientsSecondary[i, j].Dispose();
+                    _deviceSecondary[i, j].Dispose();
                 }
             }
         }
@@ -74,7 +69,30 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Forward()
         {
-            //Forward propagation does nothing, because both following layers already have a reference to the previous layers output after StartUp.
+            Accelerator accelerator = Utility.Accelerator;
+            var copyKernal = accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>>(Utility.CopyKernal);
+
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                Index1D index = new(Infos(i).Area);
+                for (int j = 0; j < _batchSize; j++)
+                {
+                    _deviceSecondary[i, j] = _outputs[i, j].AllocateEmpty(accelerator);
+                    copyKernal(index, _buffers.InputsColor[i, j], _deviceSecondary[i, j].View);
+                    copyKernal(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j]);
+                }
+            }
+
+            accelerator.Synchronize();
+
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                for (int j = 0; j < _batchSize; j++)
+                {
+                    _outputs[i, j].CopyFromBuffer(_deviceSecondary[i, j]);
+                    _deviceSecondary[i, j].Dispose();
+                }
+            }
         }
 
         /// <inheritdoc/>
@@ -83,41 +101,30 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients)
+        public override FeatureMap[,] Startup(FeatureMap[,] inputs, IOBuffers buffers)
         {
             _outputDimensions = _inputDimensions = inputs.GetLength(0);
+            _buffers = buffers;
 
             _batchSize = inputs.GetLength(1);
             _layerInfos = new ILayerInfo[_inputDimensions];
-            _inputs = _outputs = inputs;
-
-            _outGradients = outGradients;
-
-            _inGradients = new FeatureMap[_outputDimensions, _batchSize];
-            _inGradientSecondary = new FeatureMap[_outputDimensions, _batchSize];
-
             for (int i = 0; i < _inputDimensions; i++)
             {
-                ILayerInfo layer;
-                layer = _layerInfos[i] = new StaticLayerInfo()
+                _layerInfos[i] = new StaticLayerInfo()
                 {
                     Width = inputs[i, 0].Width,
                     Length = inputs[i, 0].Length,
                 };
-
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _outGradients[i, j] = new FeatureMap(layer.InputWidth, layer.InputLength);
-                }
             }
 
-            _deviceInGradients = new MemoryBuffer1D<Color, Stride1D.Dense>[_outputDimensions, _batchSize];
-            _deviceOutGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions, _batchSize];
-            _deviceInGradientsSecondary = new MemoryBuffer1D<Color, Stride1D.Dense>[_outputDimensions, _batchSize];
+            _outputs = inputs;
 
-            _concatenationLayer.Connect(inputs, _inGradientSecondary);
+            _inGradientSecondary = new FeatureMap[_outputDimensions, _batchSize];
+            _deviceSecondary = new MemoryBuffer1D<Color, Stride1D.Dense>[_outputDimensions, _batchSize];
 
-            return (inputs, _inGradients);
+            _concatenationLayer.Connect(_outputs, _inGradientSecondary);
+
+            return inputs;
         }
 
         private static void BackwardsKernal(Index2D index, ArrayView<Color> inGradient1, ArrayView<Color> inGradient2, ArrayView<float> outGradient)

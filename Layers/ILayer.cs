@@ -10,9 +10,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <value>The name of the <see cref="Layer"/>, used for logging.</value>
         string Name { get; }
 
-        /// <value>The output of the latest forward propagation through the <see cref="Layer"/>.</value>
-        public FeatureMap[,] Outputs { get; }
-
         /// <value>The number of dimensions in the <see cref="Layer"/>'s output.</value>
         public int OutputDimensions { get; }
 
@@ -37,7 +34,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="inputs">The previous <see cref="Layer"/>'s output.</param>
         /// <param name="outGradients">The previous <see cref="Layer"/>'s inGradient.</param>
         /// <returns>Returns the output and inGradient to share with the next <see cref="Layer"/>.</returns>
-        (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] inputs, FeatureMap[,] outGradients);
+        FeatureMap[,] Startup(FeatureMap[,] inputs, IOBuffers buffers);
 
         /// <summary>
         /// Reset's the current <see cref="Layer"/> to it's initial weights or initial random weights.

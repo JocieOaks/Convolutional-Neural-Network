@@ -3,6 +3,8 @@ using ConvolutionalNeuralNetwork.Design;
 using ConvolutionalNeuralNetwork.Layers;
 using Newtonsoft.Json;
 using System.Runtime.Serialization;
+using ILGPU;
+using ILGPU.Runtime;
 
 namespace ConvolutionalNeuralNetwork
 {
@@ -18,13 +20,15 @@ namespace ConvolutionalNeuralNetwork
         protected int _boolLabels;
         [JsonProperty] protected bool _configured = false;
         protected int _floatLabels;
-        protected FeatureMap[,] _inputImages;
         protected bool _ready = false;
         [JsonProperty] protected int _updateStep;
         private readonly List<IPrimaryLayer> _primaryLayers = new();
 
         private ActivationPattern _activationPattern;
         [JsonProperty] private List<(int, int)> _skipConnections;
+
+        protected IOBuffers _startBuffer;
+        protected IOBuffers _endBuffers;
 
         /// <value>Enumerates over the <see cref="IPrimaryLayer"/>'s of the <see cref="Network"/> that define its structure.</value>
         [JsonIgnore]
@@ -148,7 +152,7 @@ namespace ConvolutionalNeuralNetwork
         /// <param name="batchIndex">The index of the batch member to be printed.</param>
         public void PrintFeatureMaps(string directory, string name, int batchIndex)
         {
-            directory = Path.Combine(directory, name);
+            /*directory = Path.Combine(directory, name);
             try
             {
                 // create the directory the file will be written to if it doesn't already exist
@@ -170,7 +174,7 @@ namespace ConvolutionalNeuralNetwork
                         _layers[i].Outputs[j, batchIndex].PrintFeatureMap(Path.Combine(layerDirectory, $"{name} {j}.png"));
                     }
                 }
-            }
+            }*/
         }
 
         /// <summary>
@@ -305,7 +309,6 @@ namespace ConvolutionalNeuralNetwork
             }
 
             _batchSize = batchSize;
-            _inputImages = new FeatureMap[1, batchSize];
             _boolLabels = boolLabels;
             _floatLabels = floatLabels;
         }
@@ -343,7 +346,7 @@ namespace ConvolutionalNeuralNetwork
         }
 
         /// <summary>
-        /// Called when the <see cref="Network"/> has finished begins serialization. Serialization does not maintain the connections
+        /// Called when the <see cref="Network"/> has begins serialization. Serialization does not maintain the connections
         /// between a <see cref="SkipConnectionSplit"/> and a <see cref="SkipConnectionConcatenate"/> so they must saved separately.
         /// </summary>
         /// <param name="context">The <see cref="StreamingContext"/> stating what kind of serialization is taking place.</param>

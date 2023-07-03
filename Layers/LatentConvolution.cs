@@ -19,6 +19,8 @@ namespace ConvolutionalNeuralNetwork.Layers
         protected MemoryBuffer1D<float, Stride1D.Dense>[,] _deviceFilterGradients;
         protected MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceFilters;
         protected MemoryBuffer1D<LayerInfo, Stride1D.Dense>[] _deviceInfos;
+        protected MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInputs;
+        protected FeatureMap[,] _inputs;
 
         protected int _dimensionsMultiplier;
 
@@ -68,8 +70,8 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             Accelerator accelerator = Utility.Accelerator;
 
-            var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(Convolution.BackwardsGradientKernal);
-            var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(Convolution.BackwardsFilterKernal);
+            var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(Convolution.BackwardsGradientKernal);
+            var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(Convolution.BackwardsFilterKernal);
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -77,7 +79,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 for (int j = 0; j < _batchSize; j++)
                 {
                     _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
-                    _deviceOutGradients[i, j] = _outGradients[i, j].AllocateFloat(accelerator, true);
+                    _buffers.OutGradientsFloat[i, j].MemSetToZero();
                 }
             }
 
@@ -88,10 +90,9 @@ namespace ConvolutionalNeuralNetwork.Layers
                 {
                     _deviceFilters[i, j] = _filters[i,j].Allocate(accelerator);
                     _deviceFilterGradients[i, j] = _filterGradients[i, j].AllocateFloat(accelerator, true);
-                    _deviceInGradients[i, j] = _inGradients[i, j].Allocate(accelerator);
 
-                    backwardsOutKernal(index, _deviceInGradients[i, j].View, _deviceFilters[i, j].View, _deviceOutGradients[i % _inputDimensions, j].View, _deviceInfos[i % _inputDimensions].View);
-                    backwardsGradientKernal(index, _deviceInGradients[i, j].View, _deviceInputs[i % _inputDimensions, j].View, _deviceFilterGradients[i, j].View, _deviceInfos[i % _inputDimensions].View);
+                    backwardsOutKernal(index, _buffers.InGradientsFloat[i, j], _deviceFilters[i, j].View, _buffers.OutGradientsFloat[i % _inputDimensions, j], _deviceInfos[i % _inputDimensions].View);
+                    backwardsGradientKernal(index, _buffers.InGradientsFloat[i, j], _deviceInputs[i % _inputDimensions, j].View, _deviceFilterGradients[i, j].View, _deviceInfos[i % _inputDimensions].View);
                 }
             }
 
@@ -101,8 +102,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _outGradients[i, j].CopyFromBuffer(_deviceOutGradients[i, j]);
-                    _deviceOutGradients[i, j].Dispose();
                     _deviceInputs[i, j].Dispose();
                 }
                 _deviceInfos[i].Dispose();
@@ -112,7 +111,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceInGradients[i, j].Dispose();
                     _filterGradients[i, j].CopyFromBuffer(_deviceFilterGradients[i, j]);
                     _deviceFilterGradients[i, j].Dispose();
                     _deviceFilters[i, j].Dispose();
@@ -185,10 +183,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             for (int i = 0; i < _inputDimensions; i++)
             {
                 _deviceInfos[i] = accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
-                }
             }
 
             for (int i = 0; i < _outputDimensions; i++)
@@ -197,9 +191,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                 for (int j = 0; j < _batchSize; j++)
                 {
                     _deviceFilters[i, j] = _filters[i,j].Allocate(accelerator);
-                    _deviceOutputs[i, j] = _outputs[i, j].AllocateEmpty(accelerator);
 
-                    forwardKernal(index, _deviceInputs[i % _inputDimensions, j].View, _deviceOutputs[i, j].View, _deviceFilters[i, j].View, _deviceInfos[i % _inputDimensions].View);
+                    forwardKernal(index, _buffers.InputsColor[i % _inputDimensions, j], _buffers.OutputsColor[i, j], _deviceFilters[i, j].View, _deviceInfos[i % _inputDimensions].View);
                 }
             }
 
@@ -209,8 +202,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _outputs[i, j].CopyFromBuffer(_deviceOutputs[i, j]);
-                    _deviceOutputs[i, j].Dispose();
                     _deviceFilters[i, j].Dispose();
                 }
             }
@@ -219,7 +210,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceInputs[i, j].Dispose();
+                    _inputs[i, j].CopyFromBuffer(_buffers.InputsColor[i, j]);
                 }
                 _deviceInfos[i].Dispose();
             }
@@ -284,11 +275,11 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override (FeatureMap[,], FeatureMap[,]) Startup(FeatureMap[,] input, FeatureMap[,] outGradients)
+        public override FeatureMap[,] Startup(FeatureMap[,] inputs, IOBuffers buffers)
         {
             if (_boolsFilterVectors == null || _floatsFilterVectors == null)
             {
-                BaseStartup(input, outGradients, _dimensionsMultiplier);
+                BaseStartup(inputs, buffers, _dimensionsMultiplier);
 
                 _boolsFilterVectors = new ColorVector[_outputDimensions, _filterSize * _filterSize];
                 _boolsFirstMoment = new ColorVector[_outputDimensions, _filterSize * _filterSize];
@@ -325,7 +316,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
             else
             {
-                BaseStartup(input, outGradients, _boolsFilterVectors.GetLength(0) / input.GetLength(0));
+                BaseStartup(inputs, buffers, _boolsFilterVectors.GetLength(0) / inputs.GetLength(0));
                 if (_boolsFilterVectors[0, 0].Length != Bools[0].Length || _floatsFilterVectors[0, 0].Length != Floats[0].Length)
                 {
                     float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize * (Bools[0].Length + Floats[0].Length) + _inputDimensions * _filterSize * _filterSize * (Bools[0].Length + Floats[0].Length));
@@ -374,11 +365,14 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
+            _inputs = inputs;
+
             _deviceInfos = new MemoryBuffer1D<LayerInfo, Stride1D.Dense>[_inputDimensions];
             _deviceFilters = new MemoryBuffer1D<Color, Stride1D.Dense>[_outputDimensions, _batchSize];
             _deviceFilterGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_outputDimensions, _batchSize];
+            _deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
 
-            return (_outputs, _inGradients);
+            return _outputs;
         }
 
         /// <summary>

@@ -207,7 +207,43 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="buffer">The <see cref="MemoryBuffer1D{T, TStride}"/> with the source <see cref="Color"/>s.</param>
         public void CopyFromBuffer(MemoryBuffer1D<Color, Stride1D.Dense> buffer)
         {
-            buffer.CopyToCPU(_tensor);
+            buffer.AsArrayView<Color>(0, Area).CopyToCPU(_tensor);
+        }
+
+        public void CopyFromBuffer(ArrayView<Color> buffer)
+        {
+            buffer.SubView(0, Area).CopyToCPU(_tensor);
+        }
+
+        /// <summary>
+        /// Copies the pixel data to a <see cref="MemoryBuffer1D{T, TStride}"/> of <see cref="Color"/>.
+        /// </summary>
+        /// <param name="buffer">The <see cref="MemoryBuffer1D{T, TStride}"/> to copy to.</param>
+        public void CopyToBuffer(MemoryBuffer1D<Color, Stride1D.Dense> buffer)
+        {
+            buffer.AsArrayView<Color>(0, Area).CopyFromCPU(_tensor);
+        }
+
+        public void CopyToBuffer(ArrayView<Color> buffer)
+        {
+            buffer.SubView(0, Area).CopyFromCPU(_tensor);
+        }
+
+        /// <summary>
+        /// Copies the pixel data to a <see cref="MemoryBuffer1D{T, TStride}"/> of <see cref="float"/>.
+        /// </summary>
+        /// <param name="buffer">The <see cref="MemoryBuffer1D{T, TStride}"/> to copy to.</param>
+        public void CopyToBuffer(MemoryBuffer1D<float, Stride1D.Dense> buffer)
+        {
+            unsafe
+            {
+                fixed (void* ptr = &_tensor[0])
+                {
+                    Span<float> span = new(ptr, Area * 3);
+                    float[] floats = span.ToArray();
+                    buffer.AsArrayView<float>(0, Area * 3).CopyFromCPU(floats);
+                }
+            }
         }
 
         /// <summary>

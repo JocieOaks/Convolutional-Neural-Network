@@ -1,6 +1,7 @@
 ﻿using ILGPU;
 using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
+using ConvolutionalNeuralNetwork.DataTypes;
 
 namespace ConvolutionalNeuralNetwork
 {
@@ -76,6 +77,17 @@ namespace ConvolutionalNeuralNetwork
                 }
             }
             return transposed;
+        }
+
+        /// <summary>
+        /// Kernal for copying values from one <see cref="ArrayView{T}"/> to another.
+        /// </summary>
+        /// <param name="index">The index to iterate over every element in the two <see cref="ArrayView{T}"/>s.</param>
+        /// <param name="input">The <see cref="ArrayView{T}"/> being copied from.</param>
+        /// <param name="output">The <see cref="ArrayView{T}"/> being copied to.</param>
+        public static void CopyKernal(Index1D index, ArrayView<Color> input, ArrayView<Color> output)
+        {
+            output[index] = input[index];
         }
     }
 }

@@ -11,8 +11,7 @@ namespace ConvolutionalNeuralNetwork.Networks
     {
         private bool[][] _classificationBools;
         private float[][] _classificationFloats;
-        private FeatureMap[,] FirstInGradients { get; set; }
-        private FeatureMap[,] Outputs { get; set; }
+        FeatureMap[,] _outputs;
 
         /// <summary>
         /// Loads a <see cref="Generator"/> from a json file.
@@ -65,7 +64,8 @@ namespace ConvolutionalNeuralNetwork.Networks
 
             for (int i = 0; i < _batchSize; i++)
             {
-                FirstInGradients[0, i] = gradients[0, i];
+                
+                gradients[0, i].CopyToBuffer(_endBuffers.OutputsColor[0,i]);
             }
 
             _updateStep++;
@@ -95,7 +95,7 @@ namespace ConvolutionalNeuralNetwork.Networks
         {
             for (int i = 0; i < _batchSize; i++)
             {
-                _inputImages[0, i] = input[i].Image;
+                input[i].Image.CopyToBuffer(_startBuffer.InputsColor[0,i]);
                 _classificationBools[i] = input[i].Bools;
                 _classificationFloats[i] = input[i].Floats;
             }
@@ -112,7 +112,12 @@ namespace ConvolutionalNeuralNetwork.Networks
                 }
             }
 
-            return Outputs;
+            for(int i = 0; i < _batchSize; i++)
+            {
+                _outputs[0, i].CopyFromBuffer(_endBuffers.OutputsColor[0, i]);
+            }
+
+            return _outputs;
         }
 
         /// <inheritdoc/>
@@ -130,17 +135,20 @@ namespace ConvolutionalNeuralNetwork.Networks
                     _layers.Remove(_layers[i]);
             }
 
+            _outputs = new FeatureMap[1, batchSize];
+
             _classificationBools = new bool[_batchSize][];
             _classificationFloats = new float[_batchSize][];
             for (int i = 0; i < batchSize; i++)
             {
-                _inputImages[0, i] = new FeatureMap(width, length);
+                _outputs[0, i] = new FeatureMap(width, length);
                 _classificationBools[i] = new bool[boolsLength];
                 _classificationFloats[i] = new float[floatsLength];
             }
 
-            FeatureMap[,] current = _inputImages;
-            FeatureMap[,] gradients = new FeatureMap[1, batchSize];
+            IOBuffers inputBuffers = _startBuffer = new IOBuffers();
+            IOBuffers outputBuffers = new IOBuffers();
+            outputBuffers.OutputDimensionArea(1, width * length);
 
             foreach (var layer in _layers)
             {
@@ -150,11 +158,14 @@ namespace ConvolutionalNeuralNetwork.Networks
                     key.Floats = _classificationFloats;
                 }
 
-                (current, gradients) = layer.Startup(current, gradients);
+                _outputs = layer.Startup(_outputs, inputBuffers);
+                (inputBuffers, outputBuffers) = (outputBuffers, inputBuffers);
             }
+            _endBuffers = outputBuffers;
 
-            Outputs = current;
-            FirstInGradients = gradients;
+            inputBuffers.Allocate(batchSize);
+            outputBuffers.Allocate(batchSize);
+            IOBuffers.SetCompliment(inputBuffers, outputBuffers);
 
             _ready = true;
         }
