@@ -19,26 +19,23 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override string Name => "Scaling Layer";
 
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<ScalingLayerInfo>> s_backwardsAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<ScalingLayerInfo>>(BackwardsKernal);
+
         /// <inheritdoc/>
         public override void Backwards(float learningRatee, float firstMomentDecay, float secondMomentDecay)
         {
-            Context context = ConvolutionalNeuralNetwork.Utility.Context;
-            Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
-
-            var backwardsKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<ScalingLayerInfo>>(BackwardsKernal);
-
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = accelerator.Allocate1D(new ScalingLayerInfo[] { Infos(i) });
+                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new ScalingLayerInfo[] { Infos(i) });
                 Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
                     _buffers.OutGradientsFloat[i, j].MemSetToZero();
-                    backwardsKernal(index, _buffers.InGradientsFloat[i, j], _buffers.OutGradientsFloat[i, j], _deviceInfos[i].View);
+                    s_backwardsAction(index, _buffers.InGradientsFloat[i, j], _buffers.OutGradientsFloat[i, j], _deviceInfos[i].View);
                 }
             }
 
-            accelerator.Synchronize();
+            Utility.Accelerator.Synchronize();
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -46,16 +43,14 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
+        private readonly static Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<ScalingLayerInfo>> s_forwardAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<ScalingLayerInfo>>(ForwardKernal);
+
         /// <inheritdoc/>
         public override void Forward()
         {
-            Accelerator accelerator = Utility.Accelerator;
-
-            var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<ScalingLayerInfo>>(ForwardKernal);
-
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = accelerator.Allocate1D(new ScalingLayerInfo[] { Infos(i) });
+                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new ScalingLayerInfo[] { Infos(i) });
             }
 
             for (int i = 0; i < _inputDimensions; i++)
@@ -63,11 +58,11 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    forwardKernal(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j], _deviceInfos[i].View);
+                    s_forwardAction(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j], _deviceInfos[i].View);
                 }
             }
 
-            accelerator.Synchronize();
+            Utility.Accelerator.Synchronize();
 
             for (int i = 0; i < _inputDimensions; i++)
             {

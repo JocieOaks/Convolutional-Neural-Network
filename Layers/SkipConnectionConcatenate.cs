@@ -29,15 +29,12 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            Accelerator accelerator = Utility.Accelerator;
-            var copyKernal = accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>>(Utility.CopyKernal);
-
             for (int i = 0; i < _inputDimensions; i++)
             {
                 Index1D index = new(_layerInfos[i].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    copyKernal(index, _buffers.InGradientsColor[i, j], _buffers.OutGradientsColor[i, j]);
+                    Utility.CopyAction(index, _buffers.InGradientsColor[i, j], _buffers.OutGradientsColor[i, j]);
                 }
             }
 
@@ -46,12 +43,12 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(_layerInfos[i + _inputDimensions].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceSecondary[i, j] = _outGradientsSecondary[i, j].AllocateEmpty(accelerator);
-                    copyKernal(index, _buffers.InGradientsColor[_inputDimensions + i, j], _deviceSecondary[i, j].View);
+                    _deviceSecondary[i, j] = _outGradientsSecondary[i, j].AllocateEmpty(Utility.Accelerator);
+                    Utility.CopyAction(index, _buffers.InGradientsColor[_inputDimensions + i, j], _deviceSecondary[i, j].View);
                 }
             }
 
-            accelerator.Synchronize();
+            Utility.Accelerator.Synchronize();
 
             for(int i = 0; i < _secondaryDimensions; i++)
             {
@@ -91,15 +88,12 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Forward()
         {
-            Accelerator accelerator = Utility.Accelerator;
-            var copyKernal = accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>>(Utility.CopyKernal);
-
             for (int i = 0; i < _inputDimensions; i++)
             {
                 Index1D index = new(_layerInfos[i].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    copyKernal(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j]);
+                    Utility.CopyAction(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j]);
                 }
             }
 
@@ -108,12 +102,12 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(_layerInfos[i + _inputDimensions].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceSecondary[i, j] = _inputsSecondary[i, j].Allocate(accelerator);
-                    copyKernal(index, _deviceSecondary[i, j].View, _buffers.OutputsColor[_inputDimensions + i, j]);
+                    _deviceSecondary[i, j] = _inputsSecondary[i, j].Allocate(Utility.Accelerator);
+                    Utility.CopyAction(index, _deviceSecondary[i, j].View, _buffers.OutputsColor[_inputDimensions + i, j]);
                 }
             }
 
-            accelerator.Synchronize();
+            Utility.Accelerator.Synchronize();
 
             for (int i = 0; i < _secondaryDimensions; i++)
             {

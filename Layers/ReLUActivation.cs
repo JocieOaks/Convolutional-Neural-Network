@@ -12,6 +12,8 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class ReLUActivation : Layer, ISecondaryLayer
     {
+        private static readonly Action<Index3D, ArrayView<int>, ArrayView<float>, ArrayView<float>, ArrayView<StaticLayerInfo>> s_backwardsAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<int>, ArrayView<float>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsKernal);
+        private static readonly Action<Index2D, ArrayView<Color>, ArrayView<int>, ArrayView<Color>, ArrayView<StaticLayerInfo>> s_forwardAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<int>, ArrayView<Color>, ArrayView<StaticLayerInfo>>(ForwardKernal);
         private MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[] _deviceInfos;
         private MemoryBuffer1D<int, Stride1D.Dense>[,] _deviceZeroed;
         private int[,][] _zeroed;
@@ -26,26 +28,21 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         /// <inheritdoc/>
         public override string Name => "Activation Layer";
-
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            Accelerator accelerator = Utility.Accelerator;
-
-            var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<int>, ArrayView<float>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsKernal);
-
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
+                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
                 Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceZeroed[i, j] = accelerator.Allocate1D(_zeroed[i, j]);
-                    forwardKernal(index, _deviceZeroed[i, j].View, _buffers.InGradientsFloat[i, j], _buffers.OutGradientsFloat[i, j], _deviceInfos[i].View);
+                    _deviceZeroed[i, j] = Utility.Accelerator.Allocate1D(_zeroed[i, j]);
+                    s_backwardsAction(index, _deviceZeroed[i, j].View, _buffers.InGradientsFloat[i, j], _buffers.OutGradientsFloat[i, j], _deviceInfos[i].View);
                 }
             }
 
-            accelerator.Synchronize();
+            Utility.Accelerator.Synchronize();
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -56,28 +53,23 @@ namespace ConvolutionalNeuralNetwork.Layers
                 _deviceInfos[i].Dispose();
             }
         }
-
         /// <inheritdoc/>
         public override void Forward()
         {
-            Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
-
-            var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<int>, ArrayView<Color>, ArrayView<StaticLayerInfo>>(ForwardKernal);
-
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
+                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
                 Index2D index = new(Infos(i).Width, Infos(i).Length);
 
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceZeroed[i, j] = accelerator.Allocate1D(_zeroed[i, j]);
+                    _deviceZeroed[i, j] = Utility.Accelerator.Allocate1D(_zeroed[i, j]);
 
-                    forwardKernal(index, _buffers.InputsColor[i, j], _deviceZeroed[i, j].View, _buffers.OutputsColor[i, j], _deviceInfos[i].View);
+                    s_forwardAction(index, _buffers.InputsColor[i, j], _deviceZeroed[i, j].View, _buffers.OutputsColor[i, j], _deviceInfos[i].View);
                 }
             }
 
-            accelerator.Synchronize();
+            Utility.Accelerator.Synchronize();
 
             for (int i = 0; i < _inputDimensions; i++)
             {

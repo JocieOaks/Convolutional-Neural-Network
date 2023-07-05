@@ -1,6 +1,7 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using ILGPU;
 using ILGPU.Runtime;
+using ILGPU.Runtime.OpenCL;
 using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers
@@ -13,7 +14,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     {
         private MemoryBuffer1D<int, Stride1D.Dense>[] _deviceDropout;
         private int[][] _dropout;
-        [JsonProperty] private float _dropoutRate = 0.2f;
+        [JsonProperty] private readonly float _dropoutRate = 0.2f;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Dropout"/> class.
@@ -35,11 +36,12 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override string Name => "Dropout Layer";
 
+        private static readonly Action<Index2D, ArrayView<float>, ArrayView<int>, ArrayView<float>> s_backwardsAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<float>, ArrayView<int>, ArrayView<float>>(BackwardsKernal);
+
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
             Accelerator accelerator = Utility.Accelerator;
-            var backwardsKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<float>, ArrayView<int>, ArrayView<float>>(BackwardsKernal);
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -47,7 +49,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 _deviceDropout[i] = accelerator.Allocate1D(_dropout[i]);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    backwardsKernal(index, _buffers.InGradientsFloat[i, j], _deviceDropout[i].View, _buffers.OutGradientsFloat[i, j]);
+                    s_backwardsAction(index, _buffers.InGradientsFloat[i, j], _deviceDropout[i].View, _buffers.OutGradientsFloat[i, j]);
                 }
             }
 
@@ -59,13 +61,11 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
+        private static readonly Action<Index1D, ArrayView<Color>, ArrayView<int>, ArrayView<Color>> s_forwardAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<int>, ArrayView<Color>>(ForwardKernal);
+
         /// <inheritdoc/>
         public override void Forward()
         {
-            Context context = ConvolutionalNeuralNetwork.Utility.Context;
-            Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
-            var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<int>, ArrayView<Color>>(ForwardKernal);
-
             for (int i = 0; i < _inputDimensions; i++)
             {
                 for (int j = 0; j < _dropout[i].Length; j++)
@@ -73,14 +73,14 @@ namespace ConvolutionalNeuralNetwork.Layers
                     _dropout[i][j] = Utility.Random.NextDouble() < _dropoutRate ? 0 : 1;
                 }
                 Index1D index = new(Infos(i).Area);
-                _deviceDropout[i] = accelerator.Allocate1D(_dropout[i]);
+                _deviceDropout[i] = Utility.Accelerator.Allocate1D(_dropout[i]);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    forwardKernal(index, _buffers.InputsColor[i, j], _deviceDropout[i].View, _buffers.OutputsColor[i, j]);
+                    s_forwardAction(index, _buffers.InputsColor[i, j], _deviceDropout[i].View, _buffers.OutputsColor[i, j]);
                 }
             }
 
-            accelerator.Synchronize();
+            Utility.Accelerator.Synchronize();
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -88,27 +88,25 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
+        private static readonly Action<Index1D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>> s_inferenceAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>>(InferenceKernal);
+
         /// <summary>
         /// Forward propogates through the <see cref="Dropout"/> layer, but instead of randomly dropping values, it just adjusts
         /// every <see cref="Color"/> based on it's dropout rate so that the output is scaled similar to while training.
         /// </summary>
         public void ForwardInference()
         {
-            Context context = ConvolutionalNeuralNetwork.Utility.Context;
-            Accelerator accelerator = ConvolutionalNeuralNetwork.Utility.Accelerator;
-            var inferenceKernal = accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>>(InferenceKernal);
-
-            MemoryBuffer1D<float, Stride1D.Dense> deviceRatio = accelerator.Allocate1D(new float[] { 1 - _dropoutRate });
+            MemoryBuffer1D<float, Stride1D.Dense> deviceRatio = Utility.Accelerator.Allocate1D(new float[] { 1 - _dropoutRate });
             for (int i = 0; i < _inputDimensions; i++)
             {
                 Index1D index = new(Infos(i).Area);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    inferenceKernal(index, _buffers.InputsColor[i, j], deviceRatio.View, _buffers.OutputsColor[i, j]);
+                    s_inferenceAction(index, _buffers.InputsColor[i, j], deviceRatio.View, _buffers.OutputsColor[i, j]);
                 }
             }
 
-            accelerator.Synchronize();
+            Utility.Accelerator.Synchronize();
         }
 
         /// <inheritdoc/>

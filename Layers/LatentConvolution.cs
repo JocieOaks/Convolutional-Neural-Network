@@ -68,17 +68,12 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            Accelerator accelerator = Utility.Accelerator;
-
-            var backwardsOutKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(Convolution.BackwardsGradientKernal);
-            var backwardsGradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<LayerInfo>>(Convolution.BackwardsFilterKernal);
-
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
+                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceInputs[i, j] = _inputs[i, j].Allocate(accelerator);
+                    _deviceInputs[i, j] = _inputs[i, j].Allocate(Utility.Accelerator);
                     _buffers.OutGradientsFloat[i, j].MemSetToZero();
                 }
             }
@@ -88,15 +83,15 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceFilters[i, j] = _filters[i,j].Allocate(accelerator);
-                    _deviceFilterGradients[i, j] = _filterGradients[i, j].AllocateFloat(accelerator, true);
+                    _deviceFilters[i, j] = _filters[i,j].Allocate(Utility.Accelerator);
+                    _deviceFilterGradients[i, j] = _filterGradients[i, j].AllocateFloat(Utility.Accelerator, true);
 
-                    backwardsOutKernal(index, _buffers.InGradientsFloat[i, j], _deviceFilters[i, j].View, _buffers.OutGradientsFloat[i % _inputDimensions, j], _deviceInfos[i % _inputDimensions].View);
-                    backwardsGradientKernal(index, _buffers.InGradientsFloat[i, j], _deviceInputs[i % _inputDimensions, j].View, _deviceFilterGradients[i, j].View, _deviceInfos[i % _inputDimensions].View);
+                    Convolution.BackwardsOutGradientAction(index, _buffers.InGradientsFloat[i, j], _deviceFilters[i, j].View, _buffers.OutGradientsFloat[i % _inputDimensions, j], _deviceInfos[i % _inputDimensions].View);
+                    Convolution.BackwardsFilterAction(index, _buffers.InGradientsFloat[i, j], _deviceInputs[i % _inputDimensions, j].View, _deviceFilterGradients[i, j].View, _deviceInfos[i % _inputDimensions].View);
                 }
             }
 
-            accelerator.Synchronize();
+            Utility.Accelerator.Synchronize();
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -176,13 +171,9 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
-            Accelerator accelerator = Utility.Accelerator;
-
-            var forwardKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(Convolution.ForwardKernal);
-
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
+                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
             }
 
             for (int i = 0; i < _outputDimensions; i++)
@@ -190,13 +181,13 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceFilters[i, j] = _filters[i,j].Allocate(accelerator);
+                    _deviceFilters[i, j] = _filters[i,j].Allocate(Utility.Accelerator);
 
-                    forwardKernal(index, _buffers.InputsColor[i % _inputDimensions, j], _buffers.OutputsColor[i, j], _deviceFilters[i, j].View, _deviceInfos[i % _inputDimensions].View);
+                    Convolution.ForwardAction(index, _buffers.InputsColor[i % _inputDimensions, j], _buffers.OutputsColor[i, j], _deviceFilters[i, j].View, _deviceInfos[i % _inputDimensions].View);
                 }
             }
 
-            accelerator.Synchronize();
+            Utility.Accelerator.Synchronize();
 
             for (int i = 0; i < _outputDimensions; i++)
             {

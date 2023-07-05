@@ -15,16 +15,23 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class BatchNormalization : Layer, ISecondaryLayer
     {
+        private static readonly Action<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<Color>, ArrayView<StaticLayerInfo>> s_backwardsAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<Color>, ArrayView<StaticLayerInfo>>(BackwardsKernal);
+        private static readonly Action<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>> s_gradientAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(GradientsKernal);
+        private static readonly Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<StaticLayerInfo>> s_normalizeAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<StaticLayerInfo>>(ForwardKernal);
+        private static readonly Action<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>> s_sumAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(MeanKernal);
+        private static readonly Action<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>> s_varianceAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(VarianceKernal);
+        
         [JsonProperty] private ColorVector _bias;
         [JsonProperty] private ColorVector _biasFirstMoment;
         [JsonProperty] private ColorVector _biasSecondMoment;
         private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceGradients;
         private MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[] _deviceInfos;
+        private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInputs;
         private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceMeans;
         private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceSums;
         private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceValues;
         private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceVariances;
-        private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInputs;
+        private Gradients[] _gradients;
         private FeatureMap[,] _inputs;
         private ColorVector _mean;
         private ColorVector _sigma;
@@ -62,89 +69,14 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
             UpdateWeights(learningRate,firstMomentDecay, secondMomentDecay);
         }
-
-        public void GPUGradients()
-        {
-            Accelerator accelerator = Utility.Accelerator;
-
-            var gradientKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(GradientsKernal);
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-
-                float invM = 1f / (Infos(i).Area * _batchSize);
-
-                _deviceValues[i] = accelerator.Allocate1D(new Color[] { _mean[i], _weight[i] / _sigma[i], _bias[i] });
-
-                _deviceGradients[i] = accelerator.Allocate1D<float>(9);
-                _deviceGradients[i].MemSetToZero();
-                _deviceMeans[i] = accelerator.Allocate1D(new Color[] { _mean[i] });
-                Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
-
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    gradientKernal(index, _deviceInputs[i, j].View, _buffers.InGradientsFloat[i, j], _deviceValues[i].View, _deviceGradients[i].View, _deviceInfos[i].View);
-                }
-            }
-
-            accelerator.Synchronize();
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _deviceValues[i].Dispose();
-                _gradients[i] = new();
-                _gradients[i].CopyFromBuffer(_deviceGradients[i]);
-                _deviceGradients[i].Dispose();
-
-                _gradients[i].SigmaGradient *= Color.Pow(_sigma[i], -1.5f) * _weight[i] * -0.5f;
-                _gradients[i].MeanGradient = -_gradients[i].BiasGradient * _weight[i] / _sigma[i];
-                _deviceMeans[i].Dispose();
-
-            }
-        }
-
-        private Gradients[] _gradients;
-
-        public void GPUBackPropogate()
-        {
-            Accelerator accelerator = Utility.Accelerator;
-            accelerator.Synchronize();
-
-            var backwardsKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<Color>, ArrayView<StaticLayerInfo>>(BackwardsKernal);
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                float invM = 1f / (Infos(i).Area * _batchSize);
-
-                _deviceValues[i] = accelerator.Allocate1D(new Color[] { _weight[i] / _sigma[i], 2 * invM * _gradients[i].SigmaGradient, _mean[i], invM * _gradients[i].MeanGradient });
-
-                Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
-
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    backwardsKernal(index, _deviceInputs[i, j].View, _buffers.InGradientsFloat[i, j], _buffers.OutGradientsFloat[i, j], _deviceValues[i].View, _deviceInfos[i].View);
-                }
-            }
-
-            accelerator.Synchronize();
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _deviceValues[i].Dispose();
-            }
-        }
-
-        public void UpdateWeights(float learningRate, float firstMomentDecay, float secondMomentDecay)
+        /// <summary>
+        /// Disposes the common device data from the <see cref="Accelerator"/>.
+        /// </summary>
+        public void DisposeCommon()
         {
             for (int i = 0; i < _inputDimensions; i++)
             {
-                Color first = _weightFirstMoment[i] = firstMomentDecay * _weightFirstMoment[i] + (1 - firstMomentDecay) * _gradients[i].WeightGradient;
-                Color second = _weightSecondMoment[i] = secondMomentDecay * _weightSecondMoment[i] + (1 - secondMomentDecay) * Color.Pow(_gradients[i].WeightGradient, 2);
-                _weight[i] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
-
-                first = _biasFirstMoment[i] = firstMomentDecay * _biasFirstMoment[i] + (1 - firstMomentDecay) * _gradients[i].BiasGradient;
-                second = _biasSecondMoment[i] = secondMomentDecay * _biasSecondMoment[i] + (1 - secondMomentDecay) * Color.Pow(_gradients[i].BiasGradient, 2);
-                _bias[i] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+                _deviceInfos[i].Dispose();
             }
         }
 
@@ -166,29 +98,91 @@ namespace ConvolutionalNeuralNetwork.Layers
             DisposeCommon();
         }
 
+        public void GPUBackPropogate()
+        {
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                float invM = 1f / (Infos(i).Area * _batchSize);
+
+                _deviceValues[i] = Utility.Accelerator.Allocate1D(new Color[] { _weight[i] / _sigma[i], 2 * invM * _gradients[i].SigmaGradient, _mean[i], invM * _gradients[i].MeanGradient });
+
+                Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
+
+                for (int j = 0; j < _batchSize; j++)
+                {
+                    s_backwardsAction(index, _deviceInputs[i, j].View, _buffers.InGradientsFloat[i, j], _buffers.OutGradientsFloat[i, j], _deviceValues[i].View, _deviceInfos[i].View);
+                }
+            }
+
+            Utility.Accelerator.Synchronize();
+
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                _deviceValues[i].Dispose();
+            }
+        }
+
+        public void GPUGradients()
+        {
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                float invM = 1f / (Infos(i).Area * _batchSize);
+
+                _deviceValues[i] = Utility.Accelerator.Allocate1D(new Color[] { _mean[i], _weight[i] / _sigma[i], _bias[i] });
+
+                _deviceGradients[i] = Utility.Accelerator.Allocate1D<float>(9);
+                _deviceGradients[i].MemSetToZero();
+                Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
+
+                for (int j = 0; j < _batchSize; j++)
+                {
+                    s_gradientAction(index, _deviceInputs[i, j].View, _buffers.InGradientsFloat[i, j], _deviceValues[i].View, _deviceGradients[i].View, _deviceInfos[i].View);
+                }
+            }
+
+            Utility.Accelerator.Synchronize();
+
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                _deviceValues[i].Dispose();
+                _gradients[i] = new();
+                _gradients[i].CopyFromBuffer(_deviceGradients[i]);
+                _deviceGradients[i].Dispose();
+
+                _gradients[i].SigmaGradient *= Color.Pow(_sigma[i], -1.5f) * _weight[i] * -0.5f;
+                _gradients[i].MeanGradient = -_gradients[i].BiasGradient * _weight[i] / _sigma[i];
+            }
+        }
+        /// <summary>
+        /// Loads the common device data onto the <see cref="Accelerator"/>.
+        /// </summary>
+        public void LoadCommon(bool inGradients)
+        {
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
+            }
+        }
+
         /// <summary>
         /// Calculates the mean of each dimension using an <see cref="ILGPU"/> kernal.
         /// </summary>
         public void MeanGPU()
         {
-            Accelerator accelerator = Utility.Accelerator;
-            var sumKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(MeanKernal);
-
-
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceSums[i] = accelerator.Allocate1D<float>(3);
+                _deviceSums[i] = Utility.Accelerator.Allocate1D<float>(3);
                 _deviceSums[i].MemSetToZero();
 
                 Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
 
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    sumKernal(index, _buffers.InputsColor[i, j], _deviceSums[i].View, _deviceInfos[i].View);
+                    s_sumAction(index, _buffers.InputsColor[i, j], _deviceSums[i].View, _deviceInfos[i].View);
                 }
             }
 
-            accelerator.Synchronize();
+            Utility.Accelerator.Synchronize();
             for (int i = 0; i < _inputDimensions; i++)
             {
                 _mean[i] = (Color)_deviceSums[i] / (Infos(i).Area * _batchSize);
@@ -197,83 +191,25 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <summary>
-        /// Calculates the standard deviation of each dimension using an <see cref="ILGPU"/> kernal.
-        /// </summary>
-        public void VarianceGPU()
-        {
-            Accelerator accelerator = Utility.Accelerator;
-            var varianceKernal = accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(VarianceKernal);
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _deviceMeans[i] = accelerator.Allocate1D(new Color[] { _mean[i] });
-                _deviceVariances[i] = accelerator.Allocate1D<float>(3);
-                    _deviceVariances[i].MemSetToZero();
-
-                    Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
-
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    varianceKernal(index, _buffers.InputsColor[i, j], _deviceMeans[i].View, _deviceVariances[i].View, _deviceInfos[i].View);
-                }
-            }
-
-            accelerator.Synchronize();
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _sigma[i] = Color.Pow((Color)_deviceVariances[i] / (Infos(i).Area * _batchSize) + Utility.AsymptoteErrorColor, 0.5f);
-                _deviceMeans[i].Dispose();
-                _deviceVariances[i].Dispose();
-            }
-        }
-
-        /// <summary>
         /// Normalizes the input <see cref="FeatureMap"/>s using an <see cref="ILGPU"/> kernal.
         /// </summary>
         public void NormalizeGPU()
         {
-            Accelerator accelerator = Utility.Accelerator;
-            var normalizeKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<StaticLayerInfo>>(ForwardKernal);
-
             for (int i = 0; i < _inputDimensions; i++)
             {
                 Index2D index = new(Infos(i).Width, Infos(i).Length);
-                _deviceValues[i] = accelerator.Allocate1D(new Color[] { _mean[i], _weight[i] / _sigma[i], _bias[i] });
+                _deviceValues[i] = Utility.Accelerator.Allocate1D(new Color[] { _mean[i], _weight[i] / _sigma[i], _bias[i] });
 
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    normalizeKernal(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j], _deviceValues[i].View, _deviceInfos[i].View);
+                    s_normalizeAction(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j], _deviceValues[i].View, _deviceInfos[i].View);
                 }
             }
 
-            accelerator.Synchronize();
+            Utility.Accelerator.Synchronize();
             for (int i = 0; i < _inputDimensions; i++)
             {
                 _deviceValues[i].Dispose();
-            }
-        }
-
-        /// <summary>
-        /// Loads the common device data onto the <see cref="Accelerator"/>.
-        /// </summary>
-        public void LoadCommon(bool inGradients)
-        {
-            Accelerator accelerator = Utility.Accelerator;
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _deviceInfos[i] = accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
-            }
-        }
-
-        /// <summary>
-        /// Disposes the common device data from the <see cref="Accelerator"/>.
-        /// </summary>
-        public void DisposeCommon()
-        {
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _deviceInfos[i].Dispose();
             }
         }
 
@@ -342,6 +278,48 @@ namespace ConvolutionalNeuralNetwork.Layers
             _deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
 
             return _outputs;
+        }
+
+        public void UpdateWeights(float learningRate, float firstMomentDecay, float secondMomentDecay)
+        {
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                Color first = _weightFirstMoment[i] = firstMomentDecay * _weightFirstMoment[i] + (1 - firstMomentDecay) * _gradients[i].WeightGradient;
+                Color second = _weightSecondMoment[i] = secondMomentDecay * _weightSecondMoment[i] + (1 - secondMomentDecay) * Color.Pow(_gradients[i].WeightGradient, 2);
+                _weight[i] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+
+                first = _biasFirstMoment[i] = firstMomentDecay * _biasFirstMoment[i] + (1 - firstMomentDecay) * _gradients[i].BiasGradient;
+                second = _biasSecondMoment[i] = secondMomentDecay * _biasSecondMoment[i] + (1 - secondMomentDecay) * Color.Pow(_gradients[i].BiasGradient, 2);
+                _bias[i] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+            }
+        }
+
+        /// <summary>
+        /// Calculates the standard deviation of each dimension using an <see cref="ILGPU"/> kernal.
+        /// </summary>
+        public void VarianceGPU()
+        {
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                _deviceMeans[i] = Utility.Accelerator.Allocate1D(new Color[] { _mean[i] });
+                _deviceVariances[i] = Utility.Accelerator.Allocate1D<float>(3);
+                    _deviceVariances[i].MemSetToZero();
+
+                    Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
+
+                for (int j = 0; j < _batchSize; j++)
+                {
+                    s_varianceAction(index, _buffers.InputsColor[i, j], _deviceMeans[i].View, _deviceVariances[i].View, _deviceInfos[i].View);
+                }
+            }
+
+            Utility.Accelerator.Synchronize();
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                _sigma[i] = Color.Pow((Color)_deviceVariances[i] / (Infos(i).Area * _batchSize) + Utility.AsymptoteErrorColor, 0.5f);
+                _deviceMeans[i].Dispose();
+                _deviceVariances[i].Dispose();
+            }
         }
 
         /// <summary>

@@ -37,25 +37,23 @@ namespace ConvolutionalNeuralNetwork.Layers
             return _concatenationLayer;
         }
 
+        private static readonly Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>> s_backwardsAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>>(BackwardsKernal);
+
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            Accelerator accelerator = Utility.Accelerator;
-
-            var backwardsKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>>(BackwardsKernal);
-
             for (int i = 0; i < _inputDimensions; i++)
             {
                 Index2D index = new(Infos(i).Area, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceSecondary[i, j] = _inGradientSecondary[i, j].Allocate(accelerator);
+                    _deviceSecondary[i, j] = _inGradientSecondary[i, j].Allocate(Utility.Accelerator);
 
-                    backwardsKernal(index, _buffers.InGradientsColor[i, j], _deviceSecondary[i, j].View, _buffers.OutGradientsFloat[i, j]);
+                    s_backwardsAction(index, _buffers.InGradientsColor[i, j], _deviceSecondary[i, j].View, _buffers.OutGradientsFloat[i, j]);
                 }
             }
 
-            accelerator.Synchronize();
+            Utility.Accelerator.Synchronize();
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -69,21 +67,18 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Forward()
         {
-            Accelerator accelerator = Utility.Accelerator;
-            var copyKernal = accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>>(Utility.CopyKernal);
-
             for (int i = 0; i < _inputDimensions; i++)
             {
                 Index1D index = new(Infos(i).Area);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceSecondary[i, j] = _outputs[i, j].AllocateEmpty(accelerator);
-                    copyKernal(index, _buffers.InputsColor[i, j], _deviceSecondary[i, j].View);
-                    copyKernal(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j]);
+                    _deviceSecondary[i, j] = _outputs[i, j].AllocateEmpty(Utility.Accelerator);
+                    Utility.CopyAction(index, _buffers.InputsColor[i, j], _deviceSecondary[i, j].View);
+                    Utility.CopyAction(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j]);
                 }
             }
 
-            accelerator.Synchronize();
+            Utility.Accelerator.Synchronize();
 
             for (int i = 0; i < _inputDimensions; i++)
             {

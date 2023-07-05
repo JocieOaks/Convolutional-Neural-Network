@@ -19,7 +19,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         ArrayView<float>[,] _floats2;
 
 
-        List<(int dimensions, int area)> _outputAllocationPairs = new();
+        readonly List<(int dimensions, int area)> _outputAllocationPairs = new();
         public ArrayView<Color>[,] InGradientsColor => _colors1;
         public ArrayView<float>[,] InGradientsFloat => _floats1;
         public ArrayView<Color>[,] InputsColor => _colors2;

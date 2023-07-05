@@ -19,8 +19,8 @@ namespace ConvolutionalNeuralNetwork.Design
     /// </summary>
     public struct ActivationPattern
     {
-        private NormalizationLayers[] _pattern;
-        private float _dropoutRate;
+        private readonly NormalizationLayers[] _pattern;
+        private readonly float _dropoutRate;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ActivationPattern"/> class.

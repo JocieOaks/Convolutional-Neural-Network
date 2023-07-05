@@ -197,7 +197,9 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             Color mean = (Color)deviceSum / Area;
 
             var deviceMean = accelerator.Allocate1D(new Color[] { mean });
+            deviceMean.MemSetToZero();
             var deviceVariance = accelerator.Allocate1D<float>(3);
+            deviceVariance.MemSetToZero();
 
             varianceKernal(index, deviceInput.View, deviceMean.View, deviceVariance.View);
 
@@ -208,6 +210,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             var deviceValues = accelerator.Allocate1D(new Color[] { mean, normalDeviation / sigma, normalMean });
 
             var deviceOutput = AllocateEmpty(accelerator);
+
 
             normalizeKernal(new Index1D(Area), deviceInput.View, deviceOutput.View, deviceValues.View);
 

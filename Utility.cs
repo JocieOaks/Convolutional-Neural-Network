@@ -89,5 +89,7 @@ namespace ConvolutionalNeuralNetwork
         {
             output[index] = input[index];
         }
+
+        public static Action<Index1D, ArrayView<Color>, ArrayView<Color>> CopyAction { get; } = Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>>(Utility.CopyKernal);
     }
 }
