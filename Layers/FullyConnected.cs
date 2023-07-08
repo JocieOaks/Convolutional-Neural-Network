@@ -64,11 +64,6 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
-            }
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
                 Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
                 for (int j = 0; j < _outputDimensions; j++)
                 {
@@ -94,7 +89,6 @@ namespace ConvolutionalNeuralNetwork.Layers
                 {
                     _inputs[i, j].CopyFromBuffer(_buffers.InputsColor[i, j]);
                 }
-                _deviceInfos[i].Dispose();
             }
         }
 
@@ -189,6 +183,10 @@ namespace ConvolutionalNeuralNetwork.Layers
             _inputs = inputs;
 
             _deviceInfos = new MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[_inputDimensions];
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
+            }
             _deviceMultiplierGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions, _outputDimensions];
             _deviceMultipliers = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _outputDimensions];
             _deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
@@ -225,10 +223,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// </summary>
         private void BackwardsNoUpdate()
         {
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
-            }
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -252,8 +246,6 @@ namespace ConvolutionalNeuralNetwork.Layers
                 {
                     _deviceMultipliers[i, j].Dispose();
                 }
-
-                _deviceInfos[i].Dispose();
             }
         }
         /// Perform standard backpropagation through the layer, updating it's weights. Called when learning rate is greater than 0.
@@ -266,7 +258,6 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
                 for (int j = 0; j < _batchSize; j++)
                 {
                     _deviceInputs[i, j] = _inputs[i, j].Allocate(Utility.Accelerator);
@@ -312,8 +303,6 @@ namespace ConvolutionalNeuralNetwork.Layers
 
                     UpdateWeight(learningRate, firstMomentDecay, secondMomentDecay, i, j, multiplierGradients);
                 }
-
-                _deviceInfos[i].Dispose();
             }
         }
 

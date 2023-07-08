@@ -205,7 +205,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
             accelerator.Synchronize();
 
-            Color sigma = Color.Pow((Color)deviceVariance / Area + new Color(ConvolutionalNeuralNetwork.Utility.ASYMPTOTEERRORCORRECTION), 0.5f);
+            Color sigma = Color.Pow((Color)deviceVariance / Area + Utility.AsymptoteErrorColor, 0.5f);
 
             var deviceValues = accelerator.Allocate1D(new Color[] { mean, normalDeviation / sigma, normalMean });
 

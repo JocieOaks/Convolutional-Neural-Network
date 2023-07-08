@@ -40,7 +40,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
                 Index3D index = new(Infos(i).InputWidth, Infos(i).InputLength, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
@@ -50,11 +49,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
 
             Utility.Accelerator.Synchronize();
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _deviceInfos[i].Dispose();
-            }
         }
 
         /// <inheritdoc/>
@@ -62,7 +56,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
                 for (int j = 0; j < _batchSize; j++)
                 {
 
@@ -73,11 +66,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
 
             Utility.Accelerator.Synchronize();
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _deviceInfos[i].Dispose();
-            }
         }
 
         /// <inheritdoc/>
@@ -90,6 +78,10 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             BaseStartup(input, buffers);
             _deviceInfos = new MemoryBuffer1D<LayerInfo, Stride1D.Dense>[_inputDimensions];
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
+            }
             return _outputs;
         }
 

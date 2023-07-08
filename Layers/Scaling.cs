@@ -26,7 +26,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new ScalingLayerInfo[] { Infos(i) });
                 Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
@@ -36,11 +35,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
 
             Utility.Accelerator.Synchronize();
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _deviceInfos[i].Dispose();
-            }
         }
 
         private readonly static Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<ScalingLayerInfo>> s_forwardAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<ScalingLayerInfo>>(ForwardKernal);
@@ -48,11 +42,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Forward()
         {
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new ScalingLayerInfo[] { Infos(i) });
-            }
-
             for (int i = 0; i < _inputDimensions; i++)
             {
                 Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
@@ -63,11 +52,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
 
             Utility.Accelerator.Synchronize();
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _deviceInfos[i].Dispose();
-            }
         }
 
         /// <inheritdoc/>
@@ -105,7 +89,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             _batchSize = inputs.GetLength(1);
             _layerInfos = new ILayerInfo[_inputDimensions];
             _outputs = new FeatureMap[_outputDimensions, _batchSize];
-            _deviceInfos = new MemoryBuffer1D<ScalingLayerInfo, Stride1D.Dense>[_inputDimensions];
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -137,7 +120,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                     scaleLength = _outputLength / (float)inputs[i, 0].Length;
                 }
 
-                ILayerInfo layer = _layerInfos[i] = new ScalingLayerInfo()
+                _layerInfos[i] = new ScalingLayerInfo()
                 {
                     InputWidth = inputs[i, 0].Width,
                     InverseKSquared = scaleWidth * scaleLength,
@@ -156,6 +139,12 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             for (int i = 0; i < _outputDimensions; i++)
                 buffers.OutputDimensionArea(i, _outputs[i, 0].Area);
+
+            _deviceInfos = new MemoryBuffer1D<ScalingLayerInfo, Stride1D.Dense>[_inputDimensions];
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new ScalingLayerInfo[] { Infos(i) });
+            }
 
             return _outputs;
         }
