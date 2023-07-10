@@ -15,7 +15,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class BatchNormalization : Layer, ISecondaryLayer
     {
-        private static readonly Action<Index2D, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<Color>> s_backwardsAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<float>, ArrayView<float>, ArrayView<Color>>(BackwardsKernal);
+        private static readonly Action<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>> s_backwardsAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>>(BackwardsKernal);
         private static readonly Action<Index2D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<float>> s_gradientAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<float>>(GradientsKernal);
         private static readonly Action<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>> s_normalizeAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>>(ForwardKernal);
         private static readonly Action<Index2D, ArrayView<Color>, ArrayView<float>> s_sumAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<float>>(MeanKernal);
@@ -90,11 +90,11 @@ namespace ConvolutionalNeuralNetwork.Layers
 
                 _deviceValues[i] = Utility.Accelerator.Allocate1D(new Color[] { _weight[i] / _sigma[i], 2 * invM * _gradients[i].SigmaGradient, _mean[i], invM * _gradients[i].MeanGradient });
 
-                Index2D index = new(Infos(i).Area, 3);
+                Index1D index = new(Infos(i).Area);
 
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    s_backwardsAction(index, _deviceInputs[i, j].View, _buffers.InGradientsFloat[i, j], _buffers.OutGradientsFloat[i, j], _deviceValues[i].View);
+                    s_backwardsAction(index, _deviceInputs[i, j].View, _buffers.InGradientsColor[i, j], _buffers.OutGradientsColor[i, j], _deviceValues[i].View);
                 }
             }
 
@@ -311,9 +311,9 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="values">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s used in the equation
         /// to calculate the outGradient.</param>
         /// <param name="info">The <see cref="StaticLayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void BackwardsKernal(Index2D index, ArrayView<Color> input, ArrayView<float> inGradient, ArrayView<float> outGradient, ArrayView<Color> values)
+        private static void BackwardsKernal(Index1D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<Color> outGradient, ArrayView<Color> values)
         {
-            outGradient[3 * index.X + index.Y] = (inGradient[3 * index.X + index.Y] * values[0] + values[1] * (input[index.X] - values[2]) + values[3]).Clamp(1)[index.Y];
+            outGradient[index.X] = (inGradient[index.X] * values[0] + values[1] * (input[index.X] - values[2]) + values[3]).Clamp(1);
         }
 
         /// <summary>

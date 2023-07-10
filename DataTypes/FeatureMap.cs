@@ -185,6 +185,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             var normalizeKernal = accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>>(NormalizeKernal);
 
             var deviceSum = accelerator.Allocate1D<float>(3);
+            deviceSum.MemSetToZero();
 
             Index2D index = new(Area, 3);
 
@@ -197,7 +198,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             Color mean = (Color)deviceSum / Area;
 
             var deviceMean = accelerator.Allocate1D(new Color[] { mean });
-            deviceMean.MemSetToZero();
             var deviceVariance = accelerator.Allocate1D<float>(3);
             deviceVariance.MemSetToZero();
 

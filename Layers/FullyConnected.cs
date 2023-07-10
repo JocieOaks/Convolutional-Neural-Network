@@ -58,7 +58,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _buffers.OutputsFloat[i, j].MemSetToZero();
+                    _buffers.OutputsColor[i, j].SubView(0, Infos(i).Area).MemSetToZero();
                 }
             }
 
@@ -226,13 +226,20 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             for (int i = 0; i < _inputDimensions; i++)
             {
+                for (int j = 0; j < _batchSize; j++)
+                {
+                    _buffers.OutGradientsColor[i, j].SubView(0, Infos(i).Area).MemSetToZero();
+                }
+            }
+
+            for (int i = 0; i < _inputDimensions; i++)
+            {
                 Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
                 for (int j = 0; j < _outputDimensions; j++)
                 {
                     _deviceMultipliers[i, j] = Utility.Accelerator.Allocate1D(new Color[] { _matrixRed[i, j], _matrixGreen[i, j], _matrixBlue[i, j] });
                     for (int k = 0; k < _batchSize; k++)
                     {
-                        _buffers.OutGradientsFloat[i, k].MemSetToZero();
                         s_backwardsOutAction(index, _buffers.InGradientsFloat[j, k], _deviceMultipliers[i, j].View, _buffers.OutGradientsFloat[i, k], _deviceInfos[i].View);
                     }
                 }
@@ -266,6 +273,14 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             for (int i = 0; i < _inputDimensions; i++)
             {
+                for (int j = 0; j < _batchSize; j++)
+                {
+                    _buffers.OutGradientsColor[i, j].SubView(0, Infos(i).Area).MemSetToZero();
+                }
+            }
+
+            for (int i = 0; i < _inputDimensions; i++)
+            {
                 Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
                 for (int j = 0; j < _outputDimensions; j++)
                 {
@@ -274,7 +289,6 @@ namespace ConvolutionalNeuralNetwork.Layers
                     _deviceMultiplierGradients[i, j].MemSetToZero();
                     for (int k = 0; k < _batchSize; k++)
                     {
-                        _buffers.OutGradientsFloat[i, k].MemSetToZero();
                         s_backwardsOutAction(index, _buffers.InGradientsFloat[j, k], _deviceMultipliers[i, j].View, _buffers.OutGradientsFloat[i, k], _deviceInfos[i].View);
                         s_backwardsGradientAction(index, _buffers.InGradientsFloat[j, k], _deviceInputs[i, k].View, _deviceMultiplierGradients[i, j].View, _deviceInfos[i].View);
                     }

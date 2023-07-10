@@ -69,7 +69,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 for (int j = 0; j < _batchSize; j++)
                 {
                     _deviceInputs[i, j] = _inputs[i, j].Allocate(Utility.Accelerator);
-                    _buffers.OutGradientsFloat[i, j].MemSetToZero();
+                    _buffers.OutGradientsColor[i, j].SubView(0, Infos(i).InputArea).MemSetToZero();
                 }
             }
 

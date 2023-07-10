@@ -327,7 +327,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for(int j = 0; j < _batchSize; j++)
                 {
-                    _buffers.OutGradientsFloat[i, j].MemSetToZero();
+                    _buffers.OutGradientsColor[i, j].SubView(0, Infos(i).InputArea).MemSetToZero();
                 }
             }
 
@@ -337,7 +337,6 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _buffers.OutGradientsFloat[i, j].MemSetToZero();
                     BackwardsOutGradientAction(index, _buffers.InGradientsFloat[i, j], _deviceFilters[i].View, _buffers.OutGradientsFloat[i % _inputDimensions, j], _deviceInfos[i % _inputDimensions].View);
                 }
             }
@@ -362,7 +361,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _buffers.OutGradientsFloat[i, j].MemSetToZero();
+                    _buffers.OutGradientsColor[i, j].SubView(0, Infos(i).InputArea).MemSetToZero();
                     _deviceInputs[i, j] = _inputs[i, j].Allocate(Utility.Accelerator);
                 }
             }

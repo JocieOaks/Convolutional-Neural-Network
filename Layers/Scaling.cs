@@ -29,7 +29,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _buffers.OutGradientsFloat[i, j].MemSetToZero();
+                    _buffers.OutGradientsColor[i, j].SubView(0, Infos(i).InputArea).MemSetToZero();
                     s_backwardsAction(index, _buffers.InGradientsFloat[i, j], _buffers.OutGradientsFloat[i, j], _deviceInfos[i].View);
                 }
             }
@@ -235,6 +235,8 @@ namespace ConvolutionalNeuralNetwork.Layers
             /// <inheritdoc/>
             public int InputWidth { get; init; }
 
+            public int InputArea => InputLength * InputWidth;
+
             /// <inheritdoc/>
             public float InverseKSquared { get; init; }
 
@@ -249,6 +251,8 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             /// <inheritdoc/>
             public int OutputWidth { get; init; }
+
+            public int OutputArea => OutputLength * OutputWidth;
 
             /// <inheritdoc/>
             public int Stride => throw new NotImplementedException();   //Should not be used.
