@@ -49,6 +49,10 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             _3b = unit;
         }
 
+        public static Color Zero => new(0);
+
+        public static Color One => new(1);
+
         private readonly float _1r;
         private readonly float _2g;
         private readonly float _3b;

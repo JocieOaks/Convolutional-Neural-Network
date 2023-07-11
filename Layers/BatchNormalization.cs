@@ -214,7 +214,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             _biasSecondMoment = new ColorVector(_inputDimensions);
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _weight[i] = new Color(1);
+                _weight[i] = Color.One;
             }
         }
 
@@ -233,7 +233,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 _biasSecondMoment = new ColorVector(_inputDimensions);
                 for (int i = 0; i < _inputDimensions; i++)
                 {
-                    _weight[i] = new Color(1);
+                    _weight[i] = Color.One;
                 }
             }
 

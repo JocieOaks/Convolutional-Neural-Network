@@ -23,6 +23,14 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="length">The length of the <see cref="FeatureMap"/>.</param>
         public FeatureMap(int width, int length) : base(width, length) { }
 
+        public FeatureMap(int width, int length, Color color) : base(width, length)
+        {
+            for(int i = 0; i < Area; i++)
+            {
+                _tensor[i] = color;
+            }
+        }
+
         /// <summary>
         /// A default constructor to be used when deserializing.
         /// </summary>

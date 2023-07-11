@@ -12,9 +12,11 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class ReLUActivation : Layer, ISecondaryLayer
     {
-        private static readonly Action<Index1D, ArrayView<byte>, ArrayView<float>, ArrayView<float>> s_backwardsAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<byte>, ArrayView<float>, ArrayView<float>>(BackwardsKernal);
-        private static readonly Action<Index1D, ArrayView<float>, ArrayView<byte>, ArrayView<float>> s_forwardAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<byte>, ArrayView<float>>(ForwardKernal);
-        private MemoryBuffer1D<byte, Stride1D.Dense>[,] _deviceZeroed;
+        private static readonly Action<Index1D, ArrayView<int>, ArrayView<float>, ArrayView<float>> s_backwardsAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<int>, ArrayView<float>, ArrayView<float>>(BackwardsKernal);
+        private static readonly Action<Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>> s_forwardAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>>(ForwardKernal);
+        private MemoryBuffer1D<int, Stride1D.Dense>[,] _deviceZeroed;
+
+        private const float NEGATIVESCALING = 0.01f;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ReLUActivation"/> class.
@@ -66,47 +68,46 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             BaseStartup(inputs, buffers);
 
-            _deviceZeroed = new MemoryBuffer1D<byte, Stride1D.Dense>[_inputDimensions, _batchSize];
+            _deviceZeroed = new MemoryBuffer1D<int, Stride1D.Dense>[_inputDimensions, _batchSize];
 
             for (int i = 0; i < _inputDimensions; i++)
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceZeroed[i, j] = Utility.Accelerator.Allocate1D<byte>(inputs[i, j].Area * 3 / 8 + 1);
+                    _deviceZeroed[i, j] = Utility.Accelerator.Allocate1D<int>(inputs[i, j].FloatLength / 32 + (inputs[i,j].FloatLength % 32 > 0 ? 1 : 0));
                 }
             }
             return _outputs;
         }
 
-        private static void BackwardsKernal(Index1D index, ArrayView<byte> zeroed, ArrayView<float> inGradient, ArrayView<float> outGradient)
+        private static void BackwardsKernal(Index1D index, ArrayView<int> zeroed, ArrayView<float> inGradient, ArrayView<float> outGradient)
         {
-            int byteIndex = (index.X) / 8;
-            int bit = index.X % byteIndex;
-            byte mask = (byte)(1 << bit);
+            int byteIndex = (index.X) / 32;
+            int bit = index.X - 32 * byteIndex;
+            int mask = (1 << bit);
             if ((zeroed[byteIndex] & mask) != 0)
             {
                 outGradient[index.X] = inGradient[index.X];
             }
             else
             {
-                outGradient[index.X] = 0.01f * inGradient[index.X];
+                outGradient[index.X] = NEGATIVESCALING * inGradient[index.X];
             }
         }
 
-        private static void ForwardKernal(Index1D index, ArrayView<float> input, ArrayView<byte> zeroed, ArrayView<float> output)
+        private static void ForwardKernal(Index1D index, ArrayView<float> input, ArrayView<int> zeroed, ArrayView<float> output)
         {
-
-            int byteIndex = (index.X) / 8;
-            int bit = index.X % byteIndex;
-            byte mask = (byte)(1 << bit);
+            int byteIndex = (index.X) / 32;
+            int bit = index.X - 32 * byteIndex;
+            int mask = (1 << bit);
             if(input[index.X] < 0)
             {
-                zeroed[byteIndex] &= (byte)~mask;
-                output[index.X] = 0.01f * input[index.X];
+                Atomic.And(ref zeroed[byteIndex], ~mask);
+                output[index.X] = NEGATIVESCALING * input[index.X];
             }
             else
             {
-                zeroed[byteIndex] |= mask;
+                Atomic.Or(ref zeroed[byteIndex], mask);
                 output[index.X] = input[index.X];
             }
         }
