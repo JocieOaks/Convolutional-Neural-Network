@@ -21,9 +21,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         private static readonly Action<Index2D, ArrayView<Color>, ArrayView<float>> s_sumAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<float>>(MeanKernal);
         private static readonly Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>> s_varianceAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>>(VarianceKernal);
         
-        [JsonProperty] private ColorVector _bias;
-        [JsonProperty] private ColorVector _biasFirstMoment;
-        [JsonProperty] private ColorVector _biasSecondMoment;
         private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceGradients;
         private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInputs;
         private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceMeans;
@@ -34,9 +31,9 @@ namespace ConvolutionalNeuralNetwork.Layers
         private FeatureMap[,] _inputs;
         private ColorVector _mean;
         private ColorVector _sigma;
-        [JsonProperty] private ColorVector _weight;
-        [JsonProperty] private ColorVector _weightFirstMoment;
-        [JsonProperty] private ColorVector _weightSecondMoment;
+        [JsonProperty] private Filter _weights;
+        [JsonProperty] private Filter _bias;
+
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BatchNormalization"/> class.
@@ -88,7 +85,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 float invM = 1f / (Infos(i).Area * _batchSize);
 
-                _deviceValues[i] = Utility.Accelerator.Allocate1D(new Color[] { _weight[i] / _sigma[i], 2 * invM * _gradients[i].SigmaGradient, _mean[i], invM * _gradients[i].MeanGradient });
+                _deviceValues[i] = Utility.Accelerator.Allocate1D(new Color[] { _weights[i] / _sigma[i], 2 * invM * _gradients[i].SigmaGradient, _mean[i], invM * _gradients[i].MeanGradient });
 
                 Index1D index = new(Infos(i).Area);
 
@@ -112,7 +109,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 float invM = 1f / (Infos(i).Area * _batchSize);
 
-                _deviceValues[i] = Utility.Accelerator.Allocate1D(new Color[] { _mean[i], _weight[i] / _sigma[i], _bias[i] });
+                _deviceValues[i] = Utility.Accelerator.Allocate1D(new Color[] { _mean[i], _weights[i] / _sigma[i], _bias[i] });
 
                 _deviceGradients[i] = Utility.Accelerator.Allocate1D<float>(9);
                 _deviceGradients[i].MemSetToZero();
@@ -133,8 +130,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                 _gradients[i].CopyFromBuffer(_deviceGradients[i]);
                 _deviceGradients[i].Dispose();
 
-                _gradients[i].SigmaGradient *= Color.Pow(_sigma[i], -1.5f) * _weight[i] * -0.5f;
-                _gradients[i].MeanGradient = -_gradients[i].BiasGradient * _weight[i] / _sigma[i];
+                _gradients[i].SigmaGradient *= Color.Pow(_sigma[i], -1.5f) * _weights[i] * -0.5f;
+                _gradients[i].MeanGradient = -_gradients[i].BiasGradient * _weights[i] / _sigma[i];
             }
         }
 
@@ -172,7 +169,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             for (int i = 0; i < _inputDimensions; i++)
             {
                 Index1D index = new(Infos(i).Area);
-                _deviceValues[i] = Utility.Accelerator.Allocate1D(new Color[] { _mean[i], _weight[i] / _sigma[i], _bias[i] });
+                _deviceValues[i] = Utility.Accelerator.Allocate1D(new Color[] { _mean[i], _weights[i] / _sigma[i], _bias[i] });
 
                 for (int j = 0; j < _batchSize; j++)
                 {
@@ -195,27 +192,13 @@ namespace ConvolutionalNeuralNetwork.Layers
         [OnDeserialized]
         public void OnDeserialized(StreamingContext context)
         {
-            if (_weightFirstMoment == null || _weightSecondMoment == null || _biasFirstMoment == null || _biasSecondMoment == null)
-            {
-                _weightFirstMoment = new ColorVector(_weight.Length);
-                _weightSecondMoment = new ColorVector(_weight.Length);
-                _biasFirstMoment = new ColorVector(_bias.Length);
-                _biasSecondMoment = new ColorVector(_bias.Length);
-            }
         }
 
         /// <inheritdoc/>
         public override void Reset()
         {
-            _weightFirstMoment = new ColorVector(_inputDimensions);
-            _weightSecondMoment = new ColorVector(_inputDimensions);
-            _bias = new ColorVector(_inputDimensions);
-            _biasFirstMoment = new ColorVector(_inputDimensions);
-            _biasSecondMoment = new ColorVector(_inputDimensions);
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _weight[i] = Color.One;
-            }
+            _weights.Reset(Color.One);
+            _bias.Reset(Color.Zero);
         }
 
         /// <inheritdoc/>
@@ -223,18 +206,10 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             BaseStartup(inputs, buffers);
 
-            if (_weight == null)
+            if (_weights == null)
             {
-                _weight = new ColorVector(_inputDimensions);
-                _weightFirstMoment = new ColorVector(_inputDimensions);
-                _weightSecondMoment = new ColorVector(_inputDimensions);
-                _bias = new ColorVector(_inputDimensions);
-                _biasFirstMoment = new ColorVector(_inputDimensions);
-                _biasSecondMoment = new ColorVector(_inputDimensions);
-                for (int i = 0; i < _inputDimensions; i++)
-                {
-                    _weight[i] = Color.One;
-                }
+                _weights = new Filter(_inputDimensions, Color.One);
+                _bias = new Filter(_inputDimensions, Color.Zero);
             }
 
             _mean = new ColorVector(_inputDimensions);
@@ -257,16 +232,17 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             for (int i = 0; i < _inputDimensions; i++)
             {
-                Color gradient = _gradients[i].WeightGradient.Clip(0.5f);
-                Color first = _weightFirstMoment[i] = firstMomentDecay * _weightFirstMoment[i] + (1 - firstMomentDecay) * gradient;
-                Color second = _weightSecondMoment[i] = secondMomentDecay * _weightSecondMoment[i] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
-                _weight[i] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
-
-                gradient = _gradients[i].BiasGradient.Clip(0.5f);
-                first = _biasFirstMoment[i] = firstMomentDecay * _biasFirstMoment[i] + (1 - firstMomentDecay) * gradient;
-                second = _biasSecondMoment[i] = secondMomentDecay * _biasSecondMoment[i] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
-                _bias[i] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+                _weights.SetGradient(i, _gradients[i].WeightGradient, learningRate, firstMomentDecay, secondMomentDecay);
+                _bias.SetGradient(i, _gradients[i].BiasGradient, learningRate, firstMomentDecay, secondMomentDecay);
             }
+        }
+
+        public void FilterTest()
+        {
+            FeatureMap input = FilterTestSetup();
+
+            _weights.TestFilterGradient(this, input, _outputs[0, 0], _buffers);
+            _bias.TestFilterGradient(this, input, _outputs[0, 0], _buffers);
         }
 
         /// <summary>
@@ -313,7 +289,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="info">The <see cref="StaticLayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
         private static void BackwardsKernal(Index1D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<Color> outGradient, ArrayView<Color> values)
         {
-            outGradient[index.X] = (inGradient[index.X] * values[0] + values[1] * (input[index.X] - values[2]) + values[3]);
+            outGradient[index.X] = (inGradient[index.X] * values[0] + values[1] * (input[index.X] - values[2]) + values[3]).Clip(1);
         }
 
         /// <summary>

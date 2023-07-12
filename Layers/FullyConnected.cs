@@ -17,21 +17,11 @@ namespace ConvolutionalNeuralNetwork.Layers
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>> s_backwardsGradientAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsGradientKernal);
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>> s_backwardsOutAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsOutKernal);
         private static readonly Action<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<StaticLayerInfo>> s_forwardAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<StaticLayerInfo>>(ForwardKernal);
-        [JsonProperty] private ColorTensor _blueFirstMoment;
-        [JsonProperty] private ColorTensor _blueSecondMoment;
         private MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[] _deviceInfos;
         private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInputs;
-        private MemoryBuffer1D<float, Stride1D.Dense>[,] _deviceMultiplierGradients;
-        private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceMultipliers;
         private int _dimensionMultiplier;
-        [JsonProperty] private ColorTensor _greenFirstMoment;
-        [JsonProperty] private ColorTensor _greenSecondMoment;
         private FeatureMap[,] _inputs;
-        [JsonProperty] private ColorTensor _matrixBlue;
-        [JsonProperty] private ColorTensor _matrixGreen;
-        [JsonProperty] private ColorTensor _matrixRed;
-        [JsonProperty] private ColorTensor _redFirstMoment;
-        [JsonProperty] private ColorTensor _redSecondMoment;
+        [JsonProperty] private Filter _filter;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FeatureMap"/> class.
@@ -62,16 +52,16 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
+            ArrayView<Color> deviceFilter = _filter.FilterColorGPU();
+
             for (int i = 0; i < _inputDimensions; i++)
             {
                 Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
                 for (int j = 0; j < _outputDimensions; j++)
                 {
-                    _deviceMultipliers[i, j] = Utility.Accelerator.Allocate1D(new Color[] { _matrixRed[i, j], _matrixGreen[i, j], _matrixBlue[i, j] });
-
                     for (int k = 0; k < _batchSize; k++)
                     {
-                        s_forwardAction(index, _buffers.InputsColor[i, k], _buffers.OutputsFloat[j, k], _deviceMultipliers[i, j].View, _deviceInfos[i].View);
+                        s_forwardAction(index, _buffers.InputsColor[i, k], _buffers.OutputsFloat[j, k], deviceFilter.SubView(MultiplierIndex(i, j), 3), _deviceInfos[i].View);
                     }
                 }
             }
@@ -80,16 +70,17 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             for (int i = 0; i < _inputDimensions; i++)
             {
-                for (int j = 0; j < _outputDimensions; j++)
-                {
-                    _deviceMultipliers[i, j].Dispose();
-                }
-
                 for (int j = 0; j < _batchSize; j++)
                 {
                     _inputs[i, j].CopyFromBuffer(_buffers.InputsColor[i, j]);
                 }
             }
+            _filter.DisposeFilter();
+        }
+
+        private int MultiplierIndex(int i, int j)
+        {
+            return 3 * (i * _outputDimensions + j);
         }
 
         /// <summary>
@@ -100,15 +91,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         [OnDeserialized]
         public void OnDeserialized(StreamingContext context)
         {
-            if (_blueFirstMoment == null || _blueSecondMoment == null || _greenFirstMoment == null || _greenSecondMoment == null || _redFirstMoment == null || _redSecondMoment == null)
-            {
-                _blueFirstMoment = new ColorTensor(_matrixBlue.Width, _matrixBlue.Length);
-                _blueSecondMoment = new ColorTensor(_matrixBlue.Width, _matrixBlue.Length);
-                _greenFirstMoment = new ColorTensor(_matrixGreen.Width, _matrixGreen.Length);
-                _greenSecondMoment = new ColorTensor(_matrixGreen.Width, _matrixGreen.Length);
-                _redFirstMoment = new ColorTensor(_matrixRed.Width, _matrixRed.Length);
-                _redSecondMoment = new ColorTensor(_matrixRed.Width, _matrixRed.Length);
-            }
         }
 
         /// <inheritdoc/>
@@ -116,17 +98,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             float variance = 0.666f / (_inputDimensions + _outputDimensions);
             float stdDev = MathF.Sqrt(variance);
-            _matrixRed = ColorTensor.Random(_inputDimensions, _outputDimensions, 0, stdDev);
-            _matrixGreen = ColorTensor.Random(_inputDimensions, _outputDimensions, 0, stdDev);
-            _matrixBlue = ColorTensor.Random(_inputDimensions, _outputDimensions, 0, stdDev);
-
-            _blueFirstMoment = new ColorTensor(_inputDimensions, _outputDimensions);
-            _blueSecondMoment = new ColorTensor(_inputDimensions, _outputDimensions);
-            _greenFirstMoment = new ColorTensor(_inputDimensions, _outputDimensions);
-
-            _greenSecondMoment = new ColorTensor(_inputDimensions, _outputDimensions);
-            _redFirstMoment = new ColorTensor(_inputDimensions, _outputDimensions);
-            _redSecondMoment = new ColorTensor(_inputDimensions, _outputDimensions);
+            _filter.Reset(0, stdDev);
         }
 
         /// <summary>
@@ -152,7 +124,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override FeatureMap[,] Startup(FeatureMap[,] inputs, IOBuffers buffers)
         {
-            if (_matrixRed == null)
+            if (_filter == null)
             {
                 if (_outputDimensions != 0)
                     BaseStartup(inputs, buffers, -inputs.GetLength(0) / _outputDimensions);
@@ -164,21 +136,12 @@ namespace ConvolutionalNeuralNetwork.Layers
                 float variance = 0.666f / (_inputDimensions + _outputDimensions);
                 float stdDev = MathF.Sqrt(variance);
 
-                _matrixRed = ColorTensor.Random(_inputDimensions, _outputDimensions, 0, stdDev);
-                _matrixGreen = ColorTensor.Random(_inputDimensions, _outputDimensions, 0, stdDev);
-                _matrixBlue = ColorTensor.Random(_inputDimensions, _outputDimensions, 0, stdDev);
-
-                _blueFirstMoment = new ColorTensor(_inputDimensions, _outputDimensions);
-                _blueSecondMoment = new ColorTensor(_inputDimensions, _outputDimensions);
-                _greenFirstMoment = new ColorTensor(_inputDimensions, _outputDimensions);
-
-                _greenSecondMoment = new ColorTensor(_inputDimensions, _outputDimensions);
-                _redFirstMoment = new ColorTensor(_inputDimensions, _outputDimensions);
-                _redSecondMoment = new ColorTensor(_inputDimensions, _outputDimensions);
+                _filter = new Filter(3 * _inputDimensions * _outputDimensions, 0, stdDev);
             }
             else
             {
-                BaseStartup(inputs, buffers, -_matrixRed.Width / _matrixRed.Length);
+                _inputDimensions = inputs.GetLength(0);
+                BaseStartup(inputs, buffers, -3 * _inputDimensions * _inputDimensions / _filter.Length);
             }
             _inputs = inputs;
 
@@ -187,8 +150,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 _deviceInfos[i] = Utility.Accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
             }
-            _deviceMultiplierGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions, _outputDimensions];
-            _deviceMultipliers = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _outputDimensions];
             _deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
             return _outputs;
         }
@@ -232,28 +193,23 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
+            ArrayView<Color> deviceFilter = _filter.FilterColorGPU();
+
             for (int i = 0; i < _inputDimensions; i++)
             {
                 Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
                 for (int j = 0; j < _outputDimensions; j++)
                 {
-                    _deviceMultipliers[i, j] = Utility.Accelerator.Allocate1D(new Color[] { _matrixRed[i, j], _matrixGreen[i, j], _matrixBlue[i, j] });
                     for (int k = 0; k < _batchSize; k++)
                     {
-                        s_backwardsOutAction(index, _buffers.InGradientsFloat[j, k], _deviceMultipliers[i, j].View, _buffers.OutGradientsFloat[i, k], _deviceInfos[i].View);
+                        s_backwardsOutAction(index, _buffers.InGradientsFloat[j, k], deviceFilter.SubView(MultiplierIndex(i, j), 3), _buffers.OutGradientsFloat[i, k], _deviceInfos[i].View);
                     }
                 }
             }
 
             Utility.Accelerator.Synchronize();
 
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _outputDimensions; j++)
-                {
-                    _deviceMultipliers[i, j].Dispose();
-                }
-            }
+            _filter.DisposeFilter();
         }
         /// Perform standard backpropagation through the layer, updating it's weights. Called when learning rate is greater than 0.
         /// </summary>
@@ -279,18 +235,19 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
+            var deviceFilter = _filter.FilterColorGPU();
+            var deviceGradient = _filter.GradientFloatGPU();
+
             for (int i = 0; i < _inputDimensions; i++)
             {
                 Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
                 for (int j = 0; j < _outputDimensions; j++)
                 {
-                    _deviceMultipliers[i, j] = Utility.Accelerator.Allocate1D(new Color[] { _matrixRed[i, j], _matrixGreen[i, j], _matrixBlue[i, j] });
-                    _deviceMultiplierGradients[i, j] = Utility.Accelerator.Allocate1D<float>(9);
-                    _deviceMultiplierGradients[i, j].MemSetToZero();
                     for (int k = 0; k < _batchSize; k++)
                     {
-                        s_backwardsOutAction(index, _buffers.InGradientsFloat[j, k], _deviceMultipliers[i, j].View, _buffers.OutGradientsFloat[i, k], _deviceInfos[i].View);
-                        s_backwardsGradientAction(index, _buffers.InGradientsFloat[j, k], _deviceInputs[i, k].View, _deviceMultiplierGradients[i, j].View, _deviceInfos[i].View);
+                        int multIndex = MultiplierIndex(i, j);
+                        s_backwardsOutAction(index, _buffers.InGradientsFloat[j, k], deviceFilter.SubView(multIndex, 3), _buffers.OutGradientsFloat[i, k], _deviceInfos[i].View);
+                        s_backwardsGradientAction(index, _buffers.InGradientsFloat[j, k], _deviceInputs[i, k].View, deviceGradient.SubView(multIndex, 9), _deviceInfos[i].View);
                     }
                 }
             }
@@ -300,24 +257,15 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-
                     _deviceInputs[i, j].Dispose();
                 }
             }
 
             float[] multiplierGradients = new float[9];
 
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _outputDimensions; j++)
-                {
-                    _deviceMultiplierGradients[i, j].CopyToCPU(multiplierGradients);
-                    _deviceMultiplierGradients[i, j].Dispose();
-                    _deviceMultipliers[i, j].Dispose();
-
-                    UpdateWeight(learningRate, firstMomentDecay, secondMomentDecay, i, j, multiplierGradients);
-                }
-            }
+            _filter.DisposeFilter();
+            _filter.DisposeGradient();
+            _filter.UpdateFilter(learningRate, firstMomentDecay, secondMomentDecay);
         }
 
         /// <summary>
@@ -330,33 +278,11 @@ namespace ConvolutionalNeuralNetwork.Layers
             return (StaticLayerInfo)_layerInfos[index];
         }
 
-        /// <summary>
-        /// Updates weights along with the first and second moments.
-        /// </summary>
-        /// <param name="learningRate">The overall learning rate for the layer updates, corrected for the influence of bias in the first and second moments.</param>
-        /// <param name="firstMomentDecay">The exponential decay rate for the first moment.</param>
-        /// <param name="secondMomentDecay">The exponential decay rate for the second moment.</param>
-        /// <param name="index1">The first dimension index of weights being updated.</param>
-        /// <param name="index2">The second dimension index of the weights being updated.</param>
-        /// <param name="multiplierGradients">The gradients of the weights.</param>
-        private void UpdateWeight(float learningRate, float firstMomentDecay, float secondMomentDecay, int index1, int index2, float[] multiplierGradients)
+        public void FilterTest()
         {
-            Color gradient = new Color(multiplierGradients[0], multiplierGradients[1], multiplierGradients[2]);
-            Color first = _redFirstMoment[index1, index2] = firstMomentDecay * _redFirstMoment[index1, index2] + (1 - firstMomentDecay) * gradient;
-            Color second = _redSecondMoment[index1, index2] = secondMomentDecay * _redSecondMoment[index1, index2] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
-            _matrixRed[index1, index2] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+            FeatureMap input = FilterTestSetup();
 
-
-            gradient = new Color(multiplierGradients[3], multiplierGradients[4], multiplierGradients[5]);
-            first = _greenFirstMoment[index1, index2] = firstMomentDecay * _greenFirstMoment[index1, index2] + (1 - firstMomentDecay) * gradient;
-            second = _greenSecondMoment[index1, index2] = secondMomentDecay * _greenSecondMoment[index1, index2] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
-            _matrixGreen[index1, index2] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
-
-            gradient = new Color(multiplierGradients[6], multiplierGradients[7], multiplierGradients[8]);
-            first = _blueFirstMoment[index1, index2] = firstMomentDecay * _blueFirstMoment[index1, index2] + (1 - firstMomentDecay) * gradient;
-            second = _blueSecondMoment[index1, index2] = secondMomentDecay * _blueSecondMoment[index1, index2] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
-            _matrixBlue[index1, index2] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
-
+            _filter.TestFilterGradient(this, input, _outputs[0, 0], _buffers);
         }
     }
 }

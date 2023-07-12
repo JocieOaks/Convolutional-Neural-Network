@@ -2,6 +2,7 @@
 using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
 using ConvolutionalNeuralNetwork.DataTypes;
+using ConvolutionalNeuralNetwork.Layers;
 
 namespace ConvolutionalNeuralNetwork
 {
@@ -90,6 +91,82 @@ namespace ConvolutionalNeuralNetwork
             output[index] = input[index];
         }
 
-        public static Action<Index1D, ArrayView<Color>, ArrayView<Color>> CopyAction { get; } = Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>>(Utility.CopyKernal);
+        public static Action<Index1D, ArrayView<Color>, ArrayView<Color>> CopyAction { get; } = Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>>(CopyKernal);
+
+        /// <summary>
+        /// Tests whether the backpropogation of a <see cref="Layer"/> is accurate to it's expected value. Used to diagnose issues with a <see cref="Layer"/>s
+        /// propagation.
+        /// </summary>
+        /// <param name="layer">The <see cref="Layer"/> to be tested.</param>
+        public static void GradientTest(ILayer layer)
+        {
+            FeatureMap input = new(3, 3);
+            for (int i = 0; i < 3; i++)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    input[i, j] = new Color(i, j, i - j);
+                }
+            }
+
+            IOBuffers buffer = new();
+            IOBuffers complimentBuffer = new();
+            complimentBuffer.OutputDimensionArea(0, 9);
+
+            FeatureMap output = layer.Startup(new FeatureMap[,] { { input } }, buffer)[0, 0];
+            buffer.Allocate(1);
+            complimentBuffer.Allocate(1);
+            IOBuffers.SetCompliment(buffer, complimentBuffer);
+            input.CopyToBuffer(buffer.InputsColor[0, 0]);
+
+            layer.Forward();
+            output.CopyFromBuffer(buffer.OutputsColor[0, 0]);
+            FeatureMap gradient = new(output.Width, output.Length, Color.One);
+            gradient[0, 0] = Color.One;
+            gradient.CopyToBuffer(buffer.InGradientsColor[0, 0]);
+            layer.Backwards(0, 0, 0);
+            FeatureMap outGradient = new(3, 3);
+            outGradient.CopyFromBuffer(buffer.OutGradientsColor[0, 0]);
+
+            FeatureMap testOutput = new(output.Width, output.Length);
+
+            float h = 0.001f;
+
+            for (int i = 0; i < 3; i++)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    for (int k = 0; k < 3; k++)
+                    {
+                        Color hColor = k switch
+                        {
+                            0 => new Color(h, 0, 0),
+                            1 => new Color(0, h, 0),
+                            2 => new Color(0, 0, h)
+                        };
+                        input[i, j] += hColor;
+                        input.CopyToBuffer(buffer.InputsColor[0, 0]);
+
+                        layer.Forward();
+                        testOutput.CopyFromBuffer(buffer.OutputsColor[0, 0]);
+
+                        float testGradient = 0;
+                        for (int i2 = 0; i2 < output.Width; i2++)
+                        {
+                            for (int j2 = 0; j2 < output.Length; j2++)
+                            {
+                                for (int k2 = 0; k2 < 3; k2++)
+                                {
+                                    testGradient += (testOutput[i2, j2][k2] - output[i2, j2][k2]) / h;
+                                }
+                            }
+                        }
+
+                        Console.WriteLine($"Expected Gradient: {outGradient[i, j][k]:f4} \t Test Gradient: {testGradient:f4}");
+                        input[i, j] -= hColor;
+                    }
+                }
+            }
+        }
     }
 }
