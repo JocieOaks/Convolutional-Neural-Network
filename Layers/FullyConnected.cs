@@ -21,7 +21,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInputs;
         private int _dimensionMultiplier;
         private FeatureMap[,] _inputs;
-        [JsonProperty] private Filter _filter;
+        [JsonProperty] private Weights _filter;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FeatureMap"/> class.
@@ -52,7 +52,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
-            ArrayView<Color> deviceFilter = _filter.FilterColorGPU();
+            ArrayView<Color> deviceFilter = _filter.FilterGPU();
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -136,7 +136,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 float variance = 0.666f / (_inputDimensions + _outputDimensions);
                 float stdDev = MathF.Sqrt(variance);
 
-                _filter = new Filter(3 * _inputDimensions * _outputDimensions, 0, stdDev);
+                _filter = new Weights(3 * _inputDimensions * _outputDimensions, 0, stdDev);
             }
             else
             {
@@ -193,16 +193,17 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
-            ArrayView<Color> deviceFilter = _filter.FilterColorGPU();
+            ArrayView<Color> deviceFilter = _filter.FilterGPU();
 
             for (int i = 0; i < _inputDimensions; i++)
             {
                 Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
                 for (int j = 0; j < _outputDimensions; j++)
                 {
+                    int multIndex = MultiplierIndex(i, j);
                     for (int k = 0; k < _batchSize; k++)
                     {
-                        s_backwardsOutAction(index, _buffers.InGradientsFloat[j, k], deviceFilter.SubView(MultiplierIndex(i, j), 3), _buffers.OutGradientsFloat[i, k], _deviceInfos[i].View);
+                        s_backwardsOutAction(index, _buffers.InGradientsFloat[j, k], deviceFilter.SubView(multIndex, 3), _buffers.OutGradientsFloat[i, k], _deviceInfos[i].View);
                     }
                 }
             }
@@ -211,6 +212,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             _filter.DisposeFilter();
         }
+
         /// Perform standard backpropagation through the layer, updating it's weights. Called when learning rate is greater than 0.
         /// </summary>
         /// <param name="learningRate">The overall learning rate for the layer updates, corrected for the influence of bias in the first and second moments.</param>
@@ -235,19 +237,19 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
-            var deviceFilter = _filter.FilterColorGPU();
-            var deviceGradient = _filter.GradientFloatGPU();
+            var deviceFilter = _filter.FilterGPU();
+            var deviceGradient = _filter.GradientGPU();
 
             for (int i = 0; i < _inputDimensions; i++)
             {
                 Index3D index = new(Infos(i).Width, Infos(i).Length, 3);
                 for (int j = 0; j < _outputDimensions; j++)
                 {
+                    int multIndex = MultiplierIndex(i, j);
                     for (int k = 0; k < _batchSize; k++)
                     {
-                        int multIndex = MultiplierIndex(i, j);
                         s_backwardsOutAction(index, _buffers.InGradientsFloat[j, k], deviceFilter.SubView(multIndex, 3), _buffers.OutGradientsFloat[i, k], _deviceInfos[i].View);
-                        s_backwardsGradientAction(index, _buffers.InGradientsFloat[j, k], _deviceInputs[i, k].View, deviceGradient.SubView(multIndex, 9), _deviceInfos[i].View);
+                        s_backwardsGradientAction(index, _buffers.InGradientsFloat[j, k], _deviceInputs[i, k].View, deviceGradient.SubView(3 * multIndex, 9), _deviceInfos[i].View);
                     }
                 }
             }
@@ -278,11 +280,11 @@ namespace ConvolutionalNeuralNetwork.Layers
             return (StaticLayerInfo)_layerInfos[index];
         }
 
-        public void FilterTest()
+        public void FilterTest(int outputMultiplier)
         {
-            FeatureMap input = FilterTestSetup();
+            FeatureMap[,] input = FilterTestSetup(outputMultiplier);
 
-            _filter.TestFilterGradient(this, input, _outputs[0, 0], _buffers);
+            _filter.TestFilterGradient(this, input, _outputs[0, 0], 0, _buffers);
         }
     }
 }
