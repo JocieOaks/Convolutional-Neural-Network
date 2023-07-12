@@ -1,5 +1,6 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using Newtonsoft.Json;
+using System.Reflection.Emit;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
@@ -136,6 +137,22 @@ namespace ConvolutionalNeuralNetwork.Layers
             _buffers = buffers;
             for (int i = 0; i < _outputDimensions; i++)
                 buffers.OutputDimensionArea(i, _outputs[i, 0].Area);
+        }
+
+        protected FeatureMap FilterTestSetup()
+        {
+            FeatureMap input = new(3, 3);
+
+            IOBuffers buffer = new();
+            IOBuffers complimentBuffer = new();
+            complimentBuffer.OutputDimensionArea(0, 9);
+
+            FeatureMap output = Startup(new FeatureMap[,] { { input } }, buffer)[0, 0];
+            buffer.Allocate(1);
+            complimentBuffer.Allocate(1);
+            IOBuffers.SetCompliment(buffer, complimentBuffer);
+
+            return input;
         }
     }
 }

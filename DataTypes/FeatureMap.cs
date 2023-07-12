@@ -77,7 +77,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             {
                 for (int x = 0; x < width; x++)
                 {
-                    map[x, y] = Color.RandomGauss(0.5f, 0.2f).Clamp(1);
+                    map[x, y] = Color.RandomGauss(0.5f, 0.2f).Clip(1);
                 }
             }
             return map;
