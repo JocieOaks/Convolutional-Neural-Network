@@ -14,19 +14,150 @@ namespace ConvolutionalNeuralNetwork
         //Used to avoid divide by zero or log of zero going to infinity.
         public const float ASYMPTOTEERRORCORRECTION = 1e-6f;
 
+        /// <value>A Cuda <see cref="ILGPU.Runtime.Accelerator"/> for running <see cref="ILGPU"/> kernals.</value>
+        public static Accelerator Accelerator { get; } = Context.CreateCudaAccelerator(0);
+
         /// <value>Color with very small values. Used to avoid asymptotic behaviour when a value goes to zero.</value>
         public static DataTypes.Color AsymptoteErrorColor { get; } = new(ASYMPTOTEERRORCORRECTION);
 
         /// <value>A Cuda <see cref="ILGPU.Context"/> for running <see cref="ILGPU"/> kernals.</value>
         public static Context Context { get; } = Context.Create(builder => builder.Cuda());
 
-        /// <value>A Cuda <see cref="ILGPU.Runtime.Accelerator"/> for running <see cref="ILGPU"/> kernals.</value>
-        public static Accelerator Accelerator { get; } = Context.CreateCudaAccelerator(0);
+        /// <value>An action for running the cuda kernal <see cref="CopyKernal(Index1D, ArrayView{Color}, ArrayView{Color})"/>.</value>
+        public static Action<Index1D, ArrayView<Color>, ArrayView<Color>> CopyAction { get; } = Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>>(CopyKernal);
 
         /// <value>A single <see cref="System.Random"/> for number generation throughout the project. For some functions it is inconvenient
         /// to pass a single <see cref="System.Random"/> but creating multiple in quick succession led to them sometimes being seeded with
         /// the same values, leading to stretches of the same value being generated.</value>
         public static Random Random { get; } = new Random();
+
+        /// <summary>
+        /// Kernal for copying values from one <see cref="ArrayView{T}"/> to another.
+        /// </summary>
+        /// <param name="index">The index to iterate over every element in the two <see cref="ArrayView{T}"/>s.</param>
+        /// <param name="input">The <see cref="ArrayView{T}"/> being copied from.</param>
+        /// <param name="output">The <see cref="ArrayView{T}"/> being copied to.</param>
+        public static void CopyKernal(Index1D index, ArrayView<Color> input, ArrayView<Color> output)
+        {
+            output[index] = input[index];
+        }
+
+        /// <summary>
+        /// Tests whether the backpropogation of a <see cref="Layer"/> is accurate to it's expected value. Used to diagnose issues with a <see cref="Layer"/>s
+        /// propagation.
+        /// </summary>
+        /// <param name="layer">The <see cref="Layer"/> to be tested.</param>
+        public static void GradientCheck(ILayer layer, int dimensionMultiplier)
+        {
+            int outputDimensions, inputDimensions;
+            if (dimensionMultiplier >= 1)
+            {
+                inputDimensions = 1;
+                outputDimensions = dimensionMultiplier;
+            }
+            else
+            {
+                inputDimensions = -dimensionMultiplier;
+                outputDimensions = 1;
+            }
+
+            FeatureMap[,] inputs = new FeatureMap[inputDimensions, 1];
+            for (int i = 0; i < inputDimensions; i++)
+            {
+                inputs[i, 0] = new(3, 3);
+                for (int j = 0; j < 3; j++)
+                {
+                    for (int k = 0; k < 3; k++)
+                    {
+                        inputs[i, 0][j, k] = (i + 1) * new Color(j, k, j - k);
+                    }
+                }
+            }
+
+            IOBuffers buffer = new();
+            IOBuffers complimentBuffer = new();
+            complimentBuffer.OutputDimensionArea(inputDimensions - 1, 9);
+
+            FeatureMap[,] outputs = layer.Startup(inputs, buffer);
+            buffer.Allocate(1);
+            complimentBuffer.Allocate(1);
+            IOBuffers.SetCompliment(buffer, complimentBuffer);
+            for (int i = 0; i < inputDimensions; i++)
+            {
+                inputs[i, 0].CopyToBuffer(buffer.InputsColor[i, 0]);
+            }
+
+            layer.Forward();
+            for (int i = 0; i < outputDimensions; i++)
+            {
+                outputs[i, 0].CopyFromBuffer(buffer.OutputsColor[i, 0]);
+                new FeatureMap(outputs[i, 0].Width, outputs[i, 0].Length, Color.One).CopyToBuffer(buffer.InGradientsColor[i, 0]);
+            }
+
+            layer.Backwards(1, 1, 1);
+            FeatureMap[] outGradients = new FeatureMap[inputDimensions];
+            for (int i = 0; i < inputDimensions; i++)
+            {
+                outGradients[i] = new FeatureMap(3, 3);
+                outGradients[i].CopyFromBuffer(buffer.OutGradientsColor[i, 0]);
+            }
+
+            FeatureMap[] testOutput = new FeatureMap[outputDimensions];
+            for (int i = 0; i < outputDimensions; i++)
+            {
+
+                testOutput[i] = new(outputs[i, 0].Width, outputs[i, 0].Length);
+            }
+
+            float h = 0.001f;
+
+            for (int i = 0; i < inputDimensions; i++)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    for (int k = 0; k < 3; k++)
+                    {
+                        for (int l = 0; l < 3; l++)
+                        {
+                            Color hColor = l switch
+                            {
+                                0 => new Color(h, 0, 0),
+                                1 => new Color(0, h, 0),
+                                2 => new Color(0, 0, h)
+                            };
+
+                            inputs[i, 0][j, k] += hColor;
+                            for (int i2 = 0; i2 < inputDimensions; i2++)
+                            {
+                                inputs[i2, 0].CopyToBuffer(buffer.InputsColor[i2, 0]);
+                            }
+
+                            layer.Forward();
+
+
+
+                            float testGradient = 0;
+                            for (int i2 = 0; i2 < outputDimensions; i2++)
+                            {
+                                testOutput[i2].CopyFromBuffer(buffer.OutputsColor[i2, 0]);
+                                for (int j2 = 0; j2 < testOutput[i2].Width; j2++)
+                                {
+                                    for (int k2 = 0; k2 < testOutput[i2].Length; k2++)
+                                    {
+                                        for (int l2 = 0; l2 < 3; l2++)
+                                        {
+                                            testGradient += (testOutput[i2][j2, k2][l2] - outputs[i2, 0][j2, k2][l2]) / h;
+                                        }
+                                    }
+                                }
+                            }
+                            Console.WriteLine($"Expected Gradient: {outGradients[i][j, k][l]:f4} \t Test Gradient: {testGradient:f4}");
+                            inputs[i, 0][j, k] -= hColor;
+                        }
+                    }
+                }
+            }
+        }
 
         /// <summary>
         /// Generates a random value from a gaussian distribution with the given parameters.
@@ -78,95 +209,6 @@ namespace ConvolutionalNeuralNetwork
                 }
             }
             return transposed;
-        }
-
-        /// <summary>
-        /// Kernal for copying values from one <see cref="ArrayView{T}"/> to another.
-        /// </summary>
-        /// <param name="index">The index to iterate over every element in the two <see cref="ArrayView{T}"/>s.</param>
-        /// <param name="input">The <see cref="ArrayView{T}"/> being copied from.</param>
-        /// <param name="output">The <see cref="ArrayView{T}"/> being copied to.</param>
-        public static void CopyKernal(Index1D index, ArrayView<Color> input, ArrayView<Color> output)
-        {
-            output[index] = input[index];
-        }
-
-        public static Action<Index1D, ArrayView<Color>, ArrayView<Color>> CopyAction { get; } = Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>>(CopyKernal);
-
-        /// <summary>
-        /// Tests whether the backpropogation of a <see cref="Layer"/> is accurate to it's expected value. Used to diagnose issues with a <see cref="Layer"/>s
-        /// propagation.
-        /// </summary>
-        /// <param name="layer">The <see cref="Layer"/> to be tested.</param>
-        public static void GradientTest(ILayer layer)
-        {
-            FeatureMap input = new(3, 3);
-            for (int i = 0; i < 3; i++)
-            {
-                for (int j = 0; j < 3; j++)
-                {
-                    input[i, j] = new Color(i, j, i - j);
-                }
-            }
-
-            IOBuffers buffer = new();
-            IOBuffers complimentBuffer = new();
-            complimentBuffer.OutputDimensionArea(0, 9);
-
-            FeatureMap output = layer.Startup(new FeatureMap[,] { { input } }, buffer)[0, 0];
-            buffer.Allocate(1);
-            complimentBuffer.Allocate(1);
-            IOBuffers.SetCompliment(buffer, complimentBuffer);
-            input.CopyToBuffer(buffer.InputsColor[0, 0]);
-
-            layer.Forward();
-            output.CopyFromBuffer(buffer.OutputsColor[0, 0]);
-            FeatureMap gradient = new(output.Width, output.Length, Color.One);
-            gradient[0, 0] = Color.One;
-            gradient.CopyToBuffer(buffer.InGradientsColor[0, 0]);
-            layer.Backwards(0, 0, 0);
-            FeatureMap outGradient = new(3, 3);
-            outGradient.CopyFromBuffer(buffer.OutGradientsColor[0, 0]);
-
-            FeatureMap testOutput = new(output.Width, output.Length);
-
-            float h = 0.001f;
-
-            for (int i = 0; i < 3; i++)
-            {
-                for (int j = 0; j < 3; j++)
-                {
-                    for (int k = 0; k < 3; k++)
-                    {
-                        Color hColor = k switch
-                        {
-                            0 => new Color(h, 0, 0),
-                            1 => new Color(0, h, 0),
-                            2 => new Color(0, 0, h)
-                        };
-                        input[i, j] += hColor;
-                        input.CopyToBuffer(buffer.InputsColor[0, 0]);
-
-                        layer.Forward();
-                        testOutput.CopyFromBuffer(buffer.OutputsColor[0, 0]);
-
-                        float testGradient = 0;
-                        for (int i2 = 0; i2 < output.Width; i2++)
-                        {
-                            for (int j2 = 0; j2 < output.Length; j2++)
-                            {
-                                for (int k2 = 0; k2 < 3; k2++)
-                                {
-                                    testGradient += (testOutput[i2, j2][k2] - output[i2, j2][k2]) / h;
-                                }
-                            }
-                        }
-
-                        Console.WriteLine($"Expected Gradient: {outGradient[i, j][k]:f4} \t Test Gradient: {testGradient:f4}");
-                        input[i, j] -= hColor;
-                    }
-                }
-            }
         }
     }
 }

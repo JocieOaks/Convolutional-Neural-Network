@@ -31,8 +31,8 @@ namespace ConvolutionalNeuralNetwork.Layers
         private FeatureMap[,] _inputs;
         private ColorVector _mean;
         private ColorVector _sigma;
-        [JsonProperty] private Filter _weights;
-        [JsonProperty] private Filter _bias;
+        [JsonProperty] private Weights _weights;
+        [JsonProperty] private Weights _bias;
 
 
         /// <summary>
@@ -208,8 +208,8 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             if (_weights == null)
             {
-                _weights = new Filter(_inputDimensions, Color.One);
-                _bias = new Filter(_inputDimensions, Color.Zero);
+                _weights = new Weights(_inputDimensions, Color.One);
+                _bias = new Weights(_inputDimensions, Color.Zero);
             }
 
             _mean = new ColorVector(_inputDimensions);
@@ -239,10 +239,10 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         public void FilterTest()
         {
-            FeatureMap input = FilterTestSetup();
+            FeatureMap[,] input = FilterTestSetup(1);
 
-            _weights.TestFilterGradient(this, input, _outputs[0, 0], _buffers);
-            _bias.TestFilterGradient(this, input, _outputs[0, 0], _buffers);
+            _weights.TestFilterGradient(this, input, _outputs[0, 0], 0, _buffers);
+            _bias.TestFilterGradient(this, input, _outputs[0, 0], 0, _buffers);
         }
 
         /// <summary>

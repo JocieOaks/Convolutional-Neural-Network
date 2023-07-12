@@ -23,8 +23,8 @@ namespace ConvolutionalNeuralNetwork.Layers
         private ColorTensor[,] _filterGradients;
         private ColorTensor[,] _filters;
 
-        [JsonProperty] Filter[,] _boolsFilters;
-        [JsonProperty] Filter[,] _floatsFilters;
+        [JsonProperty] Weights[,] _boolsFilters;
+        [JsonProperty] Weights[,] _floatsFilters;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="LatentConvolution"/> class.
@@ -218,9 +218,9 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 BaseStartup(inputs, buffers, _dimensionsMultiplier);
 
-                _boolsFilters = new Filter[_outputDimensions, _filterSize * _filterSize];
+                _boolsFilters = new Weights[_outputDimensions, _filterSize * _filterSize];
 
-                _floatsFilters = new Filter[_outputDimensions, _filterSize * _filterSize];
+                _floatsFilters = new Weights[_outputDimensions, _filterSize * _filterSize];
 
                 float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize * (Bools[0].Length + Floats[0].Length) + _inputDimensions * _filterSize * _filterSize * (Bools[0].Length + Floats[0].Length));
                 float stdDev = MathF.Sqrt(variance);
@@ -229,8 +229,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                 {
                     for (int j = 0; j < _filterSize * _filterSize; j++)
                     {
-                        _boolsFilters[i, j] = new Filter(Bools[0].Length, 0, stdDev);
-                        _floatsFilters[i, j] = new Filter(Floats[0].Length, 0, stdDev);
+                        _boolsFilters[i, j] = new Weights(Bools[0].Length, 0, stdDev);
+                        _floatsFilters[i, j] = new Weights(Floats[0].Length, 0, stdDev);
                     }
                 }
             }
@@ -245,14 +245,14 @@ namespace ConvolutionalNeuralNetwork.Layers
                     {
                         for (int j = 0; j < _filterSize * _filterSize; j++)
                         {
-                            Filter newBoolVector = new(Bools[0].Length, 0, stdDev);
+                            Weights newBoolVector = new(Bools[0].Length, 0, stdDev);
                             for (int k = 0; k < _boolsFilters[i, j].Length; k++)
                             {
                                 newBoolVector.SetFilter(k, _boolsFilters[i, j][k]);
                             }
                             _boolsFilters[i, j] = newBoolVector;
 
-                            Filter newFloatVector = new(Floats[0].Length, 0, stdDev);
+                            Weights newFloatVector = new(Floats[0].Length, 0, stdDev);
 
                             for (int k = 0; k < _floatsFilters[i, j].Length; k++)
                             {
@@ -300,18 +300,21 @@ namespace ConvolutionalNeuralNetwork.Layers
             return (LayerInfo)_layerInfos[index % _inputDimensions];
         }
 
-        public void FilterTest()
+        public void FilterTest(int outputMultiplier)
         {
-            FeatureMap input = FilterTestSetup();
+            FeatureMap[,] input = FilterTestSetup(outputMultiplier);
 
-            for (int i = 0; i < _filterSize * _filterSize; i++)
+            for (int j = 0; j < outputMultiplier; j++)
             {
-                _boolsFilters[0, i].TestFilterGradient(this, input, _outputs[0, 0], _buffers);
-            }
+                for (int i = 0; i < _filterSize * _filterSize; i++)
+                {
+                    _boolsFilters[j, i].TestFilterGradient(this, input, _outputs[0, 0], j, _buffers);
+                }
 
-            for (int i = 0; i < _filterSize * _filterSize; i++)
-            {
-                _floatsFilters[0, i].TestFilterGradient(this, input, _outputs[0, 0], _buffers);
+                for (int i = 0; i < _filterSize * _filterSize; i++)
+                {
+                    _floatsFilters[j, i].TestFilterGradient(this, input, _outputs[0, 0], j, _buffers);
+                }
             }
         }
     }

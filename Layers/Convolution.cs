@@ -14,15 +14,11 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class Convolution : Layer, IPrimaryLayer
     {
-        private const int CLAMP = 1;
-
-        private const float LEARNINGMULTIPLIER = 1f;
-
         private MemoryBuffer1D<LayerInfo, Stride1D.Dense>[] _deviceInfos;
         private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInputs;
-        private int _dimensionsMultiplier;
+        private readonly int _dimensionsMultiplier;
         private FeatureMap[,] _inputs;
-        [JsonProperty] private Filter[] _filters;
+        [JsonProperty] private Weights[] _filters;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Convolution"/> layer.
@@ -30,10 +26,13 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="filterSize">The width and height of a filter.</param>
         /// <param name="stride">The amount of movement over the image for each filter pass.</param>
         /// <param name="outputDimensionsMultiplier">A factor relating the number of input layers to the number of output layers.
-        /// A positive number multiplies the number of input dimensions. A negative number divides the number of dimensions.
-        /// Note: Convolution layers are currently only set to increase the number of dimensions.</param>
+        /// Must be positive. To reduce the number of output dimensions, use a <see cref="Summation"/> layer afterwards.</param>
         public Convolution(int filterSize, int stride, int outputDimensionsMultiplier) : base(filterSize, stride)
         {
+            if(outputDimensionsMultiplier < 1)
+            {
+                throw new ArgumentException("Dimension multiplier must be greater than or equal to 1.");
+            }
             _dimensionsMultiplier = outputDimensionsMultiplier;
         }
 
@@ -83,7 +82,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    BackwardsFilterAction(index, _buffers.InGradientsFloat[i, j], _deviceInputs[i % _inputDimensions, j].View, _filters[i].GradientFloatGPU(), _deviceInfos[i % _inputDimensions].View);
+                    BackwardsFilterAction(index, _buffers.InGradientsFloat[i, j], _deviceInputs[i % _inputDimensions, j].View, _filters[i].GradientGPU(), _deviceInfos[i % _inputDimensions].View);
                 }
             }
 
@@ -112,7 +111,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    ForwardAction(index, _buffers.InputsColor[i % _inputDimensions, j], _buffers.OutputsColor[i, j], _filters[i].FilterColorGPU(), _deviceInfos[i % _inputDimensions].View);
+                    ForwardAction(index, _buffers.InputsColor[i % _inputDimensions, j], _buffers.OutputsColor[i, j], _filters[i].FilterGPU(), _deviceInfos[i % _inputDimensions].View);
                 }
             }
 
@@ -160,7 +159,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             if (_filters == null)
             {
                 BaseStartup(inputs, buffers, _dimensionsMultiplier);
-                _filters = new Filter[_outputDimensions];
+                _filters = new Weights[_outputDimensions];
 
                 float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize + _inputDimensions * _filterSize * _filterSize);
                 float stdDev = MathF.Sqrt(variance);
@@ -169,7 +168,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
                 for (int i = 0; i < _filters.Length; i++)
                 {
-                    _filters[i] = new Filter(filterArea, 0, stdDev);
+                    _filters[i] = new Weights(filterArea, 0, stdDev);
                 }
             }
             else
@@ -303,7 +302,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    BackwardsOutGradientAction(index, _buffers.InGradientsFloat[i, j], _filters[i].FilterColorGPU(), _buffers.OutGradientsFloat[i % _inputDimensions, j], _deviceInfos[i % _inputDimensions].View);
+                    BackwardsOutGradientAction(index, _buffers.InGradientsFloat[i, j], _filters[i].FilterGPU(), _buffers.OutGradientsFloat[i % _inputDimensions, j], _deviceInfos[i % _inputDimensions].View);
                 }
             }
 
@@ -337,8 +336,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    BackwardsOutGradientAction(index, _buffers.InGradientsFloat[i, j], _filters[i].FilterColorGPU(), _buffers.OutGradientsFloat[i % _inputDimensions, j], _deviceInfos[i % _inputDimensions].View);
-                    BackwardsFilterAction(index, _buffers.InGradientsFloat[i, j], _deviceInputs[i % _inputDimensions, j].View, _filters[i].GradientFloatGPU(), _deviceInfos[i % _inputDimensions].View);
+                    BackwardsOutGradientAction(index, _buffers.InGradientsFloat[i, j], _filters[i].FilterGPU(), _buffers.OutGradientsFloat[i % _inputDimensions, j], _deviceInfos[i % _inputDimensions].View);
+                    BackwardsFilterAction(index, _buffers.InGradientsFloat[i, j], _deviceInputs[i % _inputDimensions, j].View, _filters[i].GradientGPU(), _deviceInfos[i % _inputDimensions].View);
                 }
             }
 
@@ -360,11 +359,13 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
-        public void FilterTest()
+        public void FilterTest(int outputMultiplier)
         {
-            FeatureMap input = FilterTestSetup();
-
-            _filters[0].TestFilterGradient(this, input, _outputs[0, 0], _buffers);
+            FeatureMap[,] input = FilterTestSetup(outputMultiplier);
+            for (int i = 0; i < outputMultiplier; i++)
+            {
+                _filters[i].TestFilterGradient(this, input, _outputs[0, 0], i, _buffers);
+            }
         }
     }
 }

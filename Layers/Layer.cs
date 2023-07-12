@@ -139,20 +139,36 @@ namespace ConvolutionalNeuralNetwork.Layers
                 buffers.OutputDimensionArea(i, _outputs[i, 0].Area);
         }
 
-        protected FeatureMap FilterTestSetup()
+        protected FeatureMap[,] FilterTestSetup(int dimensionMultiplier)
         {
-            FeatureMap input = new(3, 3);
+            int outputDimensions, inputDimensions;
+            if (dimensionMultiplier >= 1)
+            {
+                inputDimensions = 1;
+                outputDimensions = dimensionMultiplier;
+            }
+            else
+            {
+                inputDimensions = -dimensionMultiplier;
+                outputDimensions = 1;
+            }
+
+            FeatureMap[,] inputs = new FeatureMap[inputDimensions, 1];
+            for (int i = 0; i < inputDimensions; i++)
+            {
+                inputs[i, 0] = new(3, 3);
+            }
 
             IOBuffers buffer = new();
             IOBuffers complimentBuffer = new();
-            complimentBuffer.OutputDimensionArea(0, 9);
+            complimentBuffer.OutputDimensionArea(inputDimensions - 1, 9);
 
-            FeatureMap output = Startup(new FeatureMap[,] { { input } }, buffer)[0, 0];
+            Startup(inputs, buffer);
             buffer.Allocate(1);
             complimentBuffer.Allocate(1);
             IOBuffers.SetCompliment(buffer, complimentBuffer);
 
-            return input;
+            return inputs;
         }
     }
 }
