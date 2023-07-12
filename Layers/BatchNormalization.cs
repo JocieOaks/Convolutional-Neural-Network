@@ -257,12 +257,12 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             for (int i = 0; i < _inputDimensions; i++)
             {
-                Color gradient = _gradients[i].WeightGradient.Clamp(0.5f);
+                Color gradient = _gradients[i].WeightGradient.Clip(0.5f);
                 Color first = _weightFirstMoment[i] = firstMomentDecay * _weightFirstMoment[i] + (1 - firstMomentDecay) * gradient;
                 Color second = _weightSecondMoment[i] = secondMomentDecay * _weightSecondMoment[i] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
                 _weight[i] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
 
-                gradient = _gradients[i].BiasGradient.Clamp(0.5f);
+                gradient = _gradients[i].BiasGradient.Clip(0.5f);
                 first = _biasFirstMoment[i] = firstMomentDecay * _biasFirstMoment[i] + (1 - firstMomentDecay) * gradient;
                 second = _biasSecondMoment[i] = secondMomentDecay * _biasSecondMoment[i] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
                 _bias[i] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
@@ -313,7 +313,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="info">The <see cref="StaticLayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
         private static void BackwardsKernal(Index1D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<Color> outGradient, ArrayView<Color> values)
         {
-            outGradient[index.X] = (inGradient[index.X] * values[0] + values[1] * (input[index.X] - values[2]) + values[3]).Clamp(1);
+            outGradient[index.X] = (inGradient[index.X] * values[0] + values[1] * (input[index.X] - values[2]) + values[3]);
         }
 
         /// <summary>

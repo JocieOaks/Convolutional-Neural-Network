@@ -162,7 +162,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             {
                 for (int x = 0; x < width; x++)
                 {
-                    map[x, y] = Color.RandomGauss(mean, stdDev);
+                    map[x, y] = new Color(Utility.RandomGauss(mean, stdDev), 0, 0);
                 }
             }
             return map;

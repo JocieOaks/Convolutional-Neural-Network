@@ -114,7 +114,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                     {
                         for (int y = 0; y < _filterSize; y++)
                         {
-                            Color gradient = _filterGradients[i, j][x,y].Clamp(0.5f);
+                            Color gradient = _filterGradients[i, j][x,y].Clip(0.5f);
 
                             int index = y * _filterSize + x;
                             for (int l = 0; l < _boolsFilterVectors[i, index].Length; l++)

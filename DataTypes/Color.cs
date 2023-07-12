@@ -218,7 +218,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// </summary>
         /// <param name="val">The maximum the absolute value of the <see cref="Color"/>'s values can be.</param>
         /// <returns>Returns a new <see cref="Color"/> restrict to within the range of <paramref name="val"/>.</returns>
-        public Color Clamp(float val)
+        public Color Clip(float val)
         {
             return new Color(R > val ? val : R < -val ? -val : R, G > val ? val : G < -val ? -val : G, B > val ? val : B < -val ? -val : B);
         }

@@ -92,9 +92,9 @@ namespace ConvolutionalNeuralNetwork.Layers
             for (int i = 0; i < _inputDimensions; i++)
             {
                 ILayerInfo layer;
-                if (_stride == 1 && _filterSize == 1)
+                if (_stride == 1 && _filterSize == 1 && Name != "Convolutional Layer")
                 {
-                    layer = _layerInfos[i] = new StaticLayerInfo()
+                    _layerInfos[i] = new StaticLayerInfo()
                     {
                         Width = inputs[i, 0].Width,
                         Length = inputs[i, 0].Length,
@@ -102,7 +102,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
                 else
                 {
-                    layer = _layerInfos[i] = new LayerInfo()
+                    _layerInfos[i] = new LayerInfo()
                     {
                         FilterSize = _filterSize,
                         Stride = _stride,

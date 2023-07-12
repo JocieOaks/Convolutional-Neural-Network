@@ -52,7 +52,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 {
                     for (int x = 0; x < _tensor.Width; x++)
                     {
-                        Color gradient = vectorGradient[batch][x] * _vectors[batch][y];
+                        Color gradient = vectorGradient[batch][x] * _vectors[batch][y] * new Color(1, 0, 0);
                         Color first = _tensorFirstMoment[x, y] = firstMomentDecay * _tensorFirstMoment[x, y] + (1 - firstMomentDecay) * gradient;
                         Color second = _tensorSecondMoment[x, y] = secondMomentDecay * _tensorSecondMoment[x, y] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
                         _tensor[x, y] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);

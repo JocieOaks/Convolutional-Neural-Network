@@ -13,7 +13,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
     [Serializable]
     public class FeatureMap : ColorTensor
     {
-        private readonly static Color s_colorMean = new(0.5f);
+        private readonly static Color s_colorMean = new(0);
         private readonly static Color s_colorDeviation = new(MathF.Sqrt(1f / 12));
 
         /// <summary>
@@ -77,7 +77,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             {
                 for (int x = 0; x < width; x++)
                 {
-                    map[x, y] = Color.RandomGauss(0.5f, 0.2f).Clamp(1);
+                    map[x, y] = Color.RandomGauss(0.5f, 0.2f).Clip(1);
                 }
             }
             return map;
@@ -130,7 +130,8 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 {
                     for (int x = 0; x < Width; x++)
                     {
-                        bitmap.SetPixel(x, Length - y - 1, (System.Drawing.Color)(normalizedMap[y * Width + x] * 255));
+
+                        bitmap.SetPixel(x, Length - y - 1, System.Drawing.Color.FromArgb((int)(normalizedMap[y * Width + x].Clip(1).R * 127 + 128), System.Drawing.Color.White));
                     }
                 }
 
