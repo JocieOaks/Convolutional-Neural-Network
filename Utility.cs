@@ -14,14 +14,13 @@ namespace ConvolutionalNeuralNetwork
         //Used to avoid divide by zero or log of zero going to infinity.
         public const float ASYMPTOTEERRORCORRECTION = 1e-6f;
 
+        private static Context _context = Context.Create(builder => builder.Cuda());
+
         /// <value>A Cuda <see cref="ILGPU.Runtime.Accelerator"/> for running <see cref="ILGPU"/> kernals.</value>
-        public static Accelerator Accelerator { get; } = Context.CreateCudaAccelerator(0);
+        public static Accelerator Accelerator { get; } = _context.CreateCudaAccelerator(0);
 
         /// <value>Color with very small values. Used to avoid asymptotic behaviour when a value goes to zero.</value>
         public static DataTypes.Color AsymptoteErrorColor { get; } = new(ASYMPTOTEERRORCORRECTION);
-
-        /// <value>A Cuda <see cref="ILGPU.Context"/> for running <see cref="ILGPU"/> kernals.</value>
-        public static Context Context { get; } = Context.Create(builder => builder.Cuda());
 
         /// <value>An action for running the cuda kernal <see cref="CopyKernal(Index1D, ArrayView{Color}, ArrayView{Color})"/>.</value>
         public static Action<Index1D, ArrayView<Color>, ArrayView<Color>> CopyAction { get; } = Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>>(CopyKernal);

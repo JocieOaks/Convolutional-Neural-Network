@@ -47,7 +47,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index2D index = new(Infos(i).Area, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceSecondary[i, j] = _inGradientSecondary[i, j].Allocate(Utility.Accelerator);
+                    _deviceSecondary[i, j] = _inGradientSecondary[i, j].Allocate();
 
                     s_backwardsAction(index, _buffers.InGradientsColor[i, j], _deviceSecondary[i, j].View, _buffers.OutGradientsFloat[i, j]);
                 }
@@ -72,7 +72,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(Infos(i).Area);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceSecondary[i, j] = _outputs[i, j].AllocateEmpty(Utility.Accelerator);
+                    _deviceSecondary[i, j] = _outputs[i, j].AllocateEmpty();
                     Utility.CopyAction(index, _buffers.InputsColor[i, j], _deviceSecondary[i, j].View);
                     Utility.CopyAction(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j]);
                 }

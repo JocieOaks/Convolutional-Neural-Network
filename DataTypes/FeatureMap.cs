@@ -97,7 +97,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             Accelerator accelerator = Utility.Accelerator;
 
             var sumKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<float>>(SumKernal);
-            using var deviceInput = Allocate(accelerator);
+            using var deviceInput = Allocate();
             deviceSum = accelerator.Allocate1D<float>(3);
             Index2D index = new(Width, 3);
 
@@ -197,7 +197,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
             Index2D index = new(Area, 3);
 
-            var deviceInput = Allocate(accelerator);
+            var deviceInput = Allocate();
 
             sumKernal(index, deviceInput.View, deviceSum.View);
 
@@ -217,7 +217,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
             var deviceValues = accelerator.Allocate1D(new Color[] { mean, normalDeviation / sigma, normalMean });
 
-            var deviceOutput = AllocateEmpty(accelerator);
+            var deviceOutput = AllocateEmpty();
 
 
             normalizeKernal(new Index1D(Area), deviceInput.View, deviceOutput.View, deviceValues.View);

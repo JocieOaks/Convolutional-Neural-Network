@@ -63,7 +63,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceInputs[i, j] = _inputs[i, j].Allocate(Utility.Accelerator);
+                    _deviceInputs[i, j] = _inputs[i, j].Allocate();
                     _buffers.OutGradientsColor[i, j].SubView(0, Infos(i).InputArea).MemSetToZero();
                 }
             }
@@ -73,8 +73,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceFilters[i, j] = _filters[i,j].Allocate(Utility.Accelerator);
-                    _deviceFilterGradients[i, j] = _filterGradients[i, j].AllocateFloat(Utility.Accelerator, true);
+                    _deviceFilters[i, j] = _filters[i,j].Allocate();
+                    _deviceFilterGradients[i, j] = _filterGradients[i, j].AllocateFloat(true);
 
                     Convolution.BackwardsOutGradientAction(index, _buffers.InGradientsFloat[i, j], _deviceFilters[i, j].View, _buffers.OutGradientsFloat[i % _inputDimensions, j], _deviceInfos[i % _inputDimensions].View);
                     Convolution.BackwardsFilterAction(index, _buffers.InGradientsFloat[i, j], _deviceInputs[i % _inputDimensions, j].View, _deviceFilterGradients[i, j].View, _deviceInfos[i % _inputDimensions].View);
@@ -160,7 +160,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceFilters[i, j] = _filters[i,j].Allocate(Utility.Accelerator);
+                    _deviceFilters[i, j] = _filters[i,j].Allocate();
 
                     Convolution.ForwardAction(index, _buffers.InputsColor[i % _inputDimensions, j], _buffers.OutputsColor[i, j], _deviceFilters[i, j].View, _deviceInfos[i % _inputDimensions].View);
                 }

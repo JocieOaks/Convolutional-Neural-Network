@@ -17,7 +17,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         private MemoryBuffer1D<LayerInfo, Stride1D.Dense>[] _deviceInfos;
         private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInputs;
         private readonly int _dimensionsMultiplier;
-        private FeatureMap[,] _inputs;
         [JsonProperty] private Weights[] _filters;
 
         /// <summary>
@@ -69,15 +68,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="learningRate">Controls how much the layer is updated with each backpropagation.</param>
         public void BackwardsUpdateOnly(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _deviceInputs[i, j] = _inputs[i, j].Allocate(Utility.Accelerator);
-                }
-            }
-
-            for (int i = 0; i < _outputDimensions; i++)
+            for(int i = 0; i < _outputDimensions; i++)
             {
                 Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
                 for (int j = 0; j < _batchSize; j++)
@@ -87,14 +78,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
 
             Utility.Accelerator.Synchronize();
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _deviceInputs[i, j].Dispose();
-                }
-            }
 
             for (int i = 0; i < _outputDimensions; i++)
             {
@@ -106,6 +89,15 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Forward()
         {
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                Index1D index = new(Infos(i).InputArea);
+                for (int j = 0; j < _batchSize; j++)
+                {
+                    Utility.CopyAction(index, _buffers.InputsColor[i, j], _deviceInputs[i, j].View);
+                }
+            }
+
             for (int i = 0; i < _outputDimensions; i++)
             {
                 Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
@@ -120,14 +112,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             for (int i = 0; i < _outputDimensions; i++)
             {
                 _filters[i].DisposeFilter();
-            }
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _inputs[i, j].CopyFromBuffer(_buffers.InputsColor[i, j]);
-                }
             }
         }
 
@@ -176,14 +160,17 @@ namespace ConvolutionalNeuralNetwork.Layers
                 BaseStartup(inputs, buffers, _filters.Length / inputs.GetLength(0));
             }
 
-            _inputs = inputs;
-
             _deviceInfos = new MemoryBuffer1D<LayerInfo, Stride1D.Dense>[_inputDimensions];
+            _deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
             for (int i = 0; i < _inputDimensions; i++)
             {
                 _deviceInfos[i] = Utility.Accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
+                for (int j = 0; j < _batchSize; j++)
+                {
+                    _deviceInputs[i, j] = inputs[i, j].Allocate();
+                }
             }
-            _deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
+            
 
             return _outputs;
         }
@@ -327,7 +314,6 @@ namespace ConvolutionalNeuralNetwork.Layers
                 for (int j = 0; j < _batchSize; j++)
                 {
                     _buffers.OutGradientsColor[i, j].SubView(0, Infos(i).InputArea).MemSetToZero();
-                    _deviceInputs[i, j] = _inputs[i, j].Allocate(Utility.Accelerator);
                 }
             }
 
@@ -342,14 +328,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
 
             Utility.Accelerator.Synchronize();
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _deviceInputs[i, j].Dispose();
-                }
-            }
 
             for (int i = 0; i < _outputDimensions; i++)
             {

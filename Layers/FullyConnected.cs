@@ -20,7 +20,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         private MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[] _deviceInfos;
         private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceInputs;
         private int _dimensionMultiplier;
-        private FeatureMap[,] _inputs;
         [JsonProperty] private Weights _filter;
 
         /// <summary>
@@ -52,6 +51,15 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                Index1D index = new(Infos(i).Area);
+                for (int j = 0; j < _batchSize; j++)
+                {
+                    Utility.CopyAction(index, _buffers.InputsColor[i, j], _deviceInputs[i, j].View);
+                }
+            }
+
             ArrayView<Color> deviceFilter = _filter.FilterGPU();
 
             for (int i = 0; i < _inputDimensions; i++)
@@ -67,14 +75,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
 
             Utility.Accelerator.Synchronize();
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _inputs[i, j].CopyFromBuffer(_buffers.InputsColor[i, j]);
-                }
-            }
+            
             _filter.DisposeFilter();
         }
 
@@ -143,14 +144,18 @@ namespace ConvolutionalNeuralNetwork.Layers
                 _inputDimensions = inputs.GetLength(0);
                 BaseStartup(inputs, buffers, -3 * _inputDimensions * _inputDimensions / _filter.Length);
             }
-            _inputs = inputs;
 
             _deviceInfos = new MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[_inputDimensions];
+            _deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
             for (int i = 0; i < _inputDimensions; i++)
             {
                 _deviceInfos[i] = Utility.Accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
+                for (int j = 0; j < _batchSize; j++)
+                {
+                    _deviceInputs[i, j] = inputs[i, j].Allocate();
+                }
             }
-            _deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
+
             return _outputs;
         }
         private static void BackwardsGradientKernal(Index3D index, ArrayView<float> inGradient, ArrayView<Color> input, ArrayView<float> multiplierGradient, ArrayView<StaticLayerInfo> info)
@@ -219,16 +224,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="firstMomentDecay">The exponential decay rate for the first moment.</param>
         /// <param name="secondMomentDecay">The exponential decay rate for the second moment.</param>
         private void BackwardsUpdate(float learningRate, float firstMomentDecay, float secondMomentDecay)
-        {
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _deviceInputs[i, j] = _inputs[i, j].Allocate(Utility.Accelerator);
-                }
-            }
-
+        { 
             for (int i = 0; i < _inputDimensions; i++)
             {
                 for (int j = 0; j < _batchSize; j++)
@@ -255,15 +251,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
 
             Utility.Accelerator.Synchronize();
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _deviceInputs[i, j].Dispose();
-                }
-            }
-
-            float[] multiplierGradients = new float[9];
 
             _filter.DisposeFilter();
             _filter.DisposeGradient();

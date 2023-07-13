@@ -28,7 +28,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceValues;
         private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceVariances;
         private Gradients[] _gradients;
-        private FeatureMap[,] _inputs;
         private ColorVector _mean;
         private ColorVector _sigma;
         [JsonProperty] private Weights _weights;
@@ -49,18 +48,8 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            for(int i = 0; i < _inputDimensions; i++)
-            {
-                for(int j = 0; j < _batchSize; j++)
-                    _deviceInputs[i, j] = _inputs[i, j].Allocate(Utility.Accelerator);
-            }
             GPUGradients();
             GPUBackPropogate();
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                    _deviceInputs[i, j].Dispose();
-            }
             UpdateWeights(learningRate,firstMomentDecay, secondMomentDecay);
         }
 
@@ -69,9 +58,10 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             for (int i = 0; i < _inputDimensions; i++)
             {
+                Index1D index = new(Infos(i).Area);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _inputs[i, j].CopyFromBuffer(_buffers.InputsColor[i, j]);
+                    Utility.CopyAction(index, _buffers.InputsColor[i, j], _deviceInputs[i, j].View);
                 }
             }
             MeanGPU();
@@ -216,14 +206,20 @@ namespace ConvolutionalNeuralNetwork.Layers
             _sigma = new ColorVector(_inputDimensions);
             _gradients = new Gradients[_inputDimensions];
 
-
-            _inputs = inputs;
             _deviceMeans = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions];
             _deviceGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
             _deviceValues = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions];
             _deviceSums = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
             _deviceVariances = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
             _deviceInputs = new MemoryBuffer1D<Color, Stride1D.Dense>[_inputDimensions, _batchSize];
+
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                for (int j = 0; j < _batchSize; j++)
+                {
+                    _deviceInputs[i, j] = inputs[i, j].Allocate();
+                }
+            }
 
             return _outputs;
         }

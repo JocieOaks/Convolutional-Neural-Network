@@ -173,9 +173,9 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// </summary>
         /// <param name="accelerator">The <see cref="Accelerator"/> on which the map's data is being allocated.</param>
         /// <returns>Returns the created <see cref="MemoryBuffer1D{T, TStride}"/>.</returns>
-        public MemoryBuffer1D<Color, Stride1D.Dense> Allocate(Accelerator accelerator)
+        public MemoryBuffer1D<Color, Stride1D.Dense> Allocate()
         {
-            return accelerator.Allocate1D(_tensor);
+            return Utility.Accelerator.Allocate1D(_tensor);
         }
 
         /// <summary>
@@ -183,9 +183,9 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// </summary>
         /// <param name="accelerator">The <see cref="Accelerator"/> on which the map's data is being allocated.</param>
         /// <returns>Returns the created <see cref="MemoryBuffer1D{T, TStride}"/>.</returns>
-        public MemoryBuffer1D<Color, Stride1D.Dense> AllocateEmpty(Accelerator accelerator)
+        public MemoryBuffer1D<Color, Stride1D.Dense> AllocateEmpty()
         {
-            return accelerator.Allocate1D<Color>(Area);
+            return Utility.Accelerator.Allocate1D<Color>(Area);
         }
 
         /// <summary>
@@ -193,9 +193,9 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// </summary>
         /// <param name="accelerator">The <see cref="Accelerator"/> on which the map's data is being allocated.</param>
         /// <returns>Returns the created <see cref="MemoryBuffer1D{T, TStride}"/>.</returns>
-        public MemoryBuffer1D<float, Stride1D.Dense> AllocateFloat(Accelerator accelerator, bool zero)
+        public MemoryBuffer1D<float, Stride1D.Dense> AllocateFloat(bool zero)
         {
-            var buffer = accelerator.Allocate1D<float>(FloatLength);
+            var buffer = Utility.Accelerator.Allocate1D<float>(FloatLength);
             if (zero)
                 buffer.MemSetToZero();
             return buffer;
