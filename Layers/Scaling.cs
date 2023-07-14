@@ -19,7 +19,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override string Name => "Scaling Layer";
 
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<ScalingLayerInfo>> s_backwardsAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<ScalingLayerInfo>>(BackwardsKernal);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<ScalingLayerInfo>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<ScalingLayerInfo>>(BackwardsKernal);
 
         /// <inheritdoc/>
         public override void Backwards(float learningRatee, float firstMomentDecay, float secondMomentDecay)
@@ -33,11 +33,10 @@ namespace ConvolutionalNeuralNetwork.Layers
                     s_backwardsAction(index, _buffers.InGradientsFloat[i, j], _buffers.OutGradientsFloat[i, j], _deviceInfos[i].View);
                 }
             }
-
-            Utility.Accelerator.Synchronize();
+            Synchronize();
         }
 
-        private readonly static Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<ScalingLayerInfo>> s_forwardAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<ScalingLayerInfo>>(ForwardKernal);
+        private readonly static Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<ScalingLayerInfo>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<ScalingLayerInfo>>(ForwardKernal);
 
         /// <inheritdoc/>
         public override void Forward()
@@ -50,8 +49,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                     s_forwardAction(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j], _deviceInfos[i].View);
                 }
             }
-
-            Utility.Accelerator.Synchronize();
+            Synchronize();
         }
 
         /// <inheritdoc/>
@@ -143,7 +141,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             _deviceInfos = new MemoryBuffer1D<ScalingLayerInfo, Stride1D.Dense>[_inputDimensions];
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new ScalingLayerInfo[] { Infos(i) });
+                _deviceInfos[i] = GPU.GPUManager.Accelerator.Allocate1D(new ScalingLayerInfo[] { Infos(i) });
             }
 
             return _outputs;

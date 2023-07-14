@@ -21,7 +21,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         public static FeatureMap RandomSaturation(FeatureMap featureMap)
         {
-            float saturation = ConvolutionalNeuralNetwork.Utility.RandomGauss(0, 0.1f);
+            float saturation = Utility.RandomGauss(0, 0.1f);
 
             FeatureMap newFeatureMap = new(featureMap.Width, featureMap.Length);
 
@@ -45,7 +45,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         public static FeatureMap RandomBrightness(FeatureMap featureMap)
         {
-            float brightness = ConvolutionalNeuralNetwork.Utility.RandomGauss(1, 0.1f);
+            float brightness = Utility.RandomGauss(1, 0.1f);
 
             FeatureMap newFeatureMap = new(featureMap.Width, featureMap.Length);
 

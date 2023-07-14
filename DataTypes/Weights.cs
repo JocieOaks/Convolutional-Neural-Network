@@ -9,57 +9,54 @@ namespace ConvolutionalNeuralNetwork.DataTypes
     [Serializable]
     public class Weights
     {
-        [JsonProperty] private readonly Color[] _filter;
-        private Color[] _gradient;
+        [JsonProperty] private readonly ColorVector _weights;
+        private ColorVector _gradient;
         [JsonProperty] private readonly Color[] _firstMoment;
         [JsonProperty] private readonly Color[] _secondMoment;
 
-        private MemoryBuffer1D<Color, Stride1D.Dense> _deviceGradient;
-        private MemoryBuffer1D<Color, Stride1D.Dense> _deviceFilter;
-
         public Color this[int index]
         {
-            get => _filter[index];
+            get => _weights[index];
         }
 
-        public void SetFilter(int index, Color color)
+        public void SetWeights(int index, Color color)
         {
-            _filter[index] = color;
+            _weights[index] = color;
         }
 
         public void SetGradient(int index, Color color, float learningRate, float firstMomentDecay, float secondMomentDecay, float clip = 0.5f)
         {
             _gradient[index] = color;
 
-            UpdateFilterAtIndex(index, learningRate, firstMomentDecay, secondMomentDecay, clip);
+            UpdateWeightsAtIndex(index, learningRate, firstMomentDecay, secondMomentDecay, clip);
         }
 
-        [JsonIgnore] public int Length => _filter.Length;
+        [JsonIgnore] public int Length => _weights.Length;
 
         public Weights(int length, float mean, float stdDev)
         {
-            _filter = new Color[length];
+            _weights = new ColorVector(length);
 
             for(int i = 0; i < length; i++)
             {
-                _filter[i] = Color.RandomGauss(mean, stdDev);
+                _weights[i] = Color.RandomGauss(mean, stdDev);
             }
 
-            _gradient = new Color[length];
+            _gradient = new ColorVector(length);
             _firstMoment = new Color[length];
             _secondMoment = new Color[length];
         }
 
         public Weights(int length, Color color)
         {
-            _filter = new Color[length];
+            _weights = new ColorVector(length);
 
             for (int i = 0; i < length; i++)
             {
-                _filter[i] = color;
+                _weights[i] = color;
             }
 
-            _gradient = new Color[length];
+            _gradient = new ColorVector(length);
             _firstMoment = new Color[length];
             _secondMoment = new Color[length];
         }
@@ -69,14 +66,14 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         [OnDeserialized]
         public void OnDeserialized(StreamingContext context)
         {
-            _gradient = new Color[Length];
+            _gradient = new ColorVector(Length);
         }
 
         public void Reset(float mean, float stdDev)
         {
             for (int i = 0; i < Length; i++)
             {
-                _filter[i] = Color.RandomGauss(mean, stdDev);
+                _weights[i] = Color.RandomGauss(mean, stdDev);
                 _firstMoment[i] = Color.Zero;
                 _secondMoment[i] = Color.Zero;
             }
@@ -86,7 +83,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         {
             for (int i = 0; i < Length; i++)
             {
-                _filter[i] = color;
+                _weights[i] = color;
                 _firstMoment[i] = Color.Zero;
                 _secondMoment[i] = Color.Zero;
             }
@@ -94,36 +91,24 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
         public ArrayView<float> GradientGPU()
         {
-            if (_deviceGradient == null || _deviceGradient.IsDisposed)
-            {
-                _deviceGradient = Utility.Accelerator.Allocate1D<Color>(Length);
-                _deviceGradient.MemSetToZero();
-            }
-            return new ArrayView<float>(_deviceGradient, 0, 3 * Length);
+            return _gradient.GetArrayViewZeroed<float>();
         }
 
-        public void DisposeGradient()
+        public ArrayView<Color> WeightsGPU()
         {
-            if(_deviceGradient != null && !_deviceGradient.IsDisposed)
-            {
-                _deviceGradient.CopyToCPU(_gradient);
-            }
-            _deviceGradient?.Dispose();
+            return _weights.GetArrayView<Color>();
         }
 
-        public ArrayView<Color> FilterGPU()
+        public void DisposeWeights(int batchSize)
         {
-            if (_deviceFilter == null || _deviceFilter.IsDisposed)
-            {
-                _deviceFilter = Utility.Accelerator.Allocate1D(_filter);
-            }
-
-            return new ArrayView<Color>(_deviceFilter, 0, Length);
+            for(int i = 0; i < batchSize; i++)
+                _weights.DecrementLiveCount();
         }
 
-        public void DisposeFilter()
+        public void DisposeGradient(int batchSize)
         {
-            _deviceFilter?.Dispose();
+            for (int i = 0; i < batchSize; i++)
+                _gradient.DecrementLiveCount();
         }
 
         /// <summary>
@@ -133,25 +118,23 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="firstMomentDecay">The exponential decay rate for the first moment.</param>
         /// <param name="secondMomentDecay">The exponential decay rate for the second moment.</param>
         /// <param name="clip">The maximum absolute value to clip the gradient to.</param>
-        public void UpdateFilter(float learningRate, float firstMomentDecay, float secondMomentDecay, float clip = 0.5f)
+        public void UpdateWeights(float learningRate, float firstMomentDecay, float secondMomentDecay, float clip = 0.5f)
         {
-            if (_deviceGradient != null && !_deviceGradient.IsDisposed)
-            {
-                _deviceGradient.CopyToCPU(_gradient);
-            }
+            _gradient.SyncCPU();
 
             for (int i = 0; i < Length; i++)
             {
-                UpdateFilterAtIndex(i, learningRate, firstMomentDecay, secondMomentDecay, clip);
+                UpdateWeightsAtIndex(i, learningRate, firstMomentDecay, secondMomentDecay, clip);
             }
+            _weights.UpdateIfAllocated();
         }
 
-        private void UpdateFilterAtIndex(int index, float learningRate, float firstMomentDecay, float secondMomentDecay, float clip)
+        private void UpdateWeightsAtIndex(int index, float learningRate, float firstMomentDecay, float secondMomentDecay, float clip)
         {
             Color gradient = _gradient[index].Clip(clip);
             Color first = _firstMoment[index] = firstMomentDecay * _firstMoment[index] + (1 - firstMomentDecay) * gradient;
             Color second = _secondMoment[index] = secondMomentDecay * _secondMoment[index] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
-            _filter[index] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+            _weights[index] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
         }
 
         public void TestFilterGradient(Layer layer, FeatureMap[,] inputs, FeatureMap output, int outputIndex, IOBuffers buffer)
@@ -175,7 +158,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             }
 
             layer.Forward();
-            output.CopyFromBuffer(buffer.OutputsColor[outputIndex, 0]);
+            output.SyncCPU(buffer.OutputsColor[outputIndex, 0]);
             FeatureMap gradient = new(output.Width, output.Length, Color.One);
             gradient.CopyToBuffer(buffer.InGradientsColor[outputIndex, 0]);
             layer.Backwards(1, 1, 1);
@@ -199,10 +182,10 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                         1 => new Color(0, h, 0),
                         2 => new Color(0, 0, h)
                     };
-                    _filter[i] += hColor;
+                    _weights[i] += hColor;
 
                     layer.Forward();
-                    testOutput.CopyFromBuffer(buffer.OutputsColor[outputIndex, 0]);
+                    testOutput.SyncCPU(buffer.OutputsColor[outputIndex, 0]);
 
                     float testGradient = 0;
                     for (int i2 = 0; i2 < output.Width; i2++)
@@ -217,7 +200,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                     }
 
                     Console.WriteLine($"Expected Gradient: {_gradient[i][k]:f4} \t Test Gradient: {testGradient:f4}");
-                    _filter[i] -= hColor;
+                    _weights[i] -= hColor;
                 }
             }
         }

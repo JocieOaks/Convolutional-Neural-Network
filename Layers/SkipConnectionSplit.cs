@@ -16,7 +16,6 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         private FeatureMap[,] _inGradientSecondary;
         private SkipConnectionConcatenate _concatenationLayer;
-        private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceSecondary;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SkipConnectionSplit"/> class.
@@ -37,7 +36,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             return _concatenationLayer;
         }
 
-        private static readonly Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>> s_backwardsAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>>(BackwardsKernal);
+        private static readonly Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>>(BackwardsKernal);
 
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
@@ -47,21 +46,10 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index2D index = new(Infos(i).Area, 3);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceSecondary[i, j] = _inGradientSecondary[i, j].Allocate();
-
-                    s_backwardsAction(index, _buffers.InGradientsColor[i, j], _deviceSecondary[i, j].View, _buffers.OutGradientsFloat[i, j]);
+                    s_backwardsAction(index, _buffers.InGradientsColor[i, j], _inGradientSecondary[i, j].GetArrayView<Color>(), _buffers.OutGradientsFloat[i, j]);
                 }
             }
-
-            Utility.Accelerator.Synchronize();
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _deviceSecondary[i, j].Dispose();
-                }
-            }
+            Synchronize();
         }
 
         /// <inheritdoc/>
@@ -72,22 +60,12 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(Infos(i).Area);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceSecondary[i, j] = _outputs[i, j].AllocateEmpty();
-                    Utility.CopyAction(index, _buffers.InputsColor[i, j], _deviceSecondary[i, j].View);
-                    Utility.CopyAction(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j]);
+                    GPU.GPUManager.CopyAction(index, _buffers.InputsColor[i, j], _outputs[i, j].GetArrayViewEmpty<Color>());
+                    GPU.GPUManager.CopyAction(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j]);
                 }
             }
 
-            Utility.Accelerator.Synchronize();
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _outputs[i, j].CopyFromBuffer(_deviceSecondary[i, j]);
-                    _deviceSecondary[i, j].Dispose();
-                }
-            }
+            Synchronize(_outputs);
         }
 
         /// <inheritdoc/>
@@ -115,7 +93,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             _outputs = inputs;
 
             _inGradientSecondary = new FeatureMap[_outputDimensions, _batchSize];
-            _deviceSecondary = new MemoryBuffer1D<Color, Stride1D.Dense>[_outputDimensions, _batchSize];
 
             _concatenationLayer.Connect(_outputs, _inGradientSecondary);
 

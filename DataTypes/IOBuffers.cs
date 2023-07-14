@@ -54,7 +54,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 int area = _outputAllocationPairs.Where(x => x.dimensions > i).MaxBy(x => x.area).area;
                 for (int j = 0; j < batchSize; j++)
                 {
-                    var buffer = Utility.Accelerator.Allocate1D<Color>(area);
+                    var buffer = GPU.GPUManager.Accelerator.Allocate1D<Color>(area);
                     _colors1[i, j] = new ArrayView<Color>(buffer, 0, area);
                     _floats1[i, j] = new ArrayView<float>(buffer, 0, 3 * area);
                 }

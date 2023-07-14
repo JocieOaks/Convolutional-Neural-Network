@@ -151,7 +151,7 @@ namespace ConvolutionalNeuralNetwork.Networks
             {
                 for(int j = 0; j < _batchSize; j++)
                 {
-                    _finalOutput[i, j].CopyFromBuffer(_endBuffers.OutputsColor[i, j]);
+                    _finalOutput[i, j].SyncCPU(_endBuffers.OutputsColor[i, j]);
                 }
             }
 
@@ -174,7 +174,7 @@ namespace ConvolutionalNeuralNetwork.Networks
             FeatureMap[,] gradient = new FeatureMap[1, _batchSize];
             for (int i = 0; i < _batchSize; i++)
             {
-                _finalOutGradient[0, i].CopyFromBuffer(_startBuffer.InputsColor[0, i]);
+                _finalOutGradient[0, i].SyncCPU(_startBuffer.InputsColor[0, i]);
                 gradient[0, i] = _finalOutGradient[0, i];
             }
 

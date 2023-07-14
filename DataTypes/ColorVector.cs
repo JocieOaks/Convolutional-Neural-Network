@@ -1,4 +1,7 @@
-﻿using Newtonsoft.Json;
+﻿using ConvolutionalNeuralNetwork.GPU;
+using ILGPU;
+using ILGPU.Runtime;
+using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.DataTypes
 {
@@ -8,7 +11,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
     /// for simplification <see cref="Color"/> is generally treated as a scaler value.
     /// </summary>
     [Serializable]
-    public class ColorVector
+    public class ColorVector : Cacheable<Color>
     {
         [JsonProperty] private readonly Color[] _values;
 
@@ -34,6 +37,8 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// </summary>
         [JsonIgnore] public int Length => _values.Length;
 
+        public override long MemorySize => Length * 12;
+
         /// <summary>
         /// Indexes the <see cref="ColorVector"/> returning the <see cref="Color"/> at a given index.
         /// </summary>
@@ -45,42 +50,88 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             set => _values[index] = value;
         }
 
-        public static bool operator ==(ColorVector v1, ColorVector v2)
+        public override Color[] GetValues()
         {
-            if (v1 is null)
-                return v2 is null;
-
-            if (v2 is null)
-                return v1 is null;
-
-            if (v1.Length != v2.Length)
-                return false;
-
-            for (int i = 0; i < v1.Length; i++)
-            {
-                if (v1[i] != v2[i])
-                    return false;
-            }
-            return true;
+            return _values;
         }
 
-        public static bool operator !=(ColorVector v1, ColorVector v2)
+        public ArrayView<T> GetArrayViewEmpty<T>() where T : unmanaged
         {
-            if (v1 is null)
-                return v2 is not null;
-
-            if (v2 is null)
-                return v1 is not null;
-
-            if (v1.Length != v2.Length)
-                return true;
-
-            for (int i = 0; i < v1.Length; i++)
+            IncrementLiveCount();
+            MemoryBuffer buffer = GetBuffer();
+            if (buffer == null)
             {
-                if (v1[i] != v2[i])
-                    return true;
+                (ID, buffer) = GPUManager.AllocateEmpty<Color>(this, Length);
             }
-            return false;
+            int bytes = Interop.SizeOf<T>();
+            return new ArrayView<T>(buffer, 0, 12 * Length / bytes);
+        }
+
+        public ArrayView<T> GetArrayView<T>() where T : unmanaged
+        {
+            IncrementLiveCount();
+            MemoryBuffer buffer = GetBuffer();
+            if (buffer == null)
+            {
+                (ID, buffer) = GPUManager.Allocate<Color>(this);
+            }
+            int bytes = Interop.SizeOf<T>();
+            return new ArrayView<T>(buffer, 0, 12 * Length / bytes);
+        }
+
+        public ArrayView<T> GetArrayViewZeroed<T>() where T : unmanaged
+        {
+            ArrayView<T> arrayView = GetArrayView<T>();
+            arrayView.MemSetToZero();
+            return arrayView;
+        }
+
+        public override void SyncCPU(ArrayView<Color> arrayView)
+        {
+            arrayView.SubView(0, Length).CopyToCPU(_values);
+        }
+
+        public override void DeCache()
+        {
+            // If the tensor is not cached - it's technically already decached
+            if (ID == 0)
+                return;
+
+            // If the tensor is live - Fail
+            if (LiveCount != 0)
+                return;
+
+            // Else Decache
+            SyncCPU();
+            ID = GPUManager.GCItem(ID);
+        }
+
+        public override void SyncCPU()
+        {
+            if (ID == 0)
+                return;
+
+            MemoryBuffer buffer = GetBuffer();
+
+            if (buffer != null)
+                SyncCPU(buffer);
+        }
+
+        public override void SyncCPU(MemoryBuffer buffer)
+        {
+            buffer.AsArrayView<Color>(0, Length).CopyToCPU(_values);
+        }
+
+        public void UpdateIfAllocated()
+        {
+            if (ID == 0)
+                return;
+
+            MemoryBuffer buffer = GetBuffer();
+            if (buffer == null)
+                return;
+
+            GPUManager.UpdateBuffer(this);
         }
     }
 }

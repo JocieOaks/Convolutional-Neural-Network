@@ -1,6 +1,9 @@
-﻿using ILGPU;
+﻿using ConvolutionalNeuralNetwork.GPU;
+using ILGPU;
+using ILGPU.IR;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
+using System;
 using System.Diagnostics;
 
 namespace ConvolutionalNeuralNetwork.DataTypes
@@ -9,7 +12,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
     /// The <see cref="ColorTensor"/> class represents a 2D array of <see cref="Color"/>s.
     /// </summary>
     [Serializable]
-    public class ColorTensor
+    public class ColorTensor : Cacheable<Color>
     {
         [JsonProperty] protected Color[] _tensor;
 
@@ -42,6 +45,8 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
         /// <value>The x width of the <see cref="ColorTensor"/>.</value>
         [JsonProperty] public int Width { get; private set; }
+
+        public override long MemorySize => Area * 12;
 
         /// <summary>
         /// Indexes the <see cref="ColorTensor"/> to retrieve the <see cref="Color"/> at the given coordinates.
@@ -168,101 +173,76 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return map;
         }
 
-        /// <summary>
-        /// Allocates a <see cref="MemoryBuffer1D{T, TStride}"/> on the given <see cref="Accelerator"/> with <see cref="ColorTensor"/>'s values.
-        /// </summary>
-        /// <param name="accelerator">The <see cref="Accelerator"/> on which the map's data is being allocated.</param>
-        /// <returns>Returns the created <see cref="MemoryBuffer1D{T, TStride}"/>.</returns>
-        public MemoryBuffer1D<Color, Stride1D.Dense> Allocate()
-        {
-            return Utility.Accelerator.Allocate1D(_tensor);
-        }
-
-        /// <summary>
-        /// Allocates a <see cref="MemoryBuffer1D{T, TStride}"/> on the given <see cref="Accelerator"/> with <see cref="ColorTensor"/>'s length.
-        /// </summary>
-        /// <param name="accelerator">The <see cref="Accelerator"/> on which the map's data is being allocated.</param>
-        /// <returns>Returns the created <see cref="MemoryBuffer1D{T, TStride}"/>.</returns>
-        public MemoryBuffer1D<Color, Stride1D.Dense> AllocateEmpty()
-        {
-            return Utility.Accelerator.Allocate1D<Color>(Area);
-        }
-
-        /// <summary>
-        /// Allocates a <see cref="MemoryBuffer1D{T, TStride}"/> of floats on the given <see cref="Accelerator"/> with <see cref="ColorTensor"/>'s length.
-        /// </summary>
-        /// <param name="accelerator">The <see cref="Accelerator"/> on which the map's data is being allocated.</param>
-        /// <returns>Returns the created <see cref="MemoryBuffer1D{T, TStride}"/>.</returns>
-        public MemoryBuffer1D<float, Stride1D.Dense> AllocateFloat(bool zero)
-        {
-            var buffer = Utility.Accelerator.Allocate1D<float>(FloatLength);
-            if (zero)
-                buffer.MemSetToZero();
-            return buffer;
-        }
-
-        /// <summary>
-        /// Copies the pixel data from a <see cref="MemoryBuffer1D{T, TStride}"/> of <see cref="Color"/>.
-        /// </summary>
-        /// <param name="buffer">The <see cref="MemoryBuffer1D{T, TStride}"/> with the source <see cref="Color"/>s.</param>
-        public void CopyFromBuffer(MemoryBuffer1D<Color, Stride1D.Dense> buffer)
-        {
-            buffer.AsArrayView<Color>(0, Area).CopyToCPU(_tensor);
-        }
-
-        public void CopyFromBuffer(ArrayView<Color> buffer)
-        {
-            buffer.SubView(0, Area).CopyToCPU(_tensor);
-        }
-
-        /// <summary>
-        /// Copies the pixel data to a <see cref="MemoryBuffer1D{T, TStride}"/> of <see cref="Color"/>.
-        /// </summary>
-        /// <param name="buffer">The <see cref="MemoryBuffer1D{T, TStride}"/> to copy to.</param>
-        public void CopyToBuffer(MemoryBuffer1D<Color, Stride1D.Dense> buffer)
-        {
-            buffer.AsArrayView<Color>(0, Area).CopyFromCPU(_tensor);
-        }
-
         public void CopyToBuffer(ArrayView<Color> buffer)
         {
             buffer.SubView(0, Area).CopyFromCPU(_tensor);
         }
 
-        /// <summary>
-        /// Copies the pixel data to a <see cref="MemoryBuffer1D{T, TStride}"/> of <see cref="float"/>.
-        /// </summary>
-        /// <param name="buffer">The <see cref="MemoryBuffer1D{T, TStride}"/> to copy to.</param>
-        public void CopyToBuffer(MemoryBuffer1D<float, Stride1D.Dense> buffer)
+        public override Color[] GetValues()
         {
-            unsafe
-            {
-                fixed (void* ptr = &_tensor[0])
-                {
-                    Span<float> span = new(ptr, Area * 3);
-                    float[] floats = span.ToArray();
-                    buffer.AsArrayView<float>(0, Area * 3).CopyFromCPU(floats);
-                }
-            }
+            return _tensor;
         }
 
-        /// <summary>
-        /// Copies the pixel data from a <see cref="MemoryBuffer1D{T, TStride}"/> of floats.
-        /// Because <see cref="Color"/> cannot be summed atomically on an <see cref="ILGPU"/> kernal, every three floats represents a single
-        /// <see cref="Color"/> in the gradient. The <see cref="ColorTensor"/> is then treated as a <see cref="Span{T}"/> of floats, instead of
-        /// an array of <see cref="Color"/>s, copying to memory.
-        /// </summary>
-        /// <param name="buffer">The <see cref="MemoryBuffer1D{T, TStride}"/> with the source floats.</param>
-        public void CopyFromBuffer(MemoryBuffer1D<float, Stride1D.Dense> buffer)
+        public ArrayView<T> GetArrayViewEmpty<T>() where T : unmanaged
         {
-            unsafe
+            IncrementLiveCount();
+            MemoryBuffer buffer = GetBuffer();
+            if (buffer == null)
             {
-                fixed (void* ptr = &_tensor[0])
-                {
-                    Span<float> span = new(ptr, Area * 3);
-                    buffer.AsArrayView<float>(0, Area * 3).CopyToCPU(span);
-                }
+                (ID, buffer) = GPUManager.AllocateEmpty<Color>(this, Area);
             }
+            int bytes = Interop.SizeOf<T>();
+            return buffer.AsArrayView<T>(0, 12 * Area / bytes);
+        }
+
+        public ArrayView<T> GetArrayView<T>() where T: unmanaged
+        {
+            IncrementLiveCount();
+            MemoryBuffer buffer = GetBuffer();
+            if(buffer == null)
+            {
+                (ID, buffer) = GPUManager.Allocate<Color>(this);
+            }
+            int bytes = Interop.SizeOf<T>();
+            return buffer.AsArrayView<T>(0, 12 * Area / bytes);
+        }
+
+        public ArrayView<T> GetArrayViewZeroed<T>() where T: unmanaged
+        {
+            ArrayView<T> arrayView = GetArrayView<T>();
+            arrayView.MemSetToZero();
+            return arrayView;
+        }
+
+        public override void DeCache()
+        {
+            // If the tensor is not cached - it's technically already decached
+            if (ID == 0) 
+                return;
+
+            // If the tensor is live - Fail
+            if (LiveCount != 0) 
+                return;
+
+            // Else Decache
+            SyncCPU();
+            ID = GPUManager.GCItem(ID);
+        }
+
+        public override void SyncCPU()
+        {
+            if(ID != 0)
+                SyncCPU(GetBuffer());
+        }
+
+        public override void SyncCPU(MemoryBuffer buffer)
+        {
+            buffer.AsArrayView<Color>(0, Area).CopyToCPU(_tensor);
+        }
+
+        public override void SyncCPU(ArrayView<Color> arrayView)
+        {
+            arrayView.SubView(0, Area).CopyToCPU(_tensor);
         }
     }
 }

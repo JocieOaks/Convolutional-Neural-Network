@@ -210,7 +210,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <returns>Returns a new random <see cref="Color"/> from the distribtion.</returns>
         public static Color RandomGauss(float mean, float stdDev)
         {
-            return new Color(ConvolutionalNeuralNetwork.Utility.RandomGauss(mean, stdDev), ConvolutionalNeuralNetwork.Utility.RandomGauss(mean, stdDev), ConvolutionalNeuralNetwork.Utility.RandomGauss(mean, stdDev));
+            return new Color(Utility.RandomGauss(mean, stdDev), Utility.RandomGauss(mean, stdDev), Utility.RandomGauss(mean, stdDev));
         }
 
         /// <summary>

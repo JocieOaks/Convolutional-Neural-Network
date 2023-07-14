@@ -1,4 +1,5 @@
-﻿using ILGPU;
+﻿using ConvolutionalNeuralNetwork.GPU;
+using ILGPU;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
 using System.Drawing;
@@ -92,23 +93,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return Sum() / Area;
         }
 
-        public void Sum(out MemoryBuffer1D<float, Stride1D.Dense> deviceSum)
-        {
-            Accelerator accelerator = Utility.Accelerator;
-
-            var sumKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<float>>(SumKernal);
-            using var deviceInput = Allocate();
-            deviceSum = accelerator.Allocate1D<float>(3);
-            Index2D index = new(Width, 3);
-
-            sumKernal(index, deviceInput.View, deviceSum.View);
-        }
-
-        private static void SumKernal(Index2D index, ArrayView<Color> map, ArrayView<float> sum)
-        {
-            Atomic.Add(ref sum[index.Y], map[index.X][index.Y]);
-        }
-
         /// <summary>
         /// Creates a <see cref="Bitmap"/> representation of the <see cref="FeatureMap"/>.
         /// The map is normalized to fit in the range of <see cref="System.Drawing.Color"/>.
@@ -180,55 +164,73 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return color;
         }
 
+        public (Color, Color) MeanVariance()
+        {
+
+            var deviceSum = GPU.GPUManager.Accelerator.Allocate1D<float>(3);
+            deviceSum.MemSetToZero();
+
+            Index2D index = new(Area, 3);
+
+            s_sumAction(index, GetArrayView<Color>(), deviceSum.View);
+            GPU.GPUManager.Accelerator.Synchronize();
+
+            Color mean = (Color)deviceSum / Area;
+
+            var deviceMean = GPU.GPUManager.Accelerator.Allocate1D(new Color[] { mean });
+            var deviceVariance = GPU.GPUManager.Accelerator.Allocate1D<float>(3);
+            deviceVariance.MemSetToZero();
+
+            s_varianceAction(index, GetArrayView<Color>(), deviceMean.View, deviceVariance.View);
+            GPU.GPUManager.Accelerator.Synchronize();
+
+            Color sigma = Color.Pow((Color)deviceVariance / Area + Utility.AsymptoteErrorColor, 0.5f);
+
+            deviceSum.Dispose();
+            deviceMean.Dispose();
+            deviceVariance.Dispose();
+
+            return (mean, sigma);
+        }
+
         /// <summary>
         /// Normalizes the <see cref="FeatureMap"/>.
         /// </summary>
         /// <returns>Returns the normalized <see cref="FeatureMap"/> as a single dimensional array of <see cref="Color"/>s.</returns>
         public Color[] Normalize(Color normalMean, Color normalDeviation)
         {
-            Accelerator accelerator = Utility.Accelerator;
 
-            var sumKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<float>>(MeanKernal);
-            var varianceKernal = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>>(VarianceKernal);
-            var normalizeKernal = accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>>(NormalizeKernal);
-
-            var deviceSum = accelerator.Allocate1D<float>(3);
+            var deviceSum = GPU.GPUManager.Accelerator.Allocate1D<float>(3);
             deviceSum.MemSetToZero();
 
             Index2D index = new(Area, 3);
 
-            var deviceInput = Allocate();
-
-            sumKernal(index, deviceInput.View, deviceSum.View);
-
-            accelerator.Synchronize();
+            s_sumAction(index, GetArrayView<Color>(), deviceSum.View);
+            GPU.GPUManager.Accelerator.Synchronize();
 
             Color mean = (Color)deviceSum / Area;
 
-            var deviceMean = accelerator.Allocate1D(new Color[] { mean });
-            var deviceVariance = accelerator.Allocate1D<float>(3);
+            var deviceMean = GPU.GPUManager.Accelerator.Allocate1D(new Color[] { mean });
+            var deviceVariance = GPU.GPUManager.Accelerator.Allocate1D<float>(3);
             deviceVariance.MemSetToZero();
 
-            varianceKernal(index, deviceInput.View, deviceMean.View, deviceVariance.View);
-
-            accelerator.Synchronize();
+            s_varianceAction(index, GetArrayView<Color>(), deviceMean.View, deviceVariance.View);
+            GPU.GPUManager.Accelerator.Synchronize();
 
             Color sigma = Color.Pow((Color)deviceVariance / Area + Utility.AsymptoteErrorColor, 0.5f);
 
-            var deviceValues = accelerator.Allocate1D(new Color[] { mean, normalDeviation / sigma, normalMean });
+            var deviceValues = GPU.GPUManager.Accelerator.Allocate1D(new Color[] { mean, normalDeviation / sigma, normalMean });
 
-            var deviceOutput = AllocateEmpty();
+            var deviceOutput = GPUManager.Accelerator.Allocate1D<Color>(Area);
 
 
-            normalizeKernal(new Index1D(Area), deviceInput.View, deviceOutput.View, deviceValues.View);
-
-            accelerator.Synchronize();
+            s_normalizeAction(new Index1D(Area), GetArrayView<Color>(), deviceOutput.View, deviceValues.View);
+            GPU.GPUManager.Accelerator.Synchronize();
 
             Color[] Normalized = new Color[Area];
             deviceOutput.CopyToCPU(Normalized);
 
             deviceSum.Dispose();
-            deviceInput.Dispose();
             deviceOutput.Dispose();
             deviceMean.Dispose();
             deviceVariance.Dispose();
@@ -236,21 +238,27 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
             return Normalized;
 
-            void NormalizeKernal(Index1D index, ArrayView<Color> input, ArrayView<Color> normalized, ArrayView<Color> values)
-            {
-                normalized[index] = (input[index] - values[0]) * values[1] + values[2];
-            }
 
-            void MeanKernal(Index2D index, ArrayView<Color> input, ArrayView<float> mean)
-            {
-                Atomic.Add(ref mean[index.Y], input[index.X][index.Y]);
-            }
+        }
 
-            void VarianceKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> mean, ArrayView<float> variance)
-            {
-                float difference = input[index.X][index.Y] - mean[0][index.Y];
-                Atomic.Add(ref variance[index.Y], difference * difference);
-            }
+        private static Action<Index2D, ArrayView<Color>, ArrayView<float>> s_sumAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<float>>(MeanKernal);
+        private static Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>> s_varianceAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>>(VarianceKernal);
+        private static Action<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>> s_normalizeAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>>(NormalizeKernal);
+
+        private static void NormalizeKernal(Index1D index, ArrayView<Color> input, ArrayView<Color> normalized, ArrayView<Color> values)
+        {
+            normalized[index] = (input[index] - values[0]) * values[1] + values[2];
+        }
+
+        private static void MeanKernal(Index2D index, ArrayView<Color> input, ArrayView<float> mean)
+        {
+            Atomic.Add(ref mean[index.Y], input[index.X][index.Y]);
+        }
+
+        private static void VarianceKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> mean, ArrayView<float> variance)
+        {
+            float difference = input[index.X][index.Y] - mean[0][index.Y];
+            Atomic.Add(ref variance[index.Y], difference * difference);
         }
     }
 }

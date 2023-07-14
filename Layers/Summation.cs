@@ -20,7 +20,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class Summation : Layer, IStructuralLayer
     {
-        private readonly Action<Index1D, ArrayView<float>, ArrayView<float>> s_forwardAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(ForwardKernal);
+        private readonly Action<Index1D, ArrayView<float>, ArrayView<float>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(ForwardKernal);
         [JsonProperty] private int _dimensionDivisor;
 
         [JsonConstructor] public Summation() : base(1, 1) { }
@@ -36,9 +36,11 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(Infos(i).Area);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    Utility.CopyAction(index, _buffers.InGradientsColor[outputDimension, j], _buffers.OutGradientsColor[i, j]);
+                    GPU.GPUManager.CopyAction(index, _buffers.InGradientsColor[outputDimension, j], _buffers.OutGradientsColor[i, j]);
                 }
             }
+
+            Synchronize();
         }
 
         /// <inheritdoc/>
@@ -61,6 +63,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                     s_forwardAction(index, _buffers.InputsFloat[i, j], _buffers.OutputsFloat[outputDimension, j]);
                 }
             }
+
+            Synchronize();
         }
 
         /// <inheritdoc/>

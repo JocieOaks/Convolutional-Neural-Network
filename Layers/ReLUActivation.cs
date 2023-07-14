@@ -12,8 +12,8 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class ReLUActivation : Layer, ISecondaryLayer
     {
-        private static readonly Action<Index1D, ArrayView<int>, ArrayView<float>, ArrayView<float>> s_backwardsAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<int>, ArrayView<float>, ArrayView<float>>(BackwardsKernal);
-        private static readonly Action<Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>> s_forwardAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>>(ForwardKernal);
+        private static readonly Action<Index1D, ArrayView<int>, ArrayView<float>, ArrayView<float>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<int>, ArrayView<float>, ArrayView<float>>(BackwardsKernal);
+        private static readonly Action<Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>>(ForwardKernal);
         private MemoryBuffer1D<int, Stride1D.Dense>[,] _deviceZeroed;
 
         private const float NEGATIVESCALING = 0.01f;
@@ -39,8 +39,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                     s_backwardsAction(index, _deviceZeroed[i, j].View, _buffers.InGradientsFloat[i, j], _buffers.OutGradientsFloat[i, j]);
                 }
             }
-
-            Utility.Accelerator.Synchronize();
+            Synchronize();
         }
         /// <inheritdoc/>
         public override void Forward()
@@ -54,8 +53,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                     s_forwardAction(index, _buffers.InputsFloat[i, j], _deviceZeroed[i, j].View, _buffers.OutputsFloat[i, j]);
                 }
             }
-
-            Utility.Accelerator.Synchronize();
+            Synchronize();
         }
 
         /// <inheritdoc/>
@@ -74,7 +72,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceZeroed[i, j] = Utility.Accelerator.Allocate1D<int>(inputs[i, j].FloatLength / 32 + (inputs[i,j].FloatLength % 32 > 0 ? 1 : 0));
+                    _deviceZeroed[i, j] = GPU.GPUManager.Accelerator.Allocate1D<int>(inputs[i, j].FloatLength / 32 + (inputs[i,j].FloatLength % 32 > 0 ? 1 : 0));
                 }
             }
             return _outputs;

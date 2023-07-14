@@ -114,7 +114,7 @@ namespace ConvolutionalNeuralNetwork.Networks
 
             for(int i = 0; i < _batchSize; i++)
             {
-                _outputs[0, i].CopyFromBuffer(_endBuffers.OutputsColor[0, i]);
+                _outputs[0, i].SyncCPU(_endBuffers.OutputsColor[0, i]);
             }
 
             return _outputs;

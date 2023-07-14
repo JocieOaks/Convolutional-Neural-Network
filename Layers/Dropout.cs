@@ -36,12 +36,12 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override string Name => "Dropout Layer";
 
-        private static readonly Action<Index2D, ArrayView<float>, ArrayView<int>, ArrayView<float>> s_backwardsAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<float>, ArrayView<int>, ArrayView<float>>(BackwardsKernal);
+        private static readonly Action<Index2D, ArrayView<float>, ArrayView<int>, ArrayView<float>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<float>, ArrayView<int>, ArrayView<float>>(BackwardsKernal);
 
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            Accelerator accelerator = Utility.Accelerator;
+            Accelerator accelerator = GPU.GPUManager.Accelerator;
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -61,7 +61,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
-        private static readonly Action<Index1D, ArrayView<Color>, ArrayView<int>, ArrayView<Color>> s_forwardAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<int>, ArrayView<Color>>(ForwardKernal);
+        private static readonly Action<Index1D, ArrayView<Color>, ArrayView<int>, ArrayView<Color>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<int>, ArrayView<Color>>(ForwardKernal);
 
         /// <inheritdoc/>
         public override void Forward()
@@ -73,14 +73,13 @@ namespace ConvolutionalNeuralNetwork.Layers
                     _dropout[i][j] = Utility.Random.NextDouble() < _dropoutRate ? 0 : 1;
                 }
                 Index1D index = new(Infos(i).Area);
-                _deviceDropout[i] = Utility.Accelerator.Allocate1D(_dropout[i]);
+                _deviceDropout[i] = GPU.GPUManager.Accelerator.Allocate1D(_dropout[i]);
                 for (int j = 0; j < _batchSize; j++)
                 {
                     s_forwardAction(index, _buffers.InputsColor[i, j], _deviceDropout[i].View, _buffers.OutputsColor[i, j]);
                 }
             }
-
-            Utility.Accelerator.Synchronize();
+            GPU.GPUManager.Accelerator.Synchronize();
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -88,7 +87,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
-        private static readonly Action<Index1D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>> s_inferenceAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>>(InferenceKernal);
+        private static readonly Action<Index1D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>> s_inferenceAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>>(InferenceKernal);
 
         /// <summary>
         /// Forward propogates through the <see cref="Dropout"/> layer, but instead of randomly dropping values, it just adjusts
@@ -96,7 +95,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// </summary>
         public void ForwardInference()
         {
-            MemoryBuffer1D<float, Stride1D.Dense> deviceRatio = Utility.Accelerator.Allocate1D(new float[] { 1 - _dropoutRate });
+            MemoryBuffer1D<float, Stride1D.Dense> deviceRatio = GPU.GPUManager.Accelerator.Allocate1D(new float[] { 1 - _dropoutRate });
             for (int i = 0; i < _inputDimensions; i++)
             {
                 Index1D index = new(Infos(i).Area);
@@ -105,8 +104,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                     s_inferenceAction(index, _buffers.InputsColor[i, j], deviceRatio.View, _buffers.OutputsColor[i, j]);
                 }
             }
-
-            Utility.Accelerator.Synchronize();
+            GPU.GPUManager.Accelerator.Synchronize();
         }
 
         /// <inheritdoc/>

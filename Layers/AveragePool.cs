@@ -13,8 +13,8 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class AveragePool : Layer, IStructuralLayer
     {
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>> s_backwardsAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsKernal);
-        private static readonly Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>> s_forwardAction = Utility.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(ForwardKernal);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsKernal);
+        private static readonly Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(ForwardKernal);
         private MemoryBuffer1D<LayerInfo, Stride1D.Dense>[] _deviceInfos;
 
         /// <summary>
@@ -47,8 +47,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                     s_backwardsAction(index, _buffers.InGradientsFloat[i, j], _buffers.OutGradientsFloat[i, j], _deviceInfos[i].View);
                 }
             }
-
-            Utility.Accelerator.Synchronize();
+            Synchronize();
         }
 
         /// <inheritdoc/>
@@ -64,8 +63,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                     s_forwardAction(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j], _deviceInfos[i].View);
                 }
             }
-
-            Utility.Accelerator.Synchronize();
+            Synchronize();
         }
 
         /// <inheritdoc/>
@@ -80,7 +78,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             _deviceInfos = new MemoryBuffer1D<LayerInfo, Stride1D.Dense>[_inputDimensions];
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = Utility.Accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
+                _deviceInfos[i] = GPU.GPUManager.Accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
             }
             return _outputs;
         }

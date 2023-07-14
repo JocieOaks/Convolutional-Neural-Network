@@ -1,4 +1,5 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
+using ConvolutionalNeuralNetwork.GPU;
 using Newtonsoft.Json;
 using System.Reflection.Emit;
 
@@ -137,6 +138,44 @@ namespace ConvolutionalNeuralNetwork.Layers
             _buffers = buffers;
             for (int i = 0; i < _outputDimensions; i++)
                 buffers.OutputDimensionArea(i, _outputs[i, 0].Area);
+        }
+
+        protected void Synchronize(Cacheable[,] liveMaps1 = null, Cacheable[,] liveMaps2 = null, Cacheable[,] liveMaps3 = null)
+        {
+            GPUManager.Accelerator.Synchronize();
+            if (liveMaps1 == null)
+                return;
+
+            for (int i = 0; i < liveMaps1.GetLength(0); i++)
+            {
+                for (int j = 0; j < liveMaps1.GetLength(1); j++)
+                {
+                    liveMaps1[i, j].DecrementLiveCount();
+                }
+            }
+
+            if (liveMaps2 == null)
+                return;
+
+            for (int i = 0; i < liveMaps2.GetLength(0); i++)
+            {
+                for (int j = 0; j < liveMaps2.GetLength(1); j++)
+                {
+                    liveMaps2[i, j].DecrementLiveCount();
+                }
+            }
+
+            if (liveMaps3 == null)
+                return;
+
+            for (int i = 0; i < liveMaps3.GetLength(0); i++)
+            {
+                for (int j = 0; j < liveMaps3.GetLength(1); j++)
+                {
+                    liveMaps3[i, j].DecrementLiveCount();
+                }
+            }
+
         }
 
         protected FeatureMap[,] FilterTestSetup(int dimensionMultiplier)

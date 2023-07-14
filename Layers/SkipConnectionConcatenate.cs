@@ -12,7 +12,6 @@ namespace ConvolutionalNeuralNetwork.Layers
     {
         private FeatureMap[,] _inputsSecondary;
         private FeatureMap[,] _outGradientsSecondary;
-        private MemoryBuffer1D<Color, Stride1D.Dense>[,] _deviceSecondary;
 
         private int _secondaryDimensions;
 
@@ -34,7 +33,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(_layerInfos[i].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    Utility.CopyAction(index, _buffers.InGradientsColor[i, j], _buffers.OutGradientsColor[i, j]);
+                    GPU.GPUManager.CopyAction(index, _buffers.InGradientsColor[i, j], _buffers.OutGradientsColor[i, j]);
                 }
             }
 
@@ -43,21 +42,10 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(_layerInfos[i + _inputDimensions].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceSecondary[i, j] = _outGradientsSecondary[i, j].AllocateEmpty();
-                    Utility.CopyAction(index, _buffers.InGradientsColor[_inputDimensions + i, j], _deviceSecondary[i, j].View);
+                    GPU.GPUManager.CopyAction(index, _buffers.InGradientsColor[_inputDimensions + i, j], _outGradientsSecondary[i, j].GetArrayViewEmpty<Color>());
                 }
             }
-
-            Utility.Accelerator.Synchronize();
-
-            for(int i = 0; i < _secondaryDimensions; i++)
-            {
-                for(int j = 0; j < _batchSize; j++)
-                {
-                    _outGradientsSecondary[i, j].CopyFromBuffer(_deviceSecondary[i, j]);
-                    _deviceSecondary[i, j].Dispose();
-                }
-            }
+            Synchronize(_outGradientsSecondary);
         }
 
         /// <summary>
@@ -72,7 +60,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             _secondaryDimensions = inputs.GetLength(0);
             _batchSize = inputs.GetLength(1);
             _outGradientsSecondary = outGradients;
-            _deviceSecondary = new MemoryBuffer1D<Color, Stride1D.Dense>[_secondaryDimensions, _batchSize];
 
             for (int i = 0; i < _secondaryDimensions; i++)
             {
@@ -93,7 +80,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(_layerInfos[i].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    Utility.CopyAction(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j]);
+                    GPU.GPUManager.CopyAction(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j]);
                 }
             }
 
@@ -102,20 +89,11 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(_layerInfos[i + _inputDimensions].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceSecondary[i, j] = _inputsSecondary[i, j].Allocate();
-                    Utility.CopyAction(index, _deviceSecondary[i, j].View, _buffers.OutputsColor[_inputDimensions + i, j]);
+                    GPU.GPUManager.CopyAction(index, _inputsSecondary[i, j].GetArrayView<Color>(), _buffers.OutputsColor[_inputDimensions + i, j]);
                 }
             }
 
-            Utility.Accelerator.Synchronize();
-
-            for (int i = 0; i < _secondaryDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _deviceSecondary[i, j].Dispose();
-                }
-            }
+            Synchronize(_inputsSecondary);
         }
 
         /// <inheritdoc/>
