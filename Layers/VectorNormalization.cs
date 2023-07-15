@@ -11,14 +11,14 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <summary>
         /// Normalizes the input <see cref="Vector"/>s.
         /// </summary>
-        /// <param name="input">The <see cref="Vector"/>s being normalized.</param>
+        /// <param name="inputs">The <see cref="Vector"/>s being normalized.</param>
         /// <returns>Return the normalized <see cref="Vector"/>s.</returns>
-        public static Vector[] Forward(Vector[] input)
+        public static Vector[] Forward(Vector[] inputs)
         {
-            Vector[] vectors = new Vector[input.Length];
+            Vector[] vectors = new Vector[inputs.Length];
             for (int i = 0; i < vectors.Length; i++)
             {
-                vectors[i] = input[i].Normalized();
+                vectors[i] = inputs[i].Normalized();
             }
             return vectors;
         }

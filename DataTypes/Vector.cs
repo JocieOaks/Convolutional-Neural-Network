@@ -1,4 +1,7 @@
-﻿namespace ConvolutionalNeuralNetwork.DataTypes
+﻿using ILGPU;
+using ILGPU.Runtime;
+
+namespace ConvolutionalNeuralNetwork.DataTypes
 {
     /// <summary>
     /// The <see cref="Vector"/> class stores an array of floats for performing vector mathematics.
@@ -175,6 +178,16 @@
                 return this;
 
             return this * (1 / magnitude);
+        }
+
+        public void SyncCPU(ArrayView<float> arrayView)
+        {
+            arrayView.SubView(0, Length).CopyToCPU(_values);
+        }
+
+        public void CopyToBuffer(ArrayView<float> arrayView)
+        {
+            arrayView.SubView(0, Length).CopyFromCPU(_values);
         }
     }
 }

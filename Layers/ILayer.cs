@@ -10,9 +10,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <value>The name of the <see cref="Layer"/>, used for logging.</value>
         string Name { get; }
 
-        /// <value>The number of dimensions in the <see cref="Layer"/>'s output.</value>
-        public int OutputDimensions { get; }
-
         /// <summary>
         /// Backpropagates through the <see cref="Layer"/> updating any layer weights, and calculating the outgoing gradient that is
         /// shared with the previous layer.

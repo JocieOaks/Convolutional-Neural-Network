@@ -27,7 +27,7 @@ namespace ConvolutionalNeuralNetwork
         /// propagation.
         /// </summary>
         /// <param name="layer">The <see cref="Layer"/> to be tested.</param>
-        public static void GradientCheck(ILayer layer, int dimensionMultiplier)
+        public static void GradientCheck(ILayer layer, int dimensionMultiplier, int inputSize)
         {
             int outputDimensions, inputDimensions;
             if (dimensionMultiplier >= 1)
@@ -44,10 +44,10 @@ namespace ConvolutionalNeuralNetwork
             FeatureMap[,] inputs = new FeatureMap[inputDimensions, 1];
             for (int i = 0; i < inputDimensions; i++)
             {
-                inputs[i, 0] = new(3, 3);
-                for (int j = 0; j < 3; j++)
+                inputs[i, 0] = new(inputSize, inputSize);
+                for (int j = 0; j < inputSize; j++)
                 {
-                    for (int k = 0; k < 3; k++)
+                    for (int k = 0; k < inputSize; k++)
                     {
                         inputs[i, 0][j, k] = (i + 1) * new Color(j, k, j - k);
                     }
@@ -78,7 +78,7 @@ namespace ConvolutionalNeuralNetwork
             FeatureMap[] outGradients = new FeatureMap[inputDimensions];
             for (int i = 0; i < inputDimensions; i++)
             {
-                outGradients[i] = new FeatureMap(3, 3);
+                outGradients[i] = new FeatureMap(inputSize, 3);
                 outGradients[i].SyncCPU(buffer.OutGradientsColor[i, 0]);
             }
 
@@ -93,9 +93,9 @@ namespace ConvolutionalNeuralNetwork
 
             for (int i = 0; i < inputDimensions; i++)
             {
-                for (int j = 0; j < 3; j++)
+                for (int j = 0; j < inputSize; j++)
                 {
-                    for (int k = 0; k < 3; k++)
+                    for (int k = 0; k < inputSize; k++)
                     {
                         for (int l = 0; l < 3; l++)
                         {

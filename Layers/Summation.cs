@@ -20,7 +20,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class Summation : Layer, IStructuralLayer
     {
-        private readonly Action<Index1D, ArrayView<float>, ArrayView<float>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(ForwardKernal);
+        private readonly Action<Index1D, ArrayView<float>, ArrayView<float>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(ForwardKernel);
         [JsonProperty] private int _dimensionDivisor;
 
         [JsonConstructor] public Summation() : base(1, 1) { }
@@ -111,12 +111,12 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <summary>
-        /// An <see cref="ILGPU"/> kernal that adds the values from one <see cref="ArrayView{T}"/> of floats, to another.
+        /// An <see cref="ILGPU"/> kernel that adds the values from one <see cref="ArrayView{T}"/> of floats, to another.
         /// </summary>
         /// <param name="index">The index of the arrays to sum.</param>
         /// <param name="input">The array of floats being added to <paramref name="output"/>.</param>
         /// <param name="output">The array of floats to which <paramref name="input"/> is being added.</param>
-        private static void ForwardKernal(Index1D index, ArrayView<float> input, ArrayView<float> output)
+        private static void ForwardKernel(Index1D index, ArrayView<float> input, ArrayView<float> output)
         {
             Atomic.Add(ref output[index.X], input[index.X]);
         }

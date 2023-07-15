@@ -11,7 +11,9 @@ namespace ConvolutionalNeuralNetwork.Networks
     {
         private bool[][] _classificationBools;
         private float[][] _classificationFloats;
-        FeatureMap[,] _outputs;
+        private FeatureMap[,] _outputs;
+        private FeatureMap[,] _latentSpace;
+        private readonly int _latentDimensions = 64;
 
         /// <summary>
         /// Loads a <see cref="Generator"/> from a json file.
@@ -54,35 +56,28 @@ namespace ConvolutionalNeuralNetwork.Networks
         /// <param name="gradients">An array of <see cref="FeatureMap"/>'s containing the gradients for the last layer of the <see cref="Generator"/>.</param>
         /// <param name="input">The images and their associatd labels for this iteration of training.</param>
         /// <param name="learningRate">The learning rate defining the degree to which each layer should be updated.</param>
-        public void Backwards(FeatureMap[,] gradients, ImageInput[] input, float learningRate)
+        public void Backwards(FeatureMap[,] gradients)
         {
-            FeatureMap[,] images = new FeatureMap[1, _batchSize];
             for (int i = 0; i < _batchSize; i++)
             {
-                images[0, i] = input[i].Image;
-            }
-
-            for (int i = 0; i < _batchSize; i++)
-            {
-                
                 gradients[0, i].CopyToBuffer(_endBuffers.OutputsColor[0,i]);
             }
 
             _updateStep++;
-            float correctionLearningRate = CorrectionLearningRate(learningRate, 0.9f, 0.999f);
+            float correctionLearningRate = CorrectionLearningRate(_learningRate, _firstMomentDecay, _secondMomentDecay);
 
             for (int i = Depth - 1; i > 0; i--)
             {
-                Utility.StopWatch(() => _layers[i].Backwards(correctionLearningRate, 0.9f, 0.999f), $"Backwards {i} {_layers[i].Name}", PRINTSTOPWATCH);
+                Utility.StopWatch(() => _layers[i].Backwards(correctionLearningRate, _firstMomentDecay, _secondMomentDecay), $"Backwards {i} {_layers[i].Name}", PRINTSTOPWATCH);
             }
 
             if (_layers[0] is not Convolution convolution)
             {
-                Utility.StopWatch(() => _layers[0].Backwards(correctionLearningRate, 0.9f, 0.999f), $"Backwards {0} {_layers[0].Name}", PRINTSTOPWATCH);
+                Utility.StopWatch(() => _layers[0].Backwards(correctionLearningRate, _firstMomentDecay, _secondMomentDecay), $"Backwards {0} {_layers[0].Name}", PRINTSTOPWATCH);
             }
             else
             {
-                Utility.StopWatch(() => convolution.BackwardsUpdateOnly(correctionLearningRate, 0.9f, 0.999f), $"Backwards {0} {_layers[0].Name}", PRINTSTOPWATCH);
+                Utility.StopWatch(() => convolution.BackwardsUpdateOnly(correctionLearningRate, _firstMomentDecay, _secondMomentDecay), $"Backwards {0} {_layers[0].Name}", PRINTSTOPWATCH);
             }
         }
 
@@ -93,11 +88,20 @@ namespace ConvolutionalNeuralNetwork.Networks
         /// <param name="inference">Determines whether the <see cref="Generator"/> is training or inferring. Defaults to false.</param>
         public FeatureMap[,] Forward(ImageInput[] input, bool inference = false)
         {
+
             for (int i = 0; i < _batchSize; i++)
             {
-                input[i].Image.CopyToBuffer(_startBuffer.InputsColor[0,i]);
                 _classificationBools[i] = input[i].Bools;
                 _classificationFloats[i] = input[i].Floats;
+            }
+
+            for(int i = 0; i < _latentDimensions; i++)
+            {
+                for(int j = 0; j < _batchSize; j++)
+                {
+                    _latentSpace[i, j].Randomize(0, 1);
+                    _latentSpace[i, j].CopyToBuffer(_startBuffer.InputsColor[i, j]);
+                }
             }
 
             for (int i = 0; i < Depth; i++)
@@ -121,9 +125,9 @@ namespace ConvolutionalNeuralNetwork.Networks
         }
 
         /// <inheritdoc/>
-        public override void StartUp(int batchSize, int width, int length, int boolsLength, int floatsLength)
+        public override void StartUp(int batchSize, int width, int length, int boolsLength, int floatsLength, float learningRate, float firstDecay, float secondDecay)
         {
-            base.StartUp(batchSize, width, length, boolsLength, floatsLength);
+            base.StartUp(batchSize, width, length, boolsLength, floatsLength, learningRate, firstDecay, secondDecay);
 
             for(int i = _layers.Count - 1; i >= 0; i--)
             {
@@ -146,9 +150,18 @@ namespace ConvolutionalNeuralNetwork.Networks
                 _classificationFloats[i] = new float[floatsLength];
             }
 
-            IOBuffers inputBuffers = _startBuffer = new IOBuffers();
-            IOBuffers outputBuffers = new IOBuffers();
-            outputBuffers.OutputDimensionArea(1, width * length);
+            _latentSpace = new FeatureMap[_latentDimensions, _batchSize];
+            for(int i = 0; i < _latentDimensions; i++)
+            {
+                for(int j = 0; j < _batchSize; j++)
+                {
+                    _latentSpace[i, j] = new FeatureMap(1, 1);
+                }
+            }
+
+            IOBuffers inputBuffers = _startBuffer = new();
+            IOBuffers outputBuffers = new();
+            outputBuffers.OutputDimensionArea(_latentDimensions, 1);
 
             foreach (var layer in _layers)
             {
@@ -158,7 +171,7 @@ namespace ConvolutionalNeuralNetwork.Networks
                     key.Floats = _classificationFloats;
                 }
 
-                _outputs = layer.Startup(_outputs, inputBuffers);
+                _latentSpace = layer.Startup(_latentSpace, inputBuffers);
                 (inputBuffers, outputBuffers) = (outputBuffers, inputBuffers);
             }
             _endBuffers = outputBuffers;

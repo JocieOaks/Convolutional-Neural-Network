@@ -12,11 +12,11 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class ReLUActivation : Layer, ISecondaryLayer
     {
-        private static readonly Action<Index1D, ArrayView<int>, ArrayView<float>, ArrayView<float>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<int>, ArrayView<float>, ArrayView<float>>(BackwardsKernal);
-        private static readonly Action<Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>>(ForwardKernal);
+        private static readonly Action<Index1D, ArrayView<int>, ArrayView<float>, ArrayView<float>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<int>, ArrayView<float>, ArrayView<float>>(BackwardsKernel);
+        private static readonly Action<Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>>(ForwardKernel);
         private MemoryBuffer1D<int, Stride1D.Dense>[,] _deviceZeroed;
 
-        private const float NEGATIVESCALING = 0.01f;
+        private const float NEGATIVESCALING = 0.2f;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ReLUActivation"/> class.
@@ -78,7 +78,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             return _outputs;
         }
 
-        private static void BackwardsKernal(Index1D index, ArrayView<int> zeroed, ArrayView<float> inGradient, ArrayView<float> outGradient)
+        private static void BackwardsKernel(Index1D index, ArrayView<int> zeroed, ArrayView<float> inGradient, ArrayView<float> outGradient)
         {
             int byteIndex = (index.X) / 32;
             int bit = index.X - 32 * byteIndex;
@@ -93,7 +93,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
-        private static void ForwardKernal(Index1D index, ArrayView<float> input, ArrayView<int> zeroed, ArrayView<float> output)
+        private static void ForwardKernel(Index1D index, ArrayView<float> input, ArrayView<int> zeroed, ArrayView<float> output)
         {
             int byteIndex = (index.X) / 32;
             int bit = index.X - 32 * byteIndex;

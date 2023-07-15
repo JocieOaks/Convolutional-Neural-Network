@@ -45,7 +45,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                     GPU.GPUManager.CopyAction(index, _buffers.InGradientsColor[_inputDimensions + i, j], _outGradientsSecondary[i, j].GetArrayViewEmpty<Color>());
                 }
             }
-            Synchronize(_outGradientsSecondary);
+            Synchronize();
+            DecrementCacheabble(_outGradientsSecondary);
         }
 
         /// <summary>
@@ -58,7 +59,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             _inputsSecondary = inputs;
             _secondaryDimensions = inputs.GetLength(0);
-            _batchSize = inputs.GetLength(1);
+            _batchSize = (uint)inputs.GetLength(1);
             _outGradientsSecondary = outGradients;
 
             for (int i = 0; i < _secondaryDimensions; i++)
@@ -93,7 +94,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
-            Synchronize(_inputsSecondary);
+            Synchronize();
+            DecrementCacheabble(_inputsSecondary);
         }
 
         /// <inheritdoc/>

@@ -162,15 +162,23 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <returns></returns>
         public static ColorTensor Random(int width, int length, float mean, float stdDev)
         {
-            ColorTensor map = new(width, length);
+            ColorTensor tensor = new(width, length);
             for (int y = 0; y < length; y++)
             {
                 for (int x = 0; x < width; x++)
                 {
-                    map[x, y] = Color.RandomGauss(mean, stdDev);
+                    tensor[x, y] = new Color(Utility.RandomGauss(mean, stdDev), 0, 0);
                 }
             }
-            return map;
+            return tensor;
+        }
+
+        public void Randomize(float mean, float stdDev)
+        {
+            for(int i = 0; i < Area; i++)
+            {
+                _tensor[i] = Color.RandomGauss(0, stdDev);
+            }
         }
 
         public void CopyToBuffer(ArrayView<Color> buffer)
@@ -192,7 +200,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 (ID, buffer) = GPUManager.AllocateEmpty<Color>(this, Area);
             }
             int bytes = Interop.SizeOf<T>();
-            return buffer.AsArrayView<T>(0, 12 * Area / bytes);
+            return new ArrayView<T>(buffer, 0, 12 * Area / bytes);
         }
 
         public ArrayView<T> GetArrayView<T>() where T: unmanaged
@@ -204,7 +212,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 (ID, buffer) = GPUManager.Allocate<Color>(this);
             }
             int bytes = Interop.SizeOf<T>();
-            return buffer.AsArrayView<T>(0, 12 * Area / bytes);
+            return new ArrayView<T>(buffer, 0, 12 * Area / bytes);
         }
 
         public ArrayView<T> GetArrayViewZeroed<T>() where T: unmanaged

@@ -9,7 +9,8 @@ namespace ConvolutionalNeuralNetwork.DataTypes
     [Serializable]
     public class Weights
     {
-        [JsonProperty] private readonly ColorVector _weights;
+        [JsonProperty] private ColorVector _weights;
+        [JsonProperty] private Color[] _filter;
         private ColorVector _gradient;
         [JsonProperty] private readonly Color[] _firstMoment;
         [JsonProperty] private readonly Color[] _secondMoment;
@@ -66,6 +67,11 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         [OnDeserialized]
         public void OnDeserialized(StreamingContext context)
         {
+            if(_filter != null)
+            {
+                _weights = new ColorVector(_filter);
+                _filter = null;
+            }
             _gradient = new ColorVector(Length);
         }
 
@@ -89,26 +95,24 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             }
         }
 
-        public ArrayView<float> GradientGPU()
+        public ArrayView<T> GradientGPU<T>() where T : unmanaged
         {
-            return _gradient.GetArrayViewZeroed<float>();
+            return _gradient.GetArrayViewZeroed<T>();
         }
 
-        public ArrayView<Color> WeightsGPU()
+        public ArrayView<T> WeightsGPU<T>() where T : unmanaged
         {
-            return _weights.GetArrayView<Color>();
+            return _weights.GetArrayView<T>();
         }
 
-        public void DisposeWeights(int batchSize)
+        public void DisposeWeights(uint batchSize)
         {
-            for(int i = 0; i < batchSize; i++)
-                _weights.DecrementLiveCount();
+            _weights.DecrementLiveCount(batchSize);
         }
 
-        public void DisposeGradient(int batchSize)
+        public void DisposeGradient(uint batchSize)
         {
-            for (int i = 0; i < batchSize; i++)
-                _gradient.DecrementLiveCount();
+            _gradient.DecrementLiveCount(batchSize);
         }
 
         /// <summary>

@@ -36,7 +36,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             return _concatenationLayer;
         }
 
-        private static readonly Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>>(BackwardsKernal);
+        private static readonly Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>>(BackwardsKernel);
 
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
@@ -65,7 +65,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
-            Synchronize(_outputs);
+            Synchronize();
+            DecrementCacheabble(_outputs);
         }
 
         /// <inheritdoc/>
@@ -79,7 +80,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             _outputDimensions = _inputDimensions = inputs.GetLength(0);
             _buffers = buffers;
 
-            _batchSize = inputs.GetLength(1);
+            _batchSize = (uint)inputs.GetLength(1);
             _layerInfos = new ILayerInfo[_inputDimensions];
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -99,7 +100,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             return inputs;
         }
 
-        private static void BackwardsKernal(Index2D index, ArrayView<Color> inGradient1, ArrayView<Color> inGradient2, ArrayView<float> outGradient)
+        private static void BackwardsKernel(Index2D index, ArrayView<Color> inGradient1, ArrayView<Color> inGradient2, ArrayView<float> outGradient)
         {
             outGradient[index.X * 3 + index.Y] = inGradient1[index.X][index.Y] + inGradient2[index.X][index.Y];
         }

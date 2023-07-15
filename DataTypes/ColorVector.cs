@@ -24,6 +24,11 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             _values = new Color[length];
         }
 
+        public ColorVector(Color[] values)
+        {
+            _values = values;
+        }
+
         /// <summary>
         /// A default constructor to be used when deserializing.
         /// </summary>
@@ -131,7 +136,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             if (buffer == null)
                 return;
 
-            GPUManager.UpdateBuffer(this);
+            buffer.AsArrayView<Color>(0, Length).CopyFromCPU(_values);
         }
     }
 }

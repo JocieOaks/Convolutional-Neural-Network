@@ -67,11 +67,11 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         public float R => _1r;
 
         /// <summary>
-        /// Gives the RGB value at the given index. Used in <see cref="ILGPU"/> kernals where the color channel is one of the dimensions being indexed.
+        /// Gives the RGB value at the given index. Used in <see cref="ILGPU"/> kernels where the color channel is one of the dimensions being indexed.
         /// </summary>
         /// <param name="index">The index of the value.</param>
         /// <returns>Returns the value corresponding to the index given. Defaults to blue for any value besides 0, 1 or 2.</returns>
-        /// Note: Using the modulus operator in an external function creates an error when used in an <see cref="ILGPU"/> kernal,
+        /// Note: Using the modulus operator in an external function creates an error when used in an <see cref="ILGPU"/> kernel,
         /// so the value defaults to blue.
         public float this[int index]
         {

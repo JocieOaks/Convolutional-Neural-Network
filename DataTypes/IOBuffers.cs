@@ -5,7 +5,7 @@ using ILGPU.Runtime;
 namespace ConvolutionalNeuralNetwork.DataTypes
 {
     /// <summary>
-    /// The <see cref="IOBuffers"/> class contains a set of <see cref="MemoryBuffer"/>s for use with an <see cref="ILGPU"/> kernal.
+    /// The <see cref="IOBuffers"/> class contains a set of <see cref="MemoryBuffer"/>s for use with an <see cref="ILGPU"/> kernel.
     /// Because the output of one <see cref="Layer"/> is the input of another layer, two set of these can be used such that the device inputs of one
     /// is the device outputs of another. This saves a significant amount of time instead of allocating and then deallocating <see cref="MemoryBuffer"/>s.
     /// </summary>
@@ -28,6 +28,9 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         public ArrayView<float>[,] OutGradientsFloat => _floats2;
         public ArrayView<Color>[,] OutputsColor => _colors1;
         public ArrayView<float>[,] OutputsFloat => _floats1;
+        public ArrayView<float> FinalOutput(int batchIndex) => _floats1[0, batchIndex];
+        public ArrayView<float> FirstGradient(int batchIndex) => _floats1[0, batchIndex];
+
         /// <summary>
         /// Sets to <see cref="IOBuffers"/> to be reflections of eachother. Aka, the input of one is the output of the other.
         /// </summary>
@@ -70,5 +73,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         {
             _outputAllocationPairs.Add((dimensions + 1, area));
         }
+
+        
     }
 }

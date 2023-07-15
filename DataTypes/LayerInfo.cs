@@ -2,7 +2,7 @@
 {
     /// <summary>
     /// The <see cref="ILayerInfo"/> interface is for structs to store a variety of data about <see cref="Layers.Layer"/>s
-    /// and <see cref="FeatureMap"/>s for use by an <see cref="ILGPU"/> kernal.
+    /// and <see cref="FeatureMap"/>s for use by an <see cref="ILGPU"/> kernel.
     /// </summary>
     public interface ILayerInfo
     {
@@ -36,7 +36,7 @@
 
     /// <summary>
     /// The <see cref="LayerInfo"/> struct contains a variety of data about <see cref="Layers.Layer"/>s
-    /// and <see cref="FeatureMap"/>s for use by an <see cref="ILGPU"/> kernal.
+    /// and <see cref="FeatureMap"/>s for use by an <see cref="ILGPU"/> kernel.
     /// </summary>
     public readonly struct LayerInfo : ILayerInfo
     {
@@ -104,9 +104,74 @@
         }
     }
 
+    public readonly struct InverseLayerInfo : ILayerInfo
+    {
+        /// <inheritdoc/>
+        public int InputWidth { get; init; }
+
+        /// <inheritdoc/>
+        public int InputLength { get; init; }
+
+        /// <inheritdoc/>
+        public int InputArea => InputWidth * InputLength;
+
+        /// <inheritdoc/>
+        public float InverseKSquared { get; init; }
+
+        /// <inheritdoc/>
+        public int FilterSize { get; init; }
+
+        /// <inheritdoc/>
+        public int OutputWidth { get; init; }
+
+        /// <inheritdoc/>
+        public int OutputLength { get; init; }
+
+        /// <inheritdoc/>
+        public int OutputArea => OutputWidth * OutputLength;
+
+        /// <inheritdoc/>
+        public int Stride { get; init; }
+
+        /// <summary>
+        /// Calculates the single dimensional array index for a flattened output <see cref="FeatureMap"/>.
+        /// </summary>
+        /// <param name="x">The x coordinate of the desired index.</param>
+        /// <param name="y">The y coordinate of the desired index.</param>
+        /// <returns>Returns the index corresponding to (<paramref name="x"/>, <paramref name="y"/>).</returns>
+        public int InputIndex(int x, int y)
+        {
+            return y * InputWidth + x;
+        }
+
+        /// <summary>
+        /// Calculates the single dimensional array index for a flattened input <see cref="FeatureMap"/>.
+        /// </summary>
+        /// <param name="x">The x coordinate of the desired index.</param>
+        /// <param name="y">The y coordinate of the desired index.</param>
+        /// <returns>Returns the index corresponding to (<paramref name="x"/>, <paramref name="y"/>).</returns>
+        public int OutputIndex(int strideX, int x, int strideY, int y)
+        {
+            x += strideX * Stride;
+            y += strideY * Stride;
+            return y * OutputWidth + x;
+        }
+
+        /// <summary>
+        /// Calculates the single dimensional array index for a flattened filter.
+        /// </summary>
+        /// <param name="x">The x coordinate of the desired index.</param>
+        /// <param name="y">The y coordinate of the desired index.</param>
+        /// <returns>Returns the index corresponding to (<paramref name="x"/>, <paramref name="y"/>).</returns>
+        public int FilterIndex(int x, int y)
+        {
+            return y * FilterSize + x;
+        }
+    }
+
     /// <summary>
     /// The <see cref="StaticLayerInfo"/> struct contains a variety of data about <see cref="Layers.Layer"/>s
-    /// and <see cref="FeatureMap"/>s for use by an <see cref="ILGPU"/> kernal, where the input and output <see cref="FeatureMap"/>s have
+    /// and <see cref="FeatureMap"/>s for use by an <see cref="ILGPU"/> kernel, where the input and output <see cref="FeatureMap"/>s have
     /// the same dimensions.
     /// </summary>
     public readonly struct StaticLayerInfo : ILayerInfo

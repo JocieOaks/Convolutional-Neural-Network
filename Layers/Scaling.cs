@@ -19,7 +19,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override string Name => "Scaling Layer";
 
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<ScalingLayerInfo>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<ScalingLayerInfo>>(BackwardsKernal);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<ScalingLayerInfo>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<ScalingLayerInfo>>(BackwardsKernel);
 
         /// <inheritdoc/>
         public override void Backwards(float learningRatee, float firstMomentDecay, float secondMomentDecay)
@@ -36,7 +36,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             Synchronize();
         }
 
-        private readonly static Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<ScalingLayerInfo>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<ScalingLayerInfo>>(ForwardKernal);
+        private readonly static Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<ScalingLayerInfo>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<ScalingLayerInfo>>(ForwardKernel);
 
         /// <inheritdoc/>
         public override void Forward()
@@ -84,7 +84,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             _outputDimensions = _inputDimensions = inputs.GetLength(0);
             _buffers = buffers;
-            _batchSize = inputs.GetLength(1);
+            _batchSize = (uint)inputs.GetLength(1);
             _layerInfos = new ILayerInfo[_inputDimensions];
             _outputs = new FeatureMap[_outputDimensions, _batchSize];
 
@@ -148,16 +148,16 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <summary>
-        /// An ILGPU kernal to calculate the gradients for backpropagating the previous layer.
+        /// An ILGPU kernel to calculate the gradients for backpropagating the previous layer.
         /// </summary>
-        /// <param name="index">The index of the current kernal calculation to be made.</param>
+        /// <param name="index">The index of the current kernel calculation to be made.</param>
         /// <param name="inGradient">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the incoming
         /// gradient from the following <see cref="Layer"/>.</param>
         /// <param name="outGradient">An <see cref="ArrayView1D{T, TStride}"/> of floats to sum the outgoing gradient.
         /// Because <see cref="Color"/> cannot be summed atomically, every three floats represents a single
         /// <see cref="Color"/> in the gradient.</param>
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void BackwardsKernal(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, ArrayView<ScalingLayerInfo> info)
+        private static void BackwardsKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, ArrayView<ScalingLayerInfo> info)
         {
             int inGradientIndex = info[0].OutputIndex(index.X, index.Y);
 
@@ -177,15 +177,15 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <summary>
-        /// An <see cref="ILGPU"/> kernal for resampling a <see cref="FeatureMap"/>.
+        /// An <see cref="ILGPU"/> kernel for resampling a <see cref="FeatureMap"/>.
         /// </summary>
-        /// <param name="index">The index of the current kernal calculation to be made.</param>
+        /// <param name="index">The index of the current kernel calculation to be made.</param>
         /// <param name="input">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the input from the
         /// previous <see cref="Layer"/>.</param>
         /// <param name="output">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s to set for the outgoing
         /// resampled <see cref="FeatureMap"/>.</param>
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void ForwardKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> output, ArrayView<ScalingLayerInfo> info)
+        private static void ForwardKernel(Index2D index, ArrayView<Color> input, ArrayView<Color> output, ArrayView<ScalingLayerInfo> info)
         {
             Color color = new(0);
             int outputIndex = info[0].OutputIndex(index.X, index.Y);
@@ -220,7 +220,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         /// <summary>
         /// The <see cref="ScalingLayerInfo"/> struct contains a variety of data about <see cref="Scaling"/> layers
-        /// and <see cref="FeatureMap"/>s for use by an <see cref="ILGPU"/> kernal.
+        /// and <see cref="FeatureMap"/>s for use by an <see cref="ILGPU"/> kernel.
         /// </summary>
         public readonly struct ScalingLayerInfo : ILayerInfo
         {

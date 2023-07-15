@@ -217,7 +217,7 @@ namespace ConvolutionalNeuralNetwork.GPU
             if (!Caches.TryGetValue(id, out Cache cache)) return Allocate(cacheable, accelerator);
             MemoryBuffer buffer = cache.MemoryBuffer;
 
-            if (buffer != null) return Allocate(cacheable, accelerator);
+            if (buffer == null) return Allocate(cacheable, accelerator);
 
             // If lengths match
             T[] values = cacheable.GetValues();

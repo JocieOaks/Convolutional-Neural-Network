@@ -75,7 +75,10 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
-            Synchronize(_inputs, _filters, _filterGradients);
+            Synchronize();
+            DecrementCacheabble(_inputs);
+            DecrementCacheabble(_filters);
+            DecrementCacheabble(_filterGradients);
 
             for (int i = 0; i < _outputDimensions; i++)
             {
@@ -246,7 +249,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             _deviceInfos = new MemoryBuffer1D<LayerInfo, Stride1D.Dense>[_inputDimensions];
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _deviceInfos[i] = GPU.GPUManager.Accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
+                _deviceInfos[i] = GPUManager.Accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
             }
 
             return _outputs;

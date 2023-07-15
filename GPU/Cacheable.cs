@@ -12,18 +12,22 @@ namespace ConvolutionalNeuralNetwork.GPU
 
         public abstract void DeCache();
 
-        public void IncrementLiveCount()
+        public void IncrementLiveCount(uint count = 1)
         {
-            LiveCount++;
-            if (LiveCount > 100)
-                throw new Exception();
+            LiveCount += count;
+            if( LiveCount > 200 )
+            {
+                Console.WriteLine("Live Count exceeding limit.");
+            }
         }
 
-        public void DecrementLiveCount()
+        public void DecrementLiveCount(uint count = 1)
         {
-            LiveCount--;
-            if (LiveCount > 100)
-                throw new Exception();
+            LiveCount -= count;
+            if (LiveCount > 200)
+            {
+                Console.WriteLine("Live Count exceeding limit.");
+            }
         }
 
         protected MemoryBuffer GetBuffer()

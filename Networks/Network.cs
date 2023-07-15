@@ -29,6 +29,9 @@ namespace ConvolutionalNeuralNetwork
 
         protected IOBuffers _startBuffer;
         protected IOBuffers _endBuffers;
+        protected float _learningRate;
+        protected float _firstMomentDecay;
+        protected float _secondMomentDecay;
 
         /// <value>Enumerates over the <see cref="IPrimaryLayer"/>'s of the <see cref="Network"/> that define its structure.</value>
         [JsonIgnore]
@@ -281,7 +284,7 @@ namespace ConvolutionalNeuralNetwork
         /// <param name="floatLabels">The number of floats used to label each image.</param>
         /// While <see cref="Network"/> is designed as a Conditional GAN, but it can function as a non-Conditional GAN
         /// by only useing one bool or float label whose value is always true/1.
-        public virtual void StartUp(int batchSize, int inputWidth, int inputLength, int boolLabels, int floatLabels)
+        public virtual void StartUp(int batchSize, int inputWidth, int inputLength, int boolLabels, int floatLabels, float learningRate, float firstDecay, float secondDecay)
         {
             if (!_configured)
             {
@@ -311,6 +314,9 @@ namespace ConvolutionalNeuralNetwork
             _batchSize = batchSize;
             _boolLabels = boolLabels;
             _floatLabels = floatLabels;
+            _learningRate = learningRate;
+            _firstMomentDecay = firstDecay;
+            _secondMomentDecay = secondDecay;
         }
 
         /// <summary>

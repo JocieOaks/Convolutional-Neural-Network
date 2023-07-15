@@ -15,9 +15,9 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class FullyConnected : Layer, IPrimaryLayer
     {
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>> s_backwardsGradientAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsGradientKernal);
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>> s_backwardsOutAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsOutKernal);
-        private static readonly Action<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<StaticLayerInfo>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<StaticLayerInfo>>(ForwardKernal);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>> s_backwardsGradientAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsGradientKernel);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>> s_backwardsOutAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsOutKernel);
+        private static readonly Action<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<StaticLayerInfo>> s_forwardAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<StaticLayerInfo>>(ForwardKernel);
         private MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[] _deviceInfos;
         private FeatureMap[,] _inputs;
         private int _dimensionMultiplier;
@@ -57,11 +57,11 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(Infos(i).Area);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    GPU.GPUManager.CopyAction(index, _buffers.InputsColor[i, j], _inputs[i, j].GetArrayViewEmpty<Color>());
+                    GPUManager.CopyAction(index, _buffers.InputsColor[i, j], _inputs[i, j].GetArrayViewEmpty<Color>());
                 }
             }
 
-            ArrayView<Color> deviceFilter = _filter.WeightsGPU();
+            ArrayView<Color> deviceFilter = _filter.WeightsGPU<Color>();
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -75,7 +75,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
-            Synchronize(_inputs);
+            Synchronize();
+            DecrementCacheabble(_inputs);
 
             _filter.DisposeWeights(1);
         }
@@ -155,7 +156,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             return _outputs;
         }
-        private static void BackwardsGradientKernal(Index3D index, ArrayView<float> inGradient, ArrayView<Color> input, ArrayView<float> multiplierGradient, ArrayView<StaticLayerInfo> info)
+        private static void BackwardsGradientKernel(Index3D index, ArrayView<float> inGradient, ArrayView<Color> input, ArrayView<float> multiplierGradient, ArrayView<StaticLayerInfo> info)
         {
             int mapsIndex = info[0].Index(index.X, index.Y);
             for (int i = 0; i < 3; i++)
@@ -164,7 +165,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
-        private static void BackwardsOutKernal(Index3D index, ArrayView<float> inGradient, ArrayView<Color> multiplier, ArrayView<float> outGradient, ArrayView<StaticLayerInfo> info)
+        private static void BackwardsOutKernel(Index3D index, ArrayView<float> inGradient, ArrayView<Color> multiplier, ArrayView<float> outGradient, ArrayView<StaticLayerInfo> info)
         {
             int mapsIndex = info[0].Index(index.X, index.Y);
             float transposeDot = 0;
@@ -175,7 +176,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             Atomic.Add(ref outGradient[mapsIndex * 3 + index.Z], transposeDot);
         }
 
-        private static void ForwardKernal(Index3D index, ArrayView<Color> input, ArrayView<float> output, ArrayView<Color> multiplier, ArrayView<StaticLayerInfo> info)
+        private static void ForwardKernel(Index3D index, ArrayView<Color> input, ArrayView<float> output, ArrayView<Color> multiplier, ArrayView<StaticLayerInfo> info)
         {
             int mapsIndex = info[0].Index(index.X, index.Y);
             Atomic.Add(ref output[mapsIndex * 3 + index.Z], Color.Dot(input[mapsIndex], multiplier[index.Z]));
@@ -195,7 +196,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
-            ArrayView<Color> deviceFilter = _filter.WeightsGPU();
+            ArrayView<Color> deviceFilter = _filter.WeightsGPU<Color>();
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -229,8 +230,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
-            var deviceFilter = _filter.WeightsGPU();
-            var deviceGradient = _filter.GradientGPU();
+            var deviceFilter = _filter.WeightsGPU<Color>();
+            var deviceGradient = _filter.GradientGPU<float>();
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -246,17 +247,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
             Synchronize();
-
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    for (int k = 0; k < _outputDimensions; k++)
-                    {
-                        _inputs[i, j].DecrementLiveCount();
-                    }
-                }
-            }
+            DecrementCacheabble(_inputs, (uint)_outputDimensions);
 
             _filter.UpdateWeights(learningRate, firstMomentDecay, secondMomentDecay);
             _filter.DisposeWeights(1);

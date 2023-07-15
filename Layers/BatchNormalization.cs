@@ -15,11 +15,11 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class BatchNormalization : Layer, ISecondaryLayer
     {
-        private static readonly Action<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>>(BackwardsKernal);
-        private static readonly Action<Index2D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<float>> s_gradientAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<float>>(GradientsKernal);
-        private static readonly Action<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>> s_normalizeAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>>(ForwardKernal);
-        private static readonly Action<Index2D, ArrayView<Color>, ArrayView<float>> s_sumAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<float>>(MeanKernal);
-        private static readonly Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>> s_varianceAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>>(VarianceKernal);
+        private static readonly Action<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>>(BackwardsKernel);
+        private static readonly Action<Index2D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<float>> s_gradientAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<float>>(GradientsKernel);
+        private static readonly Action<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>> s_normalizeAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>>(ForwardKernel);
+        private static readonly Action<Index2D, ArrayView<Color>, ArrayView<float>> s_sumAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<float>>(MeanKernel);
+        private static readonly Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>> s_varianceAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>>(VarianceKernel);
         
         private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceGradients;
         private MemoryBuffer1D<Color, Stride1D.Dense>[] _deviceMeans;
@@ -84,7 +84,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                     s_backwardsAction(index, _inputs[i, j].GetArrayView<Color>(), _buffers.InGradientsColor[i, j], _buffers.OutGradientsColor[i, j], _deviceValues[i].View);
                 }
             }
-            Synchronize(_inputs);
+            Synchronize();
+            DecrementCacheabble(_inputs);
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -109,7 +110,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                     s_gradientAction(index, _inputs[i, j].GetArrayView<Color>(), _buffers.InGradientsFloat[i, j], _deviceValues[i].View, _deviceGradients[i].View);
                 }
             }
-            Synchronize(_inputs);
+            Synchronize();
+            DecrementCacheabble(_inputs);
 
             for (int i = 0; i < _inputDimensions; i++)
             {
@@ -124,7 +126,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <summary>
-        /// Calculates the mean of each dimension using an <see cref="ILGPU"/> kernal.
+        /// Calculates the mean of each dimension using an <see cref="ILGPU"/> kernel.
         /// </summary>
         public void MeanGPU()
         {
@@ -143,13 +145,13 @@ namespace ConvolutionalNeuralNetwork.Layers
             Synchronize();
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _mean[i] = (Color)_deviceSums[i] / (Infos(i).Area * _batchSize);
+                _mean[i] = (Color)_deviceSums[i] / (Infos(i).Area * (int)_batchSize);
                 _deviceSums[i].Dispose();
             }
         }
 
         /// <summary>
-        /// Normalizes the input <see cref="FeatureMap"/>s using an <see cref="ILGPU"/> kernal.
+        /// Normalizes the input <see cref="FeatureMap"/>s using an <see cref="ILGPU"/> kernel.
         /// </summary>
         public void NormalizeGPU()
         {
@@ -163,7 +165,9 @@ namespace ConvolutionalNeuralNetwork.Layers
                     s_normalizeAction(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j], _deviceValues[i].View);
                 }
             }
-            Synchronize(_inputs);
+            Synchronize();
+            DecrementCacheabble(_inputs);
+
             for (int i = 0; i < _inputDimensions; i++)
             {
                 _deviceValues[i].Dispose();
@@ -230,7 +234,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <summary>
-        /// Calculates the standard deviation of each dimension using an <see cref="ILGPU"/> kernal.
+        /// Calculates the standard deviation of each dimension using an <see cref="ILGPU"/> kernel.
         /// </summary>
         public void VarianceGPU()
         {
@@ -250,16 +254,16 @@ namespace ConvolutionalNeuralNetwork.Layers
             Synchronize();
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _sigma[i] = Color.Pow((Color)_deviceVariances[i] / (Infos(i).Area * _batchSize) + Utility.AsymptoteErrorColor, 0.5f);
+                _sigma[i] = Color.Pow((Color)_deviceVariances[i] / (Infos(i).Area * (int)_batchSize) + Utility.AsymptoteErrorColor, 0.5f);
                 _deviceMeans[i].Dispose();
                 _deviceVariances[i].Dispose();
             }
         }
 
         /// <summary>
-        /// An ILGPU kernal to calculate the gradients for backpropagating the previous layer.
+        /// An ILGPU kernel to calculate the gradients for backpropagating the previous layer.
         /// </summary>
-        /// <param name="index">The index of the current kernal calculation to be made.</param>
+        /// <param name="index">The index of the current kernel calculation to be made.</param>
         /// <param name="input">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the input from the
         /// previous <see cref="Layer"/>.</param>
         /// <param name="inGradient">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the incoming
@@ -270,15 +274,15 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="values">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s used in the equation
         /// to calculate the outGradient.</param>
         /// <param name="info">The <see cref="StaticLayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void BackwardsKernal(Index1D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<Color> outGradient, ArrayView<Color> values)
+        private static void BackwardsKernel(Index1D index, ArrayView<Color> input, ArrayView<Color> inGradient, ArrayView<Color> outGradient, ArrayView<Color> values)
         {
             outGradient[index.X] = (inGradient[index.X] * values[0] + values[1] * (input[index.X] - values[2]) + values[3]).Clip(1);
         }
 
         /// <summary>
-        /// An ILGPU kernal for normalizing a <see cref="FeatureMap"/>.
+        /// An ILGPU kernel for normalizing a <see cref="FeatureMap"/>.
         /// </summary>
-        /// <param name="index">The index of the current kernal calculation to be made.</param>
+        /// <param name="index">The index of the current kernel calculation to be made.</param>
         /// <param name="input">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the input from the
         /// previous <see cref="Layer"/>.</param>
         /// <param name="normalized">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s to set for the outgoing
@@ -286,12 +290,12 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="values">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s used in the equation to
         /// calculate the normalized <see cref="Color"/>.</param>
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void ForwardKernal(Index1D index, ArrayView<Color> input, ArrayView<Color> normalized, ArrayView<Color> values)
+        private static void ForwardKernel(Index1D index, ArrayView<Color> input, ArrayView<Color> normalized, ArrayView<Color> values)
         {
             normalized[index.X] = (input[index.X] - values[0]) * values[1] + values[2];
         }
 
-        private static void GradientsKernal(Index2D index, ArrayView<Color> input, ArrayView<float> inGradient, ArrayView<Color> values, ArrayView<float> gradients)
+        private static void GradientsKernel(Index2D index, ArrayView<Color> input, ArrayView<float> inGradient, ArrayView<Color> values, ArrayView<float> gradients)
         {
             float meanOffset = input[index.X][index.Y] - values[0][index.Y];
             float gradient = inGradient[3 * index.X + index.Y];
@@ -303,12 +307,12 @@ namespace ConvolutionalNeuralNetwork.Layers
             Atomic.Add(ref gradients[index.Y + 6], gradient * meanOffset);
         }
 
-        private static void MeanKernal(Index2D index, ArrayView<Color> input, ArrayView<float> mean)
+        private static void MeanKernel(Index2D index, ArrayView<Color> input, ArrayView<float> mean)
         {
             Atomic.Add(ref mean[index.Y], input[index.X][index.Y]);
         }
 
-        private static void VarianceKernal(Index2D index, ArrayView<Color> input, ArrayView<Color> mean, ArrayView<float> variance)
+        private static void VarianceKernel(Index2D index, ArrayView<Color> input, ArrayView<Color> mean, ArrayView<float> variance)
         {
             float difference = input[index.X][index.Y] - mean[0][index.Y];
             Atomic.Add(ref variance[index.Y], difference * difference);
@@ -348,7 +352,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             /// <summary>
             /// Copies the pixel data from a <see cref="MemoryBuffer1D{T, TStride}"/> of floats.
-            /// Because <see cref="Color"/> cannot be summed atomically on an <see cref="ILGPU"/> kernal, every three floats represents a single
+            /// Because <see cref="Color"/> cannot be summed atomically on an <see cref="ILGPU"/> kernel, every three floats represents a single
             /// <see cref="Color"/> in the gradient. The <see cref="Gradients"/> is then treated as a <see cref="Span{T}"/> of floats, instead of
             /// a struct of <see cref="Color"/>.
             /// </summary>

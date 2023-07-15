@@ -13,7 +13,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     {
         //All FeatureMaps are constant throughout the programs lifetime, and are updated with each pass through the network.
         //Arrays of FeatureMaps are shared between layers as references.
-        protected int _batchSize;
+        protected uint _batchSize;
 
         protected IOBuffers _buffers;
         [JsonProperty] protected int _filterSize;
@@ -44,9 +44,6 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         /// <inheritdoc/>
         [JsonIgnore] public abstract string Name { get; }
-
-        /// <inheritdoc/>
-        [JsonIgnore] public int OutputDimensions => _outputDimensions;
 
         /// <inheritdoc/>
         public abstract void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay);
@@ -87,7 +84,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
-            _batchSize = inputs.GetLength(1);
+            _batchSize = (uint)inputs.GetLength(1);
             _layerInfos = new ILayerInfo[_inputDimensions];
             _outputs = new FeatureMap[_outputDimensions, _batchSize];
 
@@ -140,42 +137,20 @@ namespace ConvolutionalNeuralNetwork.Layers
                 buffers.OutputDimensionArea(i, _outputs[i, 0].Area);
         }
 
-        protected void Synchronize(Cacheable[,] liveMaps1 = null, Cacheable[,] liveMaps2 = null, Cacheable[,] liveMaps3 = null)
+        protected static void DecrementCacheabble(Cacheable[,] caches, uint decrement = 1)
+        {
+            for (int i = 0; i < caches.GetLength(0); i++)
+            {
+                for (int j = 0; j < caches.GetLength(1); j++)
+                {
+                    caches[i, j].DecrementLiveCount(decrement);
+                }
+            }
+        }
+
+        protected static void Synchronize()
         {
             GPUManager.Accelerator.Synchronize();
-            if (liveMaps1 == null)
-                return;
-
-            for (int i = 0; i < liveMaps1.GetLength(0); i++)
-            {
-                for (int j = 0; j < liveMaps1.GetLength(1); j++)
-                {
-                    liveMaps1[i, j].DecrementLiveCount();
-                }
-            }
-
-            if (liveMaps2 == null)
-                return;
-
-            for (int i = 0; i < liveMaps2.GetLength(0); i++)
-            {
-                for (int j = 0; j < liveMaps2.GetLength(1); j++)
-                {
-                    liveMaps2[i, j].DecrementLiveCount();
-                }
-            }
-
-            if (liveMaps3 == null)
-                return;
-
-            for (int i = 0; i < liveMaps3.GetLength(0); i++)
-            {
-                for (int j = 0; j < liveMaps3.GetLength(1); j++)
-                {
-                    liveMaps3[i, j].DecrementLiveCount();
-                }
-            }
-
         }
 
         protected FeatureMap[,] FilterTestSetup(int dimensionMultiplier)

@@ -36,7 +36,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override string Name => "Dropout Layer";
 
-        private static readonly Action<Index2D, ArrayView<float>, ArrayView<int>, ArrayView<float>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<float>, ArrayView<int>, ArrayView<float>>(BackwardsKernal);
+        private static readonly Action<Index2D, ArrayView<float>, ArrayView<int>, ArrayView<float>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<float>, ArrayView<int>, ArrayView<float>>(BackwardsKernel);
 
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
@@ -61,7 +61,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
-        private static readonly Action<Index1D, ArrayView<Color>, ArrayView<int>, ArrayView<Color>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<int>, ArrayView<Color>>(ForwardKernal);
+        private static readonly Action<Index1D, ArrayView<Color>, ArrayView<int>, ArrayView<Color>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<int>, ArrayView<Color>>(ForwardKernel);
 
         /// <inheritdoc/>
         public override void Forward()
@@ -87,7 +87,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
-        private static readonly Action<Index1D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>> s_inferenceAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>>(InferenceKernal);
+        private static readonly Action<Index1D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>> s_inferenceAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>>(InferenceKernel);
 
         /// <summary>
         /// Forward propogates through the <see cref="Dropout"/> layer, but instead of randomly dropping values, it just adjusts
@@ -127,13 +127,13 @@ namespace ConvolutionalNeuralNetwork.Layers
             return _outputs;
         }
 
-        private static void BackwardsKernal(Index2D index, ArrayView<float> inGradient, ArrayView<int> dropout, ArrayView<float> outGradient)
+        private static void BackwardsKernel(Index2D index, ArrayView<float> inGradient, ArrayView<int> dropout, ArrayView<float> outGradient)
         {
             int arrayIndex = index.X * 3 + index.Y;
             outGradient[arrayIndex] = dropout[arrayIndex] == 0 ? 0 : inGradient[arrayIndex];
         }
 
-        private static void ForwardKernal(Index1D index, ArrayView<Color> input, ArrayView<int> dropout, ArrayView<Color> output)
+        private static void ForwardKernel(Index1D index, ArrayView<Color> input, ArrayView<int> dropout, ArrayView<Color> output)
         {
             float r = dropout[3 * index] == 0 ? 0 : input[index].R;
             float g = dropout[3 * index + 1] == 0 ? 0 : input[index].G;
@@ -141,7 +141,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             output[index] = new Color(r, g, b);
         }
 
-        private static void InferenceKernal(Index1D index, ArrayView<Color> input, ArrayView<float> dropoutRate, ArrayView<Color> output)
+        private static void InferenceKernel(Index1D index, ArrayView<Color> input, ArrayView<float> dropoutRate, ArrayView<Color> output)
         {
             output[index] = input[index] * dropoutRate[0];
         }
