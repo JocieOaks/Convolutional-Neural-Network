@@ -1,4 +1,5 @@
-﻿using ConvolutionalNeuralNetwork.Layers;
+﻿using ConvolutionalNeuralNetwork.GPU;
+using ConvolutionalNeuralNetwork.Layers;
 using ILGPU;
 using ILGPU.Runtime;
 
@@ -11,23 +12,16 @@ namespace ConvolutionalNeuralNetwork.DataTypes
     /// </summary>
     public class IOBuffers
     {
-
-        ArrayView<Color>[,] _colors1;
-        ArrayView<Color>[,] _colors2;
-
         ArrayView<float>[,] _floats1;
         ArrayView<float>[,] _floats2;
 
 
         readonly List<(int dimensions, int area)> _outputAllocationPairs = new();
-        public ArrayView<Color>[,] InGradientsColor => _colors1;
         public ArrayView<float>[,] InGradientsFloat => _floats1;
-        public ArrayView<Color>[,] InputsColor => _colors2;
         public ArrayView<float>[,] InputsFloat => _floats2;
-        public ArrayView<Color>[,] OutGradientsColor => _colors2;
         public ArrayView<float>[,] OutGradientsFloat => _floats2;
-        public ArrayView<Color>[,] OutputsColor => _colors1;
         public ArrayView<float>[,] OutputsFloat => _floats1;
+
         public ArrayView<float> FinalOutput(int batchIndex) => _floats1[0, batchIndex];
         public ArrayView<float> FirstGradient(int batchIndex) => _floats1[0, batchIndex];
 
@@ -38,7 +32,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="buffers2">The second <see cref="IOBuffers"/>.</param>
         public static void SetCompliment(IOBuffers buffers1, IOBuffers buffers2)
         {
-            (buffers1._colors2, buffers2._colors2) = (buffers2._colors1, buffers1._colors1);
             (buffers1._floats2, buffers2._floats2) = (buffers2._floats1, buffers1._floats1);
         }
 
@@ -49,19 +42,21 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         public void Allocate(int batchSize)
         {
             int dimensions = _outputAllocationPairs.MaxBy(x => x.dimensions).dimensions;
-            _colors1 = new ArrayView<Color>[dimensions, batchSize];
             _floats1 = new ArrayView<float>[dimensions, batchSize];
+            long memoryUsage = 0;
 
             for (int i = 0; i < dimensions; i++)
             {
                 int area = _outputAllocationPairs.Where(x => x.dimensions > i).MaxBy(x => x.area).area;
                 for (int j = 0; j < batchSize; j++)
                 {
-                    var buffer = GPU.GPUManager.Accelerator.Allocate1D<Color>(area);
-                    _colors1[i, j] = new ArrayView<Color>(buffer, 0, area);
-                    _floats1[i, j] = new ArrayView<float>(buffer, 0, 3 * area);
+                    var buffer = GPUManager.Accelerator.Allocate1D<float>(area);
+                    _floats1[i, j] = new ArrayView<float>(buffer, 0, area);
+                    memoryUsage += area * 4;
                 }
             }
+
+            GPUManager.AddExternalMemoryUsage(memoryUsage);
         }
 
         /// <summary>
@@ -73,7 +68,5 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         {
             _outputAllocationPairs.Add((dimensions + 1, area));
         }
-
-        
     }
 }

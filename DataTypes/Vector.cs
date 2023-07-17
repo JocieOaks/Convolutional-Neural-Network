@@ -1,14 +1,17 @@
-﻿using ILGPU;
+﻿using ConvolutionalNeuralNetwork.GPU;
+using ILGPU;
 using ILGPU.Runtime;
+using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.DataTypes
 {
     /// <summary>
     /// The <see cref="Vector"/> class stores an array of floats for performing vector mathematics.
     /// </summary>
-    public class Vector
+    [Serializable]
+    public class Vector : Cacheable<float>
     {
-        private readonly float[] _values;
+        [JsonProperty] private readonly float[] _values;
 
         /// <summary>
         /// Initializes a new <see cref="Vector"/> using an array of floats.
@@ -28,6 +31,8 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             _values = new float[length];
         }
 
+        private Vector() { }
+
         /// <value>The number of dimensions of the <see cref="Vector"/>.</value>
         public int Length => _values.Length;
 
@@ -45,6 +50,8 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 return MathF.Sqrt(sum);
             }
         }
+
+        public override long MemorySize => Length * 4;
 
         /// <summary>
         /// Indexes the <see cref="Vector"/> retrieving the value at the desired index.
@@ -110,38 +117,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return vector * scaler;
         }
 
-        public static bool operator ==(Vector v1, Vector v2)
-        {
-            if (v1 is null)
-                return v2 is null;
-
-            if (v1.Length != v2.Length)
-                return false;
-
-            for(int i = 0; i < v1.Length; i++)
-            {
-                if (MathF.Abs(v1[i] - v2[i]) > 1e-6)
-                    return false;
-            }
-            return true;
-        }
-
-        public static bool operator !=(Vector v1, Vector v2)
-        {
-            if (v1 is null)
-                return v2 is null;
-
-            if (v1.Length != v2.Length)
-                return true;
-
-            for (int i = 0; i < v1.Length; i++)
-            {
-                if (MathF.Abs(v1[i] - v2[i]) > 1e-6)
-                    return true;
-            }
-            return false;
-        }
-
         /// <summary>
         /// Sums two <see cref="Vector"/>s.
         /// </summary>
@@ -180,7 +155,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return this * (1 / magnitude);
         }
 
-        public void SyncCPU(ArrayView<float> arrayView)
+        public override void SyncCPU(ArrayView<float> arrayView)
         {
             arrayView.SubView(0, Length).CopyToCPU(_values);
         }
@@ -188,6 +163,85 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         public void CopyToBuffer(ArrayView<float> arrayView)
         {
             arrayView.SubView(0, Length).CopyFromCPU(_values);
+        }
+
+        public override void DeCache()
+        {
+            // If the tensor is not cached - it's technically already decached
+            if (ID == 0)
+                return;
+
+            // If the tensor is live - Fail
+            if (LiveCount != 0)
+                return;
+
+            // Else Decache
+            SyncCPU();
+            ID = GPUManager.GCItem(ID);
+        }
+
+        public override void SyncCPU()
+        {
+            if (ID == 0)
+                return;
+
+            MemoryBuffer buffer = GetBuffer();
+
+            if (buffer != null)
+                SyncCPU(buffer);
+        }
+
+        public override void SyncCPU(MemoryBuffer buffer)
+        {
+            buffer.AsArrayView<float>(0, Length).CopyToCPU(_values);
+        }
+
+        public ArrayView<T> GetArrayViewEmpty<T>() where T : unmanaged
+        {
+            IncrementLiveCount();
+            MemoryBuffer buffer = GetBuffer();
+            if (buffer == null)
+            {
+                (ID, buffer) = GPUManager.AllocateEmpty<float>(this, Length);
+            }
+            int bytes = Interop.SizeOf<T>();
+            return new ArrayView<T>(buffer, 0, 4 * Length / bytes);
+        }
+
+        public ArrayView<T> GetArrayView<T>() where T : unmanaged
+        {
+            IncrementLiveCount();
+            MemoryBuffer buffer = GetBuffer();
+            if (buffer == null)
+            {
+                (ID, buffer) = GPUManager.Allocate(this);
+            }
+            int bytes = Interop.SizeOf<T>();
+            return new ArrayView<T>(buffer, 0, 4 * Length / bytes);
+        }
+
+        public ArrayView<T> GetArrayViewZeroed<T>() where T : unmanaged
+        {
+            ArrayView<T> arrayView = GetArrayView<T>();
+            arrayView.MemSetToZero();
+            return arrayView;
+        }
+
+        public override float[] GetValues()
+        {
+            return _values;
+        }
+
+        public void UpdateIfAllocated()
+        {
+            if (ID == 0)
+                return;
+
+            MemoryBuffer buffer = GetBuffer();
+            if (buffer == null)
+                return;
+
+            buffer.AsArrayView<float>(0, Length).CopyFromCPU(_values);
         }
     }
 }

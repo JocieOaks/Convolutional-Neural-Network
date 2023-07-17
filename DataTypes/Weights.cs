@@ -9,23 +9,23 @@ namespace ConvolutionalNeuralNetwork.DataTypes
     [Serializable]
     public class Weights
     {
-        [JsonProperty] private ColorVector _weights;
-        [JsonProperty] private Color[] _filter;
-        private ColorVector _gradient;
-        [JsonProperty] private readonly Color[] _firstMoment;
-        [JsonProperty] private readonly Color[] _secondMoment;
+        [JsonProperty] private Vector _weights;
+        [JsonProperty] private float[] _filter;
+        private Vector _gradient;
+        [JsonProperty] private readonly float[] _firstMoment;
+        [JsonProperty] private readonly float[] _secondMoment;
 
-        public Color this[int index]
+        public float this[int index]
         {
             get => _weights[index];
         }
 
-        public void SetWeights(int index, Color color)
+        public void SetWeights(int index, float color)
         {
             _weights[index] = color;
         }
 
-        public void SetGradient(int index, Color color, float learningRate, float firstMomentDecay, float secondMomentDecay, float clip = 0.5f)
+        public void SetGradient(int index, float color, float learningRate, float firstMomentDecay, float secondMomentDecay, float clip = 0.1f)
         {
             _gradient[index] = color;
 
@@ -36,30 +36,30 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
         public Weights(int length, float mean, float stdDev)
         {
-            _weights = new ColorVector(length);
+            _weights = new Vector(length);
 
             for(int i = 0; i < length; i++)
             {
-                _weights[i] = Color.RandomGauss(mean, stdDev);
+                _weights[i] = Utility.RandomGauss(mean, stdDev);
             }
 
-            _gradient = new ColorVector(length);
-            _firstMoment = new Color[length];
-            _secondMoment = new Color[length];
+            _gradient = new Vector(length);
+            _firstMoment = new float[length];
+            _secondMoment = new float[length];
         }
 
-        public Weights(int length, Color color)
+        public Weights(int length, float color)
         {
-            _weights = new ColorVector(length);
+            _weights = new Vector(length);
 
             for (int i = 0; i < length; i++)
             {
                 _weights[i] = color;
             }
 
-            _gradient = new ColorVector(length);
-            _firstMoment = new Color[length];
-            _secondMoment = new Color[length];
+            _gradient = new Vector(length);
+            _firstMoment = new float[length];
+            _secondMoment = new float[length];
         }
 
         [JsonConstructor] private Weights() { }
@@ -69,29 +69,29 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         {
             if(_filter != null)
             {
-                _weights = new ColorVector(_filter);
+                _weights = new Vector(_filter);
                 _filter = null;
             }
-            _gradient = new ColorVector(Length);
+            _gradient = new Vector(Length);
         }
 
         public void Reset(float mean, float stdDev)
         {
             for (int i = 0; i < Length; i++)
             {
-                _weights[i] = Color.RandomGauss(mean, stdDev);
-                _firstMoment[i] = Color.Zero;
-                _secondMoment[i] = Color.Zero;
+                _weights[i] = Utility.RandomGauss(mean, stdDev);
+                _firstMoment[i] = 0;
+                _secondMoment[i] = 0;
             }
         }
 
-        public void Reset(Color color)
+        public void Reset(float value)
         {
             for (int i = 0; i < Length; i++)
             {
-                _weights[i] = color;
-                _firstMoment[i] = Color.Zero;
-                _secondMoment[i] = Color.Zero;
+                _weights[i] = value;
+                _firstMoment[i] = 0;
+                _secondMoment[i] = 0;
             }
         }
 
@@ -135,15 +135,15 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
         private void UpdateWeightsAtIndex(int index, float learningRate, float firstMomentDecay, float secondMomentDecay, float clip)
         {
-            Color gradient = _gradient[index].Clip(clip);
-            Color first = _firstMoment[index] = firstMomentDecay * _firstMoment[index] + (1 - firstMomentDecay) * gradient;
-            Color second = _secondMoment[index] = secondMomentDecay * _secondMoment[index] + (1 - secondMomentDecay) * Color.Pow(gradient, 2);
-            _weights[index] -= learningRate * first / (Color.Pow(second, 0.5f) + Utility.AsymptoteErrorColor);
+            float gradient = Math.Clamp(_gradient[index], -clip, clip);
+            float first = _firstMoment[index] = firstMomentDecay * _firstMoment[index] + (1 - firstMomentDecay) * gradient;
+            float second = _secondMoment[index] = secondMomentDecay * _secondMoment[index] + (1 - secondMomentDecay) * MathF.Pow(gradient, 2);
+            _weights[index] -= learningRate * first / (MathF.Pow(second, 0.5f) + Utility.ASYMPTOTEERRORCORRECTION);
         }
 
         public void TestFilterGradient(Layer layer, FeatureMap[,] inputs, FeatureMap output, int outputIndex, IOBuffers buffer)
         {
-            int inputDimensions = inputs.GetLength(0);
+            /*int inputDimensions = inputs.GetLength(0);
 
             for (int i = 0; i < inputDimensions; i++)
             {
@@ -158,7 +158,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
             for (int i = 0; i < inputDimensions; i++)
             {
-                inputs[i, 0].CopyToBuffer(buffer.InputsColor[i, 0]);
+                inputs[i, 0].CopyToBuffer(buffer.InputsFloat[i, 0]);
             }
 
             layer.Forward();
@@ -206,7 +206,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                     Console.WriteLine($"Expected Gradient: {_gradient[i][k]:f4} \t Test Gradient: {testGradient:f4}");
                     _weights[i] -= hColor;
                 }
-            }
+            }*/
         }
     }
 }

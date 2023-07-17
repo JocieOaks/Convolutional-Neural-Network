@@ -206,6 +206,7 @@ namespace ConvolutionalNeuralNetwork.GPU
         private void UpdateMemoryUsage(long size) => Interlocked.Add(ref _memoryUsed, size);
         public void AddLiveTask() => Interlocked.Increment(ref _liveObjectCount);
         public void SubtractLiveTask() => Interlocked.Decrement(ref _liveObjectCount);
+        public void AddExternalMemoryUsage(long size) => Interlocked.Add(ref _memoryUsed, size);
 
         public (uint, MemoryBuffer) UpdateBuffer<T>(Cacheable<T> cacheable, Accelerator accelerator) where T : unmanaged
         {

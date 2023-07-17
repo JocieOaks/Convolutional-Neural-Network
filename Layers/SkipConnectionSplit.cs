@@ -1,6 +1,7 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using ILGPU;
 using ILGPU.Runtime;
+using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers
@@ -16,6 +17,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         private FeatureMap[,] _inGradientSecondary;
         private SkipConnectionConcatenate _concatenationLayer;
+        private FeatureMap[,] _outputs;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SkipConnectionSplit"/> class.
@@ -36,17 +38,17 @@ namespace ConvolutionalNeuralNetwork.Layers
             return _concatenationLayer;
         }
 
-        private static readonly Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>>(BackwardsKernel);
+        private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(BackwardsKernel);
 
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
             for (int i = 0; i < _inputDimensions; i++)
             {
-                Index2D index = new(Infos(i).Area, 3);
+                Index1D index = new(Infos(i).Area);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    s_backwardsAction(index, _buffers.InGradientsColor[i, j], _inGradientSecondary[i, j].GetArrayView<Color>(), _buffers.OutGradientsFloat[i, j]);
+                    s_backwardsAction(index, _buffers.InGradientsFloat[i, j], _inGradientSecondary[i, j].GetArrayView<float>(), _buffers.OutGradientsFloat[i, j]);
                 }
             }
             Synchronize();
@@ -60,8 +62,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(Infos(i).Area);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    GPU.GPUManager.CopyAction(index, _buffers.InputsColor[i, j], _outputs[i, j].GetArrayViewEmpty<Color>());
-                    GPU.GPUManager.CopyAction(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j]);
+                    GPU.GPUManager.CopyAction(index, _buffers.InputsFloat[i, j], _outputs[i, j].GetArrayViewEmpty<float>());
+                    GPU.GPUManager.CopyAction(index, _buffers.InputsFloat[i, j], _buffers.OutputsFloat[i, j]);
                 }
             }
 
@@ -75,34 +77,43 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override FeatureMap[,] Startup(FeatureMap[,] inputs, IOBuffers buffers)
+        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, uint batchSize)
         {
-            _outputDimensions = _inputDimensions = inputs.GetLength(0);
+            _outputDimensions = _inputDimensions = inputShapes.GetLength(0);
             _buffers = buffers;
 
-            _batchSize = (uint)inputs.GetLength(1);
+            _batchSize = (uint)inputShapes.GetLength(1);
             _layerInfos = new ILayerInfo[_inputDimensions];
             for (int i = 0; i < _inputDimensions; i++)
             {
                 _layerInfos[i] = new StaticLayerInfo()
                 {
-                    Width = inputs[i, 0].Width,
-                    Length = inputs[i, 0].Length,
+                    Width = inputShapes[i].Width,
+                    Length = inputShapes[i].Length,
                 };
             }
 
-            _outputs = inputs;
+            _outputShapes = inputShapes;
+
+            _outputs = new FeatureMap[_inputDimensions, batchSize];
+            for (int i = 0; i < _outputDimensions; i++)
+            {
+                for (int j = 0; j < batchSize; j++)
+                {
+                    _outputs[i, j] = new FeatureMap(_outputShapes[i]);
+                }
+            }
 
             _inGradientSecondary = new FeatureMap[_outputDimensions, _batchSize];
 
             _concatenationLayer.Connect(_outputs, _inGradientSecondary);
 
-            return inputs;
+            return inputShapes;
         }
 
-        private static void BackwardsKernel(Index2D index, ArrayView<Color> inGradient1, ArrayView<Color> inGradient2, ArrayView<float> outGradient)
+        private static void BackwardsKernel(Index1D index, ArrayView<float> inGradient1, ArrayView<float> inGradient2, ArrayView<float> outGradient)
         {
-            outGradient[index.X * 3 + index.Y] = inGradient1[index.X][index.Y] + inGradient2[index.X][index.Y];
+            outGradient[index.X] = inGradient1[index.X] + inGradient2[index.X];
         }
 
         /// <summary>

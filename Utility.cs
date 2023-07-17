@@ -29,7 +29,7 @@ namespace ConvolutionalNeuralNetwork
         /// <param name="layer">The <see cref="Layer"/> to be tested.</param>
         public static void GradientCheck(ILayer layer, int dimensionMultiplier, int inputSize)
         {
-            int outputDimensions, inputDimensions;
+            /*int outputDimensions, inputDimensions;
             if (dimensionMultiplier >= 1)
             {
                 inputDimensions = 1;
@@ -42,9 +42,11 @@ namespace ConvolutionalNeuralNetwork
             }
 
             FeatureMap[,] inputs = new FeatureMap[inputDimensions, 1];
+            Shape[] inputShapes = new Shape[inputDimensions];
             for (int i = 0; i < inputDimensions; i++)
             {
                 inputs[i, 0] = new(inputSize, inputSize);
+                inputShapes[i] = new Shape(inputSize, inputSize);
                 for (int j = 0; j < inputSize; j++)
                 {
                     for (int k = 0; k < inputSize; k++)
@@ -56,9 +58,14 @@ namespace ConvolutionalNeuralNetwork
 
             IOBuffers buffer = new();
             IOBuffers complimentBuffer = new();
-            complimentBuffer.OutputDimensionArea(inputDimensions - 1, 9);
+            complimentBuffer.OutputDimensionArea(inputDimensions - 1, inputSize * inputSize);
 
-            FeatureMap[,] outputs = layer.Startup(inputs, buffer);
+            Shape[] outputShapes = layer.Startup(inputShapes, buffer, 1);
+            FeatureMap[] outputs = new FeatureMap[outputDimensions];
+            for(int i = 0; i < outputDimensions;i++)
+            {
+                outputs[i] = new FeatureMap(outputShapes[i]);
+            }
             buffer.Allocate(1);
             complimentBuffer.Allocate(1);
             IOBuffers.SetCompliment(buffer, complimentBuffer);
@@ -70,15 +77,15 @@ namespace ConvolutionalNeuralNetwork
             layer.Forward();
             for (int i = 0; i < outputDimensions; i++)
             {
-                outputs[i, 0].SyncCPU(buffer.OutputsColor[i, 0]);
-                new FeatureMap(outputs[i, 0].Width, outputs[i, 0].Length, Color.One).CopyToBuffer(buffer.InGradientsColor[i, 0]);
+                outputs[i].SyncCPU(buffer.OutputsColor[i, 0]);
+                new FeatureMap(outputs[i].Width, outputs[i].Length, Color.One).CopyToBuffer(buffer.InGradientsColor[i, 0]);
             }
 
             layer.Backwards(1, 1, 1);
             FeatureMap[] outGradients = new FeatureMap[inputDimensions];
             for (int i = 0; i < inputDimensions; i++)
             {
-                outGradients[i] = new FeatureMap(inputSize, 3);
+                outGradients[i] = new FeatureMap(inputSize, inputSize);
                 outGradients[i].SyncCPU(buffer.OutGradientsColor[i, 0]);
             }
 
@@ -86,7 +93,7 @@ namespace ConvolutionalNeuralNetwork
             for (int i = 0; i < outputDimensions; i++)
             {
 
-                testOutput[i] = new(outputs[i, 0].Width, outputs[i, 0].Length);
+                testOutput[i] = new(outputs[i].Width, outputs[i].Length);
             }
 
             float h = 0.001f;
@@ -126,7 +133,7 @@ namespace ConvolutionalNeuralNetwork
                                     {
                                         for (int l2 = 0; l2 < 3; l2++)
                                         {
-                                            testGradient += (testOutput[i2][j2, k2][l2] - outputs[i2, 0][j2, k2][l2]) / h;
+                                            testGradient += (testOutput[i2][j2, k2][l2] - outputs[i2][j2, k2][l2]) / h;
                                         }
                                     }
                                 }
@@ -136,7 +143,107 @@ namespace ConvolutionalNeuralNetwork
                         }
                     }
                 }
+            }*/
+        }
+
+        /// <summary>
+        /// Tests whether the backpropogation of a <see cref="Layer"/> is accurate to it's expected value. Used to diagnose issues with a <see cref="Layer"/>s
+        /// propagation.
+        /// </summary>
+        /// <param name="layer">The <see cref="Layer"/> to be tested.</param>
+        public static void GradientCheckFinalLayer(FinalLayer layer, int outputSize, int inputSize, int inputDimensions)
+        {
+           /* FeatureMap[,] inputs = new FeatureMap[inputDimensions, 1];
+            Shape[] inputShapes = new Shape[inputDimensions];
+            for (int i = 0; i < inputDimensions; i++)
+            {
+                inputs[i, 0] = new(inputSize, inputSize);
+                inputShapes[i] = new Shape(inputSize, inputSize);
+                for (int j = 0; j < inputSize; j++)
+                {
+                    for (int k = 0; k < inputSize; k++)
+                    {
+                        inputs[i, 0][j, k] = (i + 1) * new Color(j, k, j - k);
+                    }
+                }
             }
+
+            IOBuffers buffer = new();
+            IOBuffers complimentBuffer = new();
+            complimentBuffer.OutputDimensionArea(inputDimensions - 1, inputSize * inputSize);
+
+            layer.Startup(inputShapes, buffer, 1);
+            buffer.Allocate(1);
+            complimentBuffer.Allocate(1);
+            IOBuffers.SetCompliment(buffer, complimentBuffer);
+            for (int i = 0; i < inputDimensions; i++)
+            {
+                inputs[i, 0].CopyToBuffer(buffer.InputsColor[i, 0]);
+            }
+
+            layer.Forward();
+            Vector output = new Vector(outputSize);
+
+            output.SyncCPU(buffer.FinalOutput(0));
+            Vector gradient = new Vector(outputSize);
+            for (int i = 0; i < outputSize; i++)
+                gradient[i] = 1;
+
+            gradient.CopyToBuffer(buffer.FirstGradient(0));
+           
+
+            layer.Backwards(1, 1, 1);
+            FeatureMap[] outGradients = new FeatureMap[inputDimensions];
+            for (int i = 0; i < inputDimensions; i++)
+            {
+                outGradients[i] = new FeatureMap(inputSize, inputSize);
+                outGradients[i].SyncCPU(buffer.OutGradientsColor[i, 0]);
+            }
+
+            Vector testOutput = new(outputSize);
+
+            float h = 0.01f;
+
+            for (int i = 0; i < inputDimensions; i++)
+            {
+                for (int j = 0; j < inputSize; j++)
+                {
+                    for (int k = 0; k < inputSize; k++)
+                    {
+                        for (int l = 0; l < 3; l++)
+                        {
+                            Color hColor = l switch
+                            {
+                                0 => new Color(h, 0, 0),
+                                1 => new Color(0, h, 0),
+                                2 => new Color(0, 0, h)
+                            };
+
+                            inputs[i, 0][j, k] += hColor;
+                            for (int i2 = 0; i2 < inputDimensions; i2++)
+                            {
+                                inputs[i2, 0].CopyToBuffer(buffer.InputsColor[i2, 0]);
+                            }
+
+                            layer.Forward();
+
+
+
+                            float testGradient = 0;
+
+                                testOutput.SyncCPU(buffer.FinalOutput(0));
+
+                            for(int i2 = 0; i2 < outputSize; i2++)
+                            {
+                                testGradient += (testOutput[i2] - output[i2]) / h;
+                            }
+
+                            Console.WriteLine($"Expected Gradient: {outGradients[i][j, k][l]:f4} \t Test Gradient: {testGradient:f4}");
+                            inputs[i, 0][j, k] -= hColor;
+                        }
+                    }
+                }
+            }*/
         }
 
         /// <summary>

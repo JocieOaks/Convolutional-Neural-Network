@@ -44,8 +44,7 @@ namespace ConvolutionalNeuralNetwork.Design
                 yield return layer switch
                 {
                     NormalizationLayers.Activation => new ReLUActivation(),
-                    NormalizationLayers.BatchNormalization => new BatchNormalization(),
-                    NormalizationLayers.Dropout => new Dropout(_dropoutRate)
+                    NormalizationLayers.BatchNormalization => new BatchNormalization()
                 };
             }
         }

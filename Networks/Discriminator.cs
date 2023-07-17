@@ -3,6 +3,7 @@ using ConvolutionalNeuralNetwork.Layers;
 using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
+using System.Reflection.Emit;
 
 namespace ConvolutionalNeuralNetwork.Networks
 {
@@ -37,18 +38,15 @@ namespace ConvolutionalNeuralNetwork.Networks
             {
                 try
                 {
-                    string dataToLoad = "";
-                    using (FileStream stream = new(file, FileMode.Open))
+                    using (StreamReader r = new(file))
                     {
-                        using (StreamReader read = new(stream))
+                        using (JsonReader reader = new JsonTextReader(r))
                         {
-                            dataToLoad = read.ReadToEnd();
+                            JsonSerializer serializer = new();
+                            serializer.TypeNameHandling = TypeNameHandling.Auto;
+                            discriminator = serializer.Deserialize<Discriminator>(reader);
                         }
                     }
-                    discriminator = JsonConvert.DeserializeObject<Discriminator>(dataToLoad, new JsonSerializerSettings
-                    {
-                        TypeNameHandling = TypeNameHandling.Auto
-                    });
                 }
                 catch (Exception e)
                 {
@@ -91,7 +89,7 @@ namespace ConvolutionalNeuralNetwork.Networks
             _updateStep++;
             float correctionLearningRate = CorrectionLearningRate(learningRate, _firstMomentDecay, _secondMomentDecay);
 
-            Vector[] sigmoidGradients = Sigmoid.Backward(_finalOutput, _imageVectorsNorm, gradients);
+            Vector[] sigmoidGradients = Sigmoid.Backward(_finalOutput, gradients);
 
             for (int i = 0; i < _batchSize; i++)
             {
@@ -119,23 +117,16 @@ namespace ConvolutionalNeuralNetwork.Networks
         /// </summary>
         /// <param name="input">The images and their asscoiated labels.</param>
         /// <param name="inference">Determines whether the <see cref="Discriminator"/> is training or inferring. Defaults to false.</param>
-        public void Forward(ImageInput[] input, bool inference = false)
+        public void Forward(ImageInput[] input)
         {
             for (int i = 0; i < _batchSize; i++)
             {
-                input[i].Image.CopyToBuffer(_startBuffer.InputsColor[0, i]);
+                input[i].Image.CopyToBuffer(_startBuffer.InputsFloat[0, i]);
             }
 
             for (int j = 0; j < Depth; j++)
             {
-                if (inference && _layers[j] is Dropout)
-                {
-                    Utility.StopWatch(() => (_layers[j] as Dropout).ForwardInference(), $"Forwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
-                }
-                else
-                {
-                    Utility.StopWatch(() => _layers[j].Forward(), $"Forwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
-                }
+                Utility.StopWatch(() => _layers[j].Forward(), $"Forwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
             }
 
             for(int i = 0; i < _batchSize; i++)
@@ -162,7 +153,7 @@ namespace ConvolutionalNeuralNetwork.Networks
             FeatureMap[,] gradient = new FeatureMap[1, _batchSize];
             for (int i = 0; i < _batchSize; i++)
             {
-                _finalOutGradient[0, i].SyncCPU(_startBuffer.InputsColor[0, i]);
+                _finalOutGradient[0, i].SyncCPU(_startBuffer.InputsFloat[0, i]);
                 gradient[0, i] = _finalOutGradient[0, i];
             }
 
@@ -176,29 +167,32 @@ namespace ConvolutionalNeuralNetwork.Networks
         }
 
         ///<inheritdoc/>
-        public override void StartUp(int batchSize, int width, int length, int descriptionBools, int descriptionFloats, float learningRate, float firstDecay, float secondDecay)
+        public override void StartUp(int batchSize, int width, int length, int labelBools, int labelFloats, float learningRate, float firstDecay, float secondDecay)
         {
-            base.StartUp(batchSize, width, length, descriptionBools, descriptionFloats, learningRate, firstDecay, secondDecay);
+            base.StartUp(batchSize, width, length, labelBools, labelFloats, learningRate, firstDecay, secondDecay);
 
-            _layers.Add(new Dense(descriptionBools + descriptionFloats));
+            if(_layers.Count == 0 || _layers.Last() is not FinalLayer)
+            {
+                _layers.Add(new Dense(labelFloats + labelBools));
+            }
 
-            FeatureMap[,] current = new FeatureMap[1, batchSize];
+            Shape[] current = new Shape[1];
+            current[0] = new Shape(width, length);
             _finalOutGradient = new FeatureMap[1, batchSize];
             _finalOutput = new Vector[_batchSize];
             for (int j = 0; j < batchSize; j++)
             {
-                current[0, j] = new FeatureMap(width, length);
                 _finalOutGradient[0,j] = new FeatureMap(width, length);
-                _finalOutput[j] = new Vector(descriptionFloats +  descriptionFloats);
+                _finalOutput[j] = new Vector(labelBools + labelFloats);
             }
 
-            IOBuffers inputBuffers = _startBuffer = new IOBuffers();
-            IOBuffers outputBuffers = new IOBuffers();
+            IOBuffers inputBuffers = _startBuffer = new();
+            IOBuffers outputBuffers = new();
             outputBuffers.OutputDimensionArea(1, width * length);
 
             foreach (var layer in _layers)
             {
-                current = layer.Startup(current, inputBuffers);
+                current = layer.Startup(current, inputBuffers, (uint)batchSize);
                 (inputBuffers, outputBuffers) = (outputBuffers, inputBuffers);
             }
 
@@ -280,11 +274,19 @@ namespace ConvolutionalNeuralNetwork.Networks
         private (float, Vector) CrossEntropyLoss(ImageInput input, Vector vector, float sign)
         {
             Vector classificationVector = VectorizeLabel(input.Bools, input.Floats);
+            float loss;
+            Vector gradient;
             float score = Vector.Dot(vector, classificationVector);
-            float angle = MathF.Acos(sign * score) / MathF.PI;
-            float loss = -MathF.Log(angle);
-            Vector gradient = sign / (angle * MathF.Sqrt(1 - score * score)) * classificationVector;
-
+            if (sign == 1)
+            {
+                loss = -MathF.Log(score + Utility.ASYMPTOTEERRORCORRECTION);
+                gradient = (-1 / score) * classificationVector;
+            }
+            else
+            {
+                loss = -MathF.Log(1 - score + Utility.ASYMPTOTEERRORCORRECTION);
+                gradient = (1 / (1 - score)) * classificationVector;
+            }
             return (loss, gradient);
         }
 

@@ -12,10 +12,12 @@ namespace ConvolutionalNeuralNetwork.Layers
     public abstract class FinalLayer : ILayer
     {
         protected uint _batchSize;
-        protected int _outputUnits;
+        [JsonProperty] protected int _outputUnits;
         protected IOBuffers _buffers;
         protected int _inputDimensions;
         protected ILayerInfo[] _layerInfos;
+        protected Shape[] _inputShapes;
+        protected Shape[] _outputShapes;
 
         protected FinalLayer(int outputUnits)
         {
@@ -28,29 +30,33 @@ namespace ConvolutionalNeuralNetwork.Layers
         public abstract void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay);
         public abstract void Forward();
         public abstract void Reset();
-        public abstract FeatureMap[,] Startup(FeatureMap[,] inputs, IOBuffers buffers);
+        public abstract Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, uint batchSize);
 
-        protected void BaseStartup(FeatureMap[,] inputs, IOBuffers buffers)
+        protected void BaseStartup(Shape[] inputShapes, IOBuffers buffers, uint batchSize)
         {
-            _inputDimensions = inputs.GetLength(0);
+            _inputDimensions = inputShapes.Length;
 
-            _batchSize = (uint)inputs.GetLength(1);
+            _batchSize = (uint)batchSize;
             _layerInfos = new ILayerInfo[_inputDimensions];
+            _inputShapes = inputShapes;
 
             for (int i = 0; i < _inputDimensions; i++)
             {
-                _layerInfos[i] = new StaticLayerInfo()
+                _layerInfos[i] = new LayerInfo()
                 {
-                    Width = inputs[i, 0].Width,
-                    Length = inputs[i, 0].Length,
+                    InputWidth = inputShapes[i].Width,
+                    InputLength = inputShapes[i].Length,
                 };
             }
+
+            _outputShapes = new Shape[1];
+            _outputShapes[0] = new Shape(1, _outputUnits);
 
             _buffers = buffers;
             buffers.OutputDimensionArea(0, _outputUnits);
         }
 
-        protected void DecrementCacheabble(Cacheable[,] caches, uint decrement = 1)
+        protected static void DecrementCacheabble(Cacheable[,] caches, uint decrement = 1)
         {
             for (int i = 0; i < caches.GetLength(0); i++)
             {
@@ -61,7 +67,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
-        protected void Synchronize()
+        protected static void Synchronize()
         {
             GPUManager.Accelerator.Synchronize();
         }

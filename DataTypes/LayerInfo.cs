@@ -67,6 +67,8 @@
         /// <inheritdoc/>
         public int Stride { get; init; }
 
+        public int Padding { get; init; }
+
         /// <summary>
         /// Calculates the single dimensional array index for a flattened output <see cref="FeatureMap"/>.
         /// </summary>
@@ -86,10 +88,10 @@
         /// <returns>Returns the index corresponding to (<paramref name="x"/>, <paramref name="y"/>).</returns>
         public bool TryGetInputIndex(int strideX, int x, int strideY, int y, out int index)
         {
-            x += strideX * Stride;
-            y += strideY * Stride;
+            x += strideX * Stride - Padding;
+            y += strideY * Stride - Padding;
             index = y * InputWidth + x;
-            return x < InputWidth && y < InputLength;
+            return x > 0 && y > 0 && x < InputWidth && y < InputLength;
         }
 
         /// <summary>
@@ -133,6 +135,8 @@
         /// <inheritdoc/>
         public int Stride { get; init; }
 
+        public int Padding { get; init; }
+
         /// <summary>
         /// Calculates the single dimensional array index for a flattened output <see cref="FeatureMap"/>.
         /// </summary>
@@ -150,11 +154,12 @@
         /// <param name="x">The x coordinate of the desired index.</param>
         /// <param name="y">The y coordinate of the desired index.</param>
         /// <returns>Returns the index corresponding to (<paramref name="x"/>, <paramref name="y"/>).</returns>
-        public int OutputIndex(int strideX, int x, int strideY, int y)
+        public bool TryGetOutputIndex(int strideX, int x, int strideY, int y, out int index)
         {
-            x += strideX * Stride;
-            y += strideY * Stride;
-            return y * OutputWidth + x;
+            x += strideX * Stride - Padding;
+            y += strideY * Stride - Padding;
+            index = y * OutputWidth + x;
+            return x > 0 && y > 0 && x < OutputWidth  && y < OutputLength;
         }
 
         /// <summary>

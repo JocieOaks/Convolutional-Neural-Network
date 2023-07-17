@@ -33,7 +33,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(_layerInfos[i].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    GPU.GPUManager.CopyAction(index, _buffers.InGradientsColor[i, j], _buffers.OutGradientsColor[i, j]);
+                    GPU.GPUManager.CopyAction(index, _buffers.InGradientsFloat[i, j], _buffers.OutGradientsFloat[i, j]);
                 }
             }
 
@@ -42,7 +42,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(_layerInfos[i + _inputDimensions].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    GPU.GPUManager.CopyAction(index, _buffers.InGradientsColor[_inputDimensions + i, j], _outGradientsSecondary[i, j].GetArrayViewEmpty<Color>());
+                    GPU.GPUManager.CopyAction(index, _buffers.InGradientsFloat[_inputDimensions + i, j], _outGradientsSecondary[i, j].GetArrayViewEmpty<float>());
                 }
             }
             Synchronize();
@@ -81,7 +81,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(_layerInfos[i].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    GPU.GPUManager.CopyAction(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j]);
+                    GPU.GPUManager.CopyAction(index, _buffers.InputsFloat[i, j], _buffers.OutputsFloat[i, j]);
                 }
             }
 
@@ -90,7 +90,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(_layerInfos[i + _inputDimensions].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    GPU.GPUManager.CopyAction(index, _inputsSecondary[i, j].GetArrayView<Color>(), _buffers.OutputsColor[_inputDimensions + i, j]);
+                    GPU.GPUManager.CopyAction(index, _inputsSecondary[i, j].GetArrayView<float>(), _buffers.OutputsFloat[_inputDimensions + i, j]);
                 }
             }
 
@@ -104,28 +104,25 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override FeatureMap[,] Startup(FeatureMap[,] inputs, IOBuffers buffers)
+        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, uint batchSize)
         {
-            _inputDimensions = inputs.GetLength(0);
+            _inputDimensions = inputShapes.Length;
             _outputDimensions = _inputDimensions + _secondaryDimensions;
 
-            _outputs = new FeatureMap[_outputDimensions, _batchSize];
+            _outputShapes = new Shape[_outputDimensions];
 
             _layerInfos = new ILayerInfo[_inputDimensions + _secondaryDimensions];
             for (int i = 0; i < _inputDimensions; i++)
             {
                 StaticLayerInfo layer = new StaticLayerInfo()
                 {
-                    Width = inputs[i, 0].Width,
-                    Length = inputs[i, 0].Length,
+                    Width = inputShapes[i].Width,
+                    Length = inputShapes[i].Length,
                 };
 
                 _layerInfos[i] = layer;
 
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _outputs[i, j] = new FeatureMap(layer.Width, layer.Length);
-                }
+                _outputShapes[i] = new Shape(layer.Width, layer.Length);
             }
 
             for (int i = 0; i < _secondaryDimensions; i++)
@@ -136,17 +133,14 @@ namespace ConvolutionalNeuralNetwork.Layers
                     Length = _inputsSecondary[i, 0].Length
                 };
                 _layerInfos[i + _inputDimensions] = layer;
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _outputs[_inputDimensions + i, j] = new FeatureMap(layer.Width, layer.Length);
-                }
+                _outputShapes[_inputDimensions + i] = new Shape(layer.Width, layer.Length);
             }
 
             _buffers = buffers;
             for (int i = 0; i < _outputDimensions; i++)
-                buffers.OutputDimensionArea(i, _outputs[i, 0].Area);
+                buffers.OutputDimensionArea(i, _outputShapes[i].Area);
 
-            return _outputs;
+            return _outputShapes;
         }
     }
 }

@@ -239,20 +239,17 @@ namespace ConvolutionalNeuralNetwork
                 // create the directory the file will be written to if it doesn't already exist
                 Directory.CreateDirectory(Path.GetDirectoryName(file)!);
 
-                // serialize the C# game data object into Json
-                string dataToStore = JsonConvert.SerializeObject(this, Formatting.Indented, new JsonSerializerSettings
+                using (StreamWriter writer = new(file))
                 {
-                    TypeNameHandling = TypeNameHandling.Auto
-                });
-
-                // write the serialized data to the file
-                using (FileStream stream = File.Create(file))
-                {
-                    using (StreamWriter writer = new(stream))
+                    using(JsonWriter writer2 = new JsonTextWriter(writer))
                     {
-                        writer.Write(dataToStore);
+                        var serializer = new JsonSerializer();
+                        serializer.TypeNameHandling = TypeNameHandling.Auto;
+                        serializer.Formatting = Formatting.Indented;
+                        serializer.Serialize(writer2, this);
                     }
                 }
+                
             }
             catch (System.Exception e)
             {

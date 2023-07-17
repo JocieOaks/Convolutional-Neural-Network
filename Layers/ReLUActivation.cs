@@ -33,7 +33,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             for (int i = 0; i < _inputDimensions; i++)
             {
-                Index1D index = new(Infos(i).Area * 3);
+                Index1D index = new(_inputShapes[i].Area);
                 for (int j = 0; j < _batchSize; j++)
                 {
                     s_backwardsAction(index, _deviceZeroed[i, j].View, _buffers.InGradientsFloat[i, j], _buffers.OutGradientsFloat[i, j]);
@@ -46,7 +46,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             for (int i = 0; i < _inputDimensions; i++)
             {
-                Index1D index = new(3 * Infos(i).Area);
+                Index1D index = new(_inputShapes[i].Area);
 
                 for (int j = 0; j < _batchSize; j++)
                 {
@@ -62,9 +62,9 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override FeatureMap[,] Startup(FeatureMap[,] inputs, IOBuffers buffers)
+        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, uint batchSize)
         {
-            BaseStartup(inputs, buffers);
+            BaseStartup(inputShapes, buffers, batchSize);
 
             _deviceZeroed = new MemoryBuffer1D<int, Stride1D.Dense>[_inputDimensions, _batchSize];
 
@@ -72,10 +72,10 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _deviceZeroed[i, j] = GPU.GPUManager.Accelerator.Allocate1D<int>(inputs[i, j].FloatLength / 32 + (inputs[i,j].FloatLength % 32 > 0 ? 1 : 0));
+                    _deviceZeroed[i, j] = GPU.GPUManager.Accelerator.Allocate1D<int>(inputShapes[i].Area / 32 + (inputShapes[i].Area % 32 > 0 ? 1 : 0));
                 }
             }
-            return _outputs;
+            return _outputShapes;
         }
 
         private static void BackwardsKernel(Index1D index, ArrayView<int> zeroed, ArrayView<float> inGradient, ArrayView<float> outGradient)

@@ -36,7 +36,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(Infos(i).Area);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    GPU.GPUManager.CopyAction(index, _buffers.InGradientsColor[outputDimension, j], _buffers.OutGradientsColor[i, j]);
+                    GPU.GPUManager.CopyAction(index, _buffers.InGradientsFloat[outputDimension, j], _buffers.OutGradientsFloat[i, j]);
                 }
             }
 
@@ -50,14 +50,14 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _buffers.OutputsColor[i, j].SubView(0, Infos(i).Area).MemSetToZero();
+                    _buffers.OutputsFloat[i, j].SubView(0, Infos(i).Area).MemSetToZero();
                 }
             }
 
             for (int i = 0; i < _inputDimensions; i++)
             {
                 int outputDimension = i % _outputDimensions;
-                Index1D index = new(Infos(i).Area * 3);
+                Index1D index = new(Infos(i).Area);
                 for (int j = 0; j < _batchSize; j++)
                 {
                     s_forwardAction(index, _buffers.InputsFloat[i, j], _buffers.OutputsFloat[outputDimension, j]);
@@ -98,16 +98,16 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override FeatureMap[,] Startup(FeatureMap[,] inputs, IOBuffers buffers)
+        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, uint batchSize)
         {
             if(_outputDimensions != 0)
             {
-                _dimensionDivisor = inputs.GetLength(0) / _outputDimensions;
+                _dimensionDivisor = inputShapes.Length / _outputDimensions;
             }
             
-            BaseStartup(inputs, buffers, -_dimensionDivisor);
+            BaseStartup(inputShapes, buffers, batchSize, -_dimensionDivisor);
 
-            return _outputs;
+            return _outputShapes;
         }
 
         /// <summary>

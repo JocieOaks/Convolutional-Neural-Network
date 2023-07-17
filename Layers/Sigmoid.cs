@@ -25,7 +25,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             return output;
         }
 
-        public static Vector[] Backward(Vector[] inputs, Vector[] outputs, Vector[] inGradients)
+        public static Vector[] Backward(Vector[] inputs, Vector[] inGradients)
         {
             Vector[] outGradients = new Vector[inputs.Length];
             for (int i = 0; i < outGradients.Length; i++)
@@ -33,8 +33,9 @@ namespace ConvolutionalNeuralNetwork.Layers
                 outGradients[i] = new(inGradients[i].Length);
                 for (int j = 0; j < inGradients[i].Length; j++)
                 {
-                    float exp = MathF.Exp(inputs[i][j]);
-                    outGradients[i][j] = exp * outputs[i][j] * outputs[i][j] * inGradients[i][j];
+                    float exp = MathF.Exp(-inputs[i][j]);
+                    float sig = 1 / (1 + exp);
+                    outGradients[i][j] = exp * sig * sig * inGradients[i][j];
                 }
             }
             return outGradients;

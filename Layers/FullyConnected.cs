@@ -8,7 +8,7 @@ using System.Runtime.Serialization;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
-    /// <summary>
+    /*/// <summary>
     /// The <see cref="FullyConnected"/> class is a <see cref="Layer"/> for that connects every input node to every output node,
     /// so that every output <see cref="FeatureMap"/> for an image is based on all every input <see cref="FeatureMap"/>.
     /// </summary>
@@ -48,7 +48,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _buffers.OutputsColor[i, j].SubView(0, Infos(i).Area).MemSetToZero();
+                    _buffers.OutputsFloat[i, j].SubView(0, Infos(i).Area).MemSetToZero();
                 }
             }
 
@@ -57,7 +57,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(Infos(i).Area);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    GPUManager.CopyAction(index, _buffers.InputsColor[i, j], _inputs[i, j].GetArrayViewEmpty<Color>());
+                    GPUManager.CopyAction(index, _buffers.InputsFloat[i, j], _inputs[i, j].GetArrayViewEmpty<float>());
                 }
             }
 
@@ -70,7 +70,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 {
                     for (int k = 0; k < _batchSize; k++)
                     {
-                        s_forwardAction(index, _buffers.InputsColor[i, k], _buffers.OutputsFloat[j, k], deviceFilter.SubView(MultiplierIndex(i, j), 3), _deviceInfos[i].View);
+                        s_forwardAction(index, _buffers.InputsFloat[i, k], _buffers.OutputsFloat[j, k], deviceFilter.SubView(MultiplierIndex(i, j), 3), _deviceInfos[i].View);
                     }
                 }
             }
@@ -125,16 +125,16 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override FeatureMap[,] Startup(FeatureMap[,] inputs, IOBuffers buffers)
+        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, uint batchSize)
         {
             if (_filter == null)
             {
                 if (_outputDimensions != 0)
-                    BaseStartup(inputs, buffers, -inputs.GetLength(0) / _outputDimensions);
+                    BaseStartup(inputShapes, buffers, batchSize, -inputShapes.Length / _outputDimensions);
                 else if (_dimensionMultiplier != 0)
-                    BaseStartup(inputs, buffers, _dimensionMultiplier);
+                    BaseStartup(inputShapes, buffers, batchSize, _dimensionMultiplier);
                 else
-                    BaseStartup(inputs, buffers, 1);
+                    BaseStartup(inputShapes, buffers, batchSize, 1);
 
                 float variance = 0.666f / (_inputDimensions + _outputDimensions);
                 float stdDev = MathF.Sqrt(variance);
@@ -143,8 +143,8 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
             else
             {
-                _inputDimensions = inputs.GetLength(0);
-                BaseStartup(inputs, buffers, -3 * _inputDimensions * _inputDimensions / _filter.Length);
+                _inputDimensions = inputShapes.Length;
+                BaseStartup(inputShapes, buffers, batchSize, -3 * _inputDimensions * _inputDimensions / _filter.Length);
             }
 
             _deviceInfos = new MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[_inputDimensions];
@@ -152,9 +152,17 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 _deviceInfos[i] = GPUManager.Accelerator.Allocate1D(new StaticLayerInfo[] { Infos(i) });
             }
-            _inputs = inputs;
 
-            return _outputs;
+            _inputs = new FeatureMap[_inputDimensions, batchSize];
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                for (int j = 0; j < batchSize; j++)
+                {
+                    _inputs[i, j] = new FeatureMap(inputShapes[i]);
+                }
+            }
+
+            return _outputShapes;
         }
         private static void BackwardsGradientKernel(Index3D index, ArrayView<float> inGradient, ArrayView<Color> input, ArrayView<float> multiplierGradient, ArrayView<StaticLayerInfo> info)
         {
@@ -268,7 +276,9 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             FeatureMap[,] input = FilterTestSetup(outputMultiplier);
 
-            _filter.TestFilterGradient(this, input, _outputs[0, 0], 0, _buffers);
+            FeatureMap output = new(_outputShapes[0]);
+
+            _filter.TestFilterGradient(this, input, output, 0, _buffers);
         }
-    }
+    }*/
 }

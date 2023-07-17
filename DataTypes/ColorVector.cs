@@ -29,6 +29,8 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             _values = values;
         }
 
+        public int FloatLength => 3 * Length;
+
         /// <summary>
         /// A default constructor to be used when deserializing.
         /// </summary>
@@ -78,7 +80,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             MemoryBuffer buffer = GetBuffer();
             if (buffer == null)
             {
-                (ID, buffer) = GPUManager.Allocate<Color>(this);
+                (ID, buffer) = GPUManager.Allocate(this);
             }
             int bytes = Interop.SizeOf<T>();
             return new ArrayView<T>(buffer, 0, 12 * Length / bytes);

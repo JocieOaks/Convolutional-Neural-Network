@@ -12,9 +12,9 @@ namespace ConvolutionalNeuralNetwork.DataTypes
     /// The <see cref="ColorTensor"/> class represents a 2D array of <see cref="Color"/>s.
     /// </summary>
     [Serializable]
-    public class ColorTensor : Cacheable<Color>
+    public class ColorTensor : Cacheable<float>
     {
-        [JsonProperty] protected Color[] _tensor;
+        [JsonProperty] protected float[] _tensor;
 
         /// <summary>
         /// Initializes a new <see cref="ColorTensor"/> with the given dimensions.
@@ -26,7 +26,15 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             Width = width;
             Length = length;
 
-            _tensor = new Color[width * length];
+            _tensor = new float[width * length];
+        }
+
+        public ColorTensor(Shape shape)
+        {
+            Width = shape.Width;
+            Length = shape.Length;
+
+            _tensor = new float[shape.Area];
         }
 
         /// <summary>
@@ -54,13 +62,13 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="x">The x coordinate of the desired <see cref="Color"/>.</param>
         /// <param name="y">The y coordinate of the desired <see cref="Color"/>.</param>
         /// <returns>Returns the <see cref="Color"/> at (<paramref name="x"/>, <paramref name="y"/>).</returns>
-        public Color this[int x, int y]
+        public float this[int x, int y]
         {
             get => _tensor[y * Width + x];
             set => _tensor[y * Width + x] = value;
         }
 
-        private Color this[int index]
+        private float this[int index]
         {
             get => _tensor[index];
             set => _tensor[index] = value;
@@ -74,11 +82,11 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="tensor">The <see cref="ColorTensor"/> of dimensions n x m.</param>
         /// <returns>Returns a <see cref="ColorVector"/> of length m, where m is the <see cref="ColorTensor.Length"/> of <paramref name="tensor"/>.</returns>
         /// <exception cref="ArgumentException">Thrown if <paramref name="vector"/> length is not equal to <paramref name="tensor"/> width.</exception>
-        public static ColorVector operator *(Vector vector, ColorTensor tensor)
+        public static Vector operator *(Vector vector, ColorTensor tensor)
         {
             if (tensor.Width != vector.Length)
                 throw new ArgumentException("Matrix and vector are not compatible.");
-            ColorVector output = new(tensor.Length);
+            Vector output = new(tensor.Length);
             for (int i = 0; i < tensor.Width; i++)
             {
                 for (int j = 0; j < tensor.Length; j++)
@@ -99,7 +107,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <returns>Returns a new <see cref="Vector"/> of length equal to <paramref name="matrix"/> width.</returns>
         /// <exception cref="ArgumentException">Thrown if <paramref name="matrix"/> <see cref="ColorTensor.Length"/> is not equal to
         /// <paramref name="vector"/>'s length.</exception>
-        public static Vector operator *(ColorTensor matrix, ColorVector vector)
+        /*public static Vector operator *(ColorTensor matrix, ColorVector vector)
         {
             if (matrix.Length != vector.Length)
                 throw new ArgumentException("Matrix and vector are not compatible.");
@@ -114,44 +122,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             }
 
             return output;
-        }
-
-        public static bool operator ==(ColorTensor v1, ColorTensor v2)
-        {
-            if (v1 is null)
-                return v2 is null;
-            if (v2 is null)
-                return v1 is null;
-
-            if (v1.Length != v2.Length || v1.Width != v2.Width)
-                return false;
-
-            for (int i = 0; i < v1.Area; i++)
-            {
-                if (v1[i] != v2[i])
-                    return false;
-            }
-            return true;
-        }
-
-        public static bool operator !=(ColorTensor v1, ColorTensor v2)
-        {
-            if (v1 is null)
-                return v2 is not null;
-
-            if (v2 is null)
-                return v1 is not null;
-
-            if (v1.Length != v2.Length || v1.Width != v2.Width)
-                return true;
-
-            for (int i = 0; i < v1.Area; i++)
-            {
-                if (v1[i] != v2[i])
-                    return true;
-            }
-            return false;
-        }
+        }*/
 
         /// <summary>
         /// Generates a new <see cref="ColorTensor"/> of the given dimensions with randomized values. Used for creating starting noise
@@ -167,7 +138,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             {
                 for (int x = 0; x < width; x++)
                 {
-                    tensor[x, y] = new Color(Utility.RandomGauss(mean, stdDev), 0, 0);
+                    tensor[x, y] = Utility.RandomGauss(mean, stdDev);
                 }
             }
             return tensor;
@@ -177,16 +148,16 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         {
             for(int i = 0; i < Area; i++)
             {
-                _tensor[i] = Color.RandomGauss(0, stdDev);
+                _tensor[i] = Utility.RandomGauss(0, stdDev);
             }
         }
 
-        public void CopyToBuffer(ArrayView<Color> buffer)
+        public void CopyToBuffer(ArrayView<float> buffer)
         {
             buffer.SubView(0, Area).CopyFromCPU(_tensor);
         }
 
-        public override Color[] GetValues()
+        public override float[] GetValues()
         {
             return _tensor;
         }
@@ -197,7 +168,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             MemoryBuffer buffer = GetBuffer();
             if (buffer == null)
             {
-                (ID, buffer) = GPUManager.AllocateEmpty<Color>(this, Area);
+                (ID, buffer) = GPUManager.AllocateEmpty<float>(this, Area);
             }
             int bytes = Interop.SizeOf<T>();
             return new ArrayView<T>(buffer, 0, 12 * Area / bytes);
@@ -209,7 +180,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             MemoryBuffer buffer = GetBuffer();
             if(buffer == null)
             {
-                (ID, buffer) = GPUManager.Allocate<Color>(this);
+                (ID, buffer) = GPUManager.Allocate<float>(this);
             }
             int bytes = Interop.SizeOf<T>();
             return new ArrayView<T>(buffer, 0, 12 * Area / bytes);
@@ -245,10 +216,10 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
         public override void SyncCPU(MemoryBuffer buffer)
         {
-            buffer.AsArrayView<Color>(0, Area).CopyToCPU(_tensor);
+            buffer.AsArrayView<float>(0, Area).CopyToCPU(_tensor);
         }
 
-        public override void SyncCPU(ArrayView<Color> arrayView)
+        public override void SyncCPU(ArrayView<float> arrayView)
         {
             arrayView.SubView(0, Area).CopyToCPU(_tensor);
         }

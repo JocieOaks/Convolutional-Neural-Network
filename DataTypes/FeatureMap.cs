@@ -14,8 +14,8 @@ namespace ConvolutionalNeuralNetwork.DataTypes
     [Serializable]
     public class FeatureMap : ColorTensor
     {
-        private readonly static Color s_colorMean = new(0.5f);
-        private readonly static Color s_colorDeviation = new(MathF.Sqrt(1f / 12));
+        private readonly static float s_colorMean = -0.7386f;
+        private readonly static float s_colorDeviation = 0.6026f;
 
         /// <summary>
         /// Initializes a new <see cref="FeatureMap"/> with the given dimensions.
@@ -24,11 +24,13 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="length">The length of the <see cref="FeatureMap"/>.</param>
         public FeatureMap(int width, int length) : base(width, length) { }
 
-        public FeatureMap(int width, int length, Color color) : base(width, length)
+        public FeatureMap(Shape shape) : base(shape) { }
+
+        public FeatureMap(int width, int length, float value) : base(width, length)
         {
             for(int i = 0; i < Area; i++)
             {
-                _tensor[i] = color;
+                _tensor[i] = value;
             }
         }
 
@@ -55,7 +57,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                     {
                         for (int x = 0; x < bitmap.Width; x++)
                         {
-                            map[x, bitmap.Height - y - 1] = (Color)bitmap.GetPixel(x, y);
+                            map[x, bitmap.Height - y - 1] = bitmap.GetPixel(x, y).GetBrightness();
                         }
                     }
                 }
@@ -78,7 +80,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             {
                 for (int x = 0; x < width; x++)
                 {
-                    map[x, y] = Color.RandomGauss(0.5f, 0.2f).Clip(1);
+                    map[x, y] = Math.Clamp(Utility.RandomGauss(0.5f, 0.2f), -1, 1);
                 }
             }
             return map;
@@ -88,7 +90,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// Calculates the average <see cref="Color"/> of the <see cref="FeatureMap"/>.
         /// </summary>
         /// <returns>Returns the <see cref="Color"/>.</returns>
-        public Color Average()
+        public float Average()
         {
             return Sum() / Area;
         }
@@ -105,7 +107,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             {
                 Bitmap bitmap = new(Width, Length);
 
-                Color[] normalizedMap = Normalize(new(-.7386f), new(0.6026f));
+                float[] normalizedMap = Normalize(s_colorMean, s_colorDeviation);
 
                 if (setNormalized)
                     _tensor = normalizedMap;
@@ -114,7 +116,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 {
                     for (int x = 0; x < Width; x++)
                     {
-                        bitmap.SetPixel(x, Length - y - 1, (System.Drawing.Color)(normalizedMap[y * Width + x] * 255));
+                        bitmap.SetPixel(x, Length - y - 1, System.Drawing.Color.FromArgb(Math.Clamp((int)(normalizedMap[y * Width + x] * 255), 0, 255), System.Drawing.Color.White));
                     }
                 }
 
@@ -150,9 +152,9 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// chunks instead of the full map all at once).
         /// </summary>
         /// <returns>Returns the sum of every <see cref="Color"/> in the <see cref="FeatureMap"/>.</returns>
-        public Color Sum()
+        public float Sum()
         {
-            Color color = new();
+            float color = 0;
             for (int i = 0; i < Length; i++)
             {
                 for (int j = 0; j < Width; j++)
@@ -164,70 +166,51 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return color;
         }
 
-        public (Color, Color) MeanVariance()
-        {
-
-            var deviceSum = GPUManager.Accelerator.Allocate1D<float>(3);
-            deviceSum.MemSetToZero();
-
-            Index2D index = new(Area, 3);
-
-            s_sumAction(index, GetArrayView<Color>(), deviceSum.View);
-            GPUManager.Accelerator.Synchronize();
-
-            Color mean = (Color)deviceSum / Area;
-
-            var deviceMean = GPUManager.Accelerator.Allocate1D(new Color[] { mean });
-            var deviceVariance = GPUManager.Accelerator.Allocate1D<float>(3);
-            deviceVariance.MemSetToZero();
-
-            s_varianceAction(index, GetArrayView<Color>(), deviceMean.View, deviceVariance.View);
-            GPUManager.Accelerator.Synchronize();
-
-            Color sigma = Color.Pow((Color)deviceVariance / Area + Utility.AsymptoteErrorColor, 0.5f);
-
-            deviceSum.Dispose();
-            deviceMean.Dispose();
-            deviceVariance.Dispose();
-
-            return (mean, sigma);
-        }
-
         /// <summary>
         /// Normalizes the <see cref="FeatureMap"/>.
         /// </summary>
         /// <returns>Returns the normalized <see cref="FeatureMap"/> as a single dimensional array of <see cref="Color"/>s.</returns>
-        public Color[] Normalize(Color normalMean, Color normalDeviation)
+        public float[] Normalize(float normalMean, float normalDeviation)
         {
 
-            var deviceSum = GPUManager.Accelerator.Allocate1D<float>(3);
+            var deviceSum = GPUManager.Accelerator.Allocate1D<float>(1);
             deviceSum.MemSetToZero();
 
-            Index2D index = new(Area, 3);
+            Index1D index = new(Area);
 
-            s_sumAction(index, GetArrayView<Color>(), deviceSum.View);
+            s_sumAction(index, GetArrayView<float>(), deviceSum.View);
             GPUManager.Accelerator.Synchronize();
 
-            Color mean = (Color)deviceSum / Area;
+            DecrementLiveCount();
+            float[] value = new float[1];
+            deviceSum.CopyToCPU(value);
 
-            var deviceMean = GPUManager.Accelerator.Allocate1D(new Color[] { mean });
-            var deviceVariance = GPUManager.Accelerator.Allocate1D<float>(3);
+            float mean = value[0] / Area;
+
+            var deviceMean = GPUManager.Accelerator.Allocate1D(new float[] { mean });
+            var deviceVariance = GPUManager.Accelerator.Allocate1D<float>(1);
             deviceVariance.MemSetToZero();
 
-            s_varianceAction(index, GetArrayView<Color>(), deviceMean.View, deviceVariance.View);
+            s_varianceAction(index, GetArrayView<float>(), deviceMean.View, deviceVariance.View);
             GPUManager.Accelerator.Synchronize();
 
-            Color sigma = Color.Pow((Color)deviceVariance / Area + Utility.AsymptoteErrorColor, 0.5f);
+            DecrementLiveCount();
 
-            var deviceValues = GPUManager.Accelerator.Allocate1D(new Color[] { mean, normalDeviation / sigma, normalMean });
+            deviceVariance.CopyToCPU(value);
 
-            var deviceOutput = GPUManager.Accelerator.Allocate1D<Color>(Area);
+            float sigma = float.Pow(value[0] / Area + Utility.ASYMPTOTEERRORCORRECTION, 0.5f);
+
+            var deviceValues = GPUManager.Accelerator.Allocate1D(new float[] { mean, normalDeviation / sigma, normalMean });
+
+            var deviceOutput = GPUManager.Accelerator.Allocate1D<float>(Area);
 
 
-            s_normalizeAction(new Index1D(Area), GetArrayView<Color>(), deviceOutput.View, deviceValues.View);
+            s_normalizeAction(new Index1D(Area), GetArrayView<float>(), deviceOutput.View, deviceValues.View);
             GPUManager.Accelerator.Synchronize();
 
-            Color[] Normalized = new Color[Area];
+            DecrementLiveCount();
+
+            float[] Normalized = new float[Area];
             deviceOutput.CopyToCPU(Normalized);
 
             deviceSum.Dispose();
@@ -237,28 +220,26 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             deviceValues.Dispose();
 
             return Normalized;
-
-
         }
 
-        private static Action<Index2D, ArrayView<Color>, ArrayView<float>> s_sumAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<float>>(MeanKernel);
-        private static Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>> s_varianceAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<float>>(VarianceKernel);
-        private static Action<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>> s_normalizeAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>, ArrayView<Color>>(NormalizeKernel);
+        private static Action<Index1D, ArrayView<float>, ArrayView<float>> s_sumAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(MeanKernel);
+        private static Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>> s_varianceAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(VarianceKernel);
+        private static Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>> s_normalizeAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(NormalizeKernel);
 
-        private static void NormalizeKernel(Index1D index, ArrayView<Color> input, ArrayView<Color> normalized, ArrayView<Color> values)
+        private static void NormalizeKernel(Index1D index, ArrayView<float> input, ArrayView<float> normalized, ArrayView<float> values)
         {
             normalized[index] = (input[index] - values[0]) * values[1] + values[2];
         }
 
-        private static void MeanKernel(Index2D index, ArrayView<Color> input, ArrayView<float> mean)
+        private static void MeanKernel(Index1D index, ArrayView<float> input, ArrayView<float> mean)
         {
-            Atomic.Add(ref mean[index.Y], input[index.X][index.Y]);
+            Atomic.Add(ref mean[0], input[index.X]);
         }
 
-        private static void VarianceKernel(Index2D index, ArrayView<Color> input, ArrayView<Color> mean, ArrayView<float> variance)
+        private static void VarianceKernel(Index1D index, ArrayView<float> input, ArrayView<float> mean, ArrayView<float> variance)
         {
-            float difference = input[index.X][index.Y] - mean[0][index.Y];
-            Atomic.Add(ref variance[index.Y], difference * difference);
+            float difference = input[index.X] - mean[0];
+            Atomic.Add(ref variance[0], difference * difference);
         }
     }
 }

@@ -13,8 +13,8 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class AveragePool : Layer, IStructuralLayer
     {
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsKernel);
-        private static readonly Action<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<Color>, ArrayView<Color>, ArrayView<LayerInfo>>(ForwardKernel);
+        private static readonly Action<Index2D, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsKernel);
+        private static readonly Action<Index2D, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>>(ForwardKernel);
         private MemoryBuffer1D<LayerInfo, Stride1D.Dense>[] _deviceInfos;
 
         /// <summary>
@@ -40,7 +40,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             for (int i = 0; i < _inputDimensions; i++)
             {
-                Index3D index = new(Infos(i).InputWidth, Infos(i).InputLength, 3);
+                Index2D index = new(Infos(i).InputWidth, Infos(i).InputLength);
                 for (int j = 0; j < _batchSize; j++)
                 {
 
@@ -58,9 +58,9 @@ namespace ConvolutionalNeuralNetwork.Layers
                 for (int j = 0; j < _batchSize; j++)
                 {
 
-                    Index2D index = new(_outputs[i, j].Width, _outputs[i, j].Length);
+                    Index2D index = new(_outputShapes[i].Width, _outputShapes[i].Length);
 
-                    s_forwardAction(index, _buffers.InputsColor[i, j], _buffers.OutputsColor[i, j], _deviceInfos[i].View);
+                    s_forwardAction(index, _buffers.InputsFloat[i, j], _buffers.OutputsFloat[i, j], _deviceInfos[i].View);
                 }
             }
             Synchronize();
@@ -72,15 +72,15 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override FeatureMap[,] Startup(FeatureMap[,] input, IOBuffers buffers)
+        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, uint batchSize)
         {
-            BaseStartup(input, buffers);
+            BaseStartup(inputShapes, buffers, batchSize);
             _deviceInfos = new MemoryBuffer1D<LayerInfo, Stride1D.Dense>[_inputDimensions];
             for (int i = 0; i < _inputDimensions; i++)
             {
                 _deviceInfos[i] = GPU.GPUManager.Accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
             }
-            return _outputs;
+            return _outputShapes;
         }
 
         /// <summary>
@@ -93,12 +93,12 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// Because <see cref="Color"/> cannot be summed atomically, every three floats represents a single
         /// <see cref="Color"/> in the gradient.</param>
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void BackwardsKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, ArrayView<LayerInfo> info)
+        private static void BackwardsKernel(Index2D index, ArrayView<float> inGradient, ArrayView<float> outGradient, ArrayView<LayerInfo> info)
         {
             //Unlike other Backwards Kernels, this kernel indexes by the outGradient rather than the inGradient, so the equations for index are inverted.
             int inGradientIndex = index.Y / info[0].FilterSize * info[0].OutputWidth + index.X / info[0].FilterSize;
             int outGradientIndex = index.Y * info[0].InputWidth + index.X;
-            outGradient[3 * outGradientIndex + index.Z] = inGradient[3 * inGradientIndex + index.Z] * info[0].InverseKSquared;
+            outGradient[outGradientIndex] = inGradient[inGradientIndex] * info[0].InverseKSquared;
         }
 
         /// <summary>
@@ -112,9 +112,9 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="filter">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing one of the
         /// <see cref="Convolution"/>'s filters.</param>
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void ForwardKernel(Index2D index, ArrayView<Color> input, ArrayView<Color> pooled, ArrayView<LayerInfo> info)
+        private static void ForwardKernel(Index2D index, ArrayView<float> input, ArrayView<float> pooled, ArrayView<LayerInfo> info)
         {
-            Color sum = new();
+            float sum = new();
             for (int j = 0; j < info[0].FilterSize; j++)
             {
                 for (int i = 0; i < info[0].FilterSize; i++)

@@ -19,10 +19,10 @@ namespace ConvolutionalNeuralNetwork.GPU
         private static readonly LRU _lru;
         static GPUManager()
         {
-            Context = Context.Create(builder => builder.CPU());
-            Accelerator = Context.CreateCPUAccelerator(0);
+            Context = Context.Create(builder => builder.Cuda());
+            Accelerator = Context.CreateCudaAccelerator(0);
             _lru = new LRU(Accelerator.MemorySize, 0.5f);
-            CopyAction = Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Color>, ArrayView<Color>>(CopyKernel);
+            CopyAction = Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(CopyKernel);
             AddAction = Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(AddKernel);
         }
 
@@ -31,7 +31,7 @@ namespace ConvolutionalNeuralNetwork.GPU
 
         public static Context Context { get; }
         /// <value>An action for running the cuda kernel <see cref="CopyKernel(Index1D, ArrayView{Color}, ArrayView{Color})"/>.</value>
-        public static Action<Index1D, ArrayView<Color>, ArrayView<Color>> CopyAction { get; }
+        public static Action<Index1D, ArrayView<float>, ArrayView<float>> CopyAction { get; }
 
         public static Action<Index1D, ArrayView<float>, ArrayView<float>> AddAction { get; }
 
@@ -47,7 +47,7 @@ namespace ConvolutionalNeuralNetwork.GPU
         /// <param name="index">The index to iterate over every element in the two <see cref="ArrayView{T}"/>s.</param>
         /// <param name="input">The <see cref="ArrayView{T}"/> being copied from.</param>
         /// <param name="output">The <see cref="ArrayView{T}"/> being copied to.</param>
-        private static void CopyKernel(Index1D index, ArrayView<Color> input, ArrayView<Color> output)
+        private static void CopyKernel(Index1D index, ArrayView<float> input, ArrayView<float> output)
         {
             output[index] = input[index];
         }
@@ -64,5 +64,7 @@ namespace ConvolutionalNeuralNetwork.GPU
         public static MemoryBuffer TryGetBuffer(uint Id) => _lru.GetBuffer(Id);
         public static (uint, MemoryBuffer) UpdateBuffer<T>(Cacheable cacheable, T[] values) where T : unmanaged => _lru.UpdateBuffer(cacheable, values, Accelerator);
         public static (uint, MemoryBuffer) UpdateBuffer<T>(Cacheable<T> cacheable) where T : unmanaged => _lru.UpdateBuffer(cacheable, Accelerator);
+
+        public static void AddExternalMemoryUsage(long size) => _lru.AddExternalMemoryUsage(size);
     }
 }

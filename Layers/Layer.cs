@@ -20,7 +20,8 @@ namespace ConvolutionalNeuralNetwork.Layers
         protected int _inputDimensions;
         protected ILayerInfo[] _layerInfos;
         protected int _outputDimensions;
-        protected FeatureMap[,] _outputs;
+        protected Shape[] _inputShapes;
+        protected Shape[] _outputShapes;
         [JsonProperty] protected int _stride;
 
         /// <summary>
@@ -55,7 +56,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         public abstract void Reset();
 
         /// <inheritdoc/>
-        public abstract FeatureMap[,] Startup(FeatureMap[,] inputs, IOBuffers buffers);
+        public abstract Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, uint batchSize);
 
         /// <summary>
         /// Initializes the <see cref="Layer"/> and many of its fields.
@@ -65,9 +66,9 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="outputDimensionFactor">A factor relating the number of input layers to the number of output layers.
         /// A positive number multiplies the number of input dimensions. A negative number divides the number of dimensions.</param>
         /// <exception cref="ArgumentException">Thrown if the ratio of input layers and output layers is not an integer.</exception>
-        protected void BaseStartup(FeatureMap[,] inputs, IOBuffers buffers, int outputDimensionFactor = 1)
+        protected void BaseStartup(Shape[] inputShapes, IOBuffers buffers, uint batchSize, int outputDimensionFactor = 1)
         {
-            _inputDimensions = inputs.GetLength(0);
+            _inputDimensions = inputShapes.Length;
             if (outputDimensionFactor >= 1)
             {
                 _outputDimensions = outputDimensionFactor * _inputDimensions;
@@ -84,32 +85,36 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
-            _batchSize = (uint)inputs.GetLength(1);
+            _batchSize = batchSize;
             _layerInfos = new ILayerInfo[_inputDimensions];
-            _outputs = new FeatureMap[_outputDimensions, _batchSize];
+            _inputShapes = inputShapes;
+            _outputShapes = new Shape[_outputDimensions];
 
             for (int i = 0; i < _inputDimensions; i++)
             {
-                ILayerInfo layer;
                 if (_stride == 1 && _filterSize == 1)
                 {
-                    layer = _layerInfos[i] = new StaticLayerInfo()
+                    _layerInfos[i] = new StaticLayerInfo()
                     {
-                        Width = inputs[i, 0].Width,
-                        Length = inputs[i, 0].Length,
+                        Width = inputShapes[i].Width,
+                        Length = inputShapes[i].Length,
                     };
                 }
                 else
                 {
-                    layer = _layerInfos[i] = new LayerInfo()
+
+                    int outputWidth = (int)MathF.Ceiling(inputShapes[i].Width / (float)_stride);
+                    int outputLength = (int)MathF.Ceiling(inputShapes[i].Length / (float)_stride);
+                    _layerInfos[i] = new LayerInfo()
                     {
                         FilterSize = _filterSize,
                         Stride = _stride,
                         InverseKSquared = 1f / (_filterSize * _filterSize),
-                        InputWidth = inputs[i, 0].Width,
-                        InputLength = inputs[i, 0].Length,
-                        OutputWidth = 2 + (inputs[i, 0].Width - _filterSize - 1) / _stride,
-                        OutputLength = 2 + (inputs[i, 0].Length - _filterSize - 1) / _stride
+                        InputWidth = inputShapes[i].Width,
+                        InputLength = inputShapes[i].Length,
+                        OutputWidth = outputWidth,
+                        OutputLength = outputLength,
+                        Padding = _filterSize - _stride 
                     };
                 }
             }
@@ -128,13 +133,13 @@ namespace ConvolutionalNeuralNetwork.Layers
 
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _outputs[i, j] = new FeatureMap(layer.OutputWidth, layer.OutputLength);
+                    _outputShapes[i] = new Shape(layer.OutputWidth, layer.OutputLength);
                 }
             }
 
             _buffers = buffers;
             for (int i = 0; i < _outputDimensions; i++)
-                buffers.OutputDimensionArea(i, _outputs[i, 0].Area);
+                buffers.OutputDimensionArea(i, _outputShapes[i].Area);
         }
 
         protected static void DecrementCacheabble(Cacheable[,] caches, uint decrement = 1)
@@ -168,16 +173,18 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
 
             FeatureMap[,] inputs = new FeatureMap[inputDimensions, 1];
+            Shape[] inputShape = new Shape[inputDimensions];
             for (int i = 0; i < inputDimensions; i++)
             {
                 inputs[i, 0] = new(3, 3);
+                inputShape[i] = new Shape(3, 3);
             }
 
             IOBuffers buffer = new();
             IOBuffers complimentBuffer = new();
             complimentBuffer.OutputDimensionArea(inputDimensions - 1, 9);
 
-            Startup(inputs, buffer);
+            Startup(inputShape, buffer, 1);
             buffer.Allocate(1);
             complimentBuffer.Allocate(1);
             IOBuffers.SetCompliment(buffer, complimentBuffer);

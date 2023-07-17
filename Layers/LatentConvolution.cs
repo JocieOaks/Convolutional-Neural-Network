@@ -18,8 +18,8 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         protected int _dimensionsMultiplier;
 
-        private ColorVector[,] _filterGradients;
-        private ColorVector[,] _filters;
+        private Vector[,] _filterGradients;
+        private Vector[,] _filters;
 
         [JsonProperty] Weights[,] _boolsFilters;
         [JsonProperty] Weights[,] _floatsFilters;
@@ -61,17 +61,17 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _buffers.OutGradientsColor[i, j].SubView(0, Infos(i).InputArea).MemSetToZero();
+                    _buffers.OutGradientsFloat[i, j].SubView(0, Infos(i).InputArea).MemSetToZero();
                 }
             }
 
             for (int i = 0; i < _outputDimensions; i++)
             {
-                Index3D index = new(Infos(i).OutputWidth, Infos(i).OutputLength, 3);
+                Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    Convolution.BackwardsOutGradientAction(index, _buffers.InGradientsFloat[i, j], _filters[i, j].GetArrayView<Color>(), _buffers.OutGradientsFloat[i % _inputDimensions, j], _deviceInfos[i % _inputDimensions].View);
-                    Convolution.BackwardsFilterAction(index, _buffers.InGradientsFloat[i, j], _inputs[i % _inputDimensions, j].GetArrayView<Color>(), _filterGradients[i, j].GetArrayViewZeroed<float>(), _deviceInfos[i % _inputDimensions].View);
+                    Convolution.BackwardsOutGradientAction(index, _buffers.InGradientsFloat[i, j], _filters[i, j].GetArrayView<float>(), _buffers.OutGradientsFloat[i % _inputDimensions, j], _deviceInfos[i % _inputDimensions].View);
+                    Convolution.BackwardsFilterAction(index, _buffers.InGradientsFloat[i, j], _inputs[i % _inputDimensions, j].GetArrayView<float>(), _filterGradients[i, j].GetArrayViewZeroed<float>(), _deviceInfos[i % _inputDimensions].View);
                 }
             }
 
@@ -88,11 +88,11 @@ namespace ConvolutionalNeuralNetwork.Layers
 
                     for (int k = 0; k < _filterSize * _filterSize; k++)
                     {
-                        Color gradient = _filterGradients[i, j][k];
+                        float gradient = _filterGradients[i, j][k];
 
                         for (int l = 0; l < _boolsFilters[i, k].Length; l++)
                         {
-                            _boolsFilters[i, k].SetGradient(l, Bools[j][l] ? gradient : Color.Zero, learningRate, firstMomentDecay, secondMomentDecay);
+                            _boolsFilters[i, k].SetGradient(l, Bools[j][l] ? gradient : 0, learningRate, firstMomentDecay, secondMomentDecay);
                         }
 
                         for (int l = 0; l < _floatsFilters[i, k].Length; l++)
@@ -115,7 +115,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 {
                     for (int k = 0; k < _filterSize * _filterSize; k++)
                     {
-                        _filters[i, j][k] = new Color(0);
+                        _filters[i, j][k] = 0;
                             
                         for (int l = 0; l < _boolsFilters[i, k].Length; l++)
                         {
@@ -137,7 +137,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    Convolution.ForwardAction(index, _buffers.InputsColor[i % _inputDimensions, j], _buffers.OutputsColor[i, j], _filters[i, j].GetArrayView<Color>(), _deviceInfos[i % _inputDimensions].View);
+                    Convolution.ForwardAction(index, _buffers.InputsFloat[i % _inputDimensions, j], _buffers.OutputsFloat[i, j], _filters[i, j].GetArrayView<float>(), _deviceInfos[i % _inputDimensions].View);
                 }
             }
 
@@ -148,7 +148,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(Infos(i).InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    GPUManager.CopyAction(index, _buffers.InputsColor[i, j], _inputs[i, j].GetArrayViewEmpty<Color>());
+                    GPUManager.CopyAction(index, _buffers.InputsFloat[i, j], _inputs[i, j].GetArrayViewEmpty<float>());
                 }
             }
         }
@@ -180,11 +180,11 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override FeatureMap[,] Startup(FeatureMap[,] inputs, IOBuffers buffers)
+        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, uint batchSize)
         {
             if (_boolsFilters == null || _floatsFilters == null)
             {
-                BaseStartup(inputs, buffers, _dimensionsMultiplier);
+                BaseStartup(inputShapes, buffers, batchSize, _dimensionsMultiplier);
 
                 _boolsFilters = new Weights[_outputDimensions, _filterSize * _filterSize];
 
@@ -204,7 +204,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
             else
             {
-                BaseStartup(inputs, buffers, _boolsFilters.GetLength(0) / inputs.GetLength(0));
+                BaseStartup(inputShapes, buffers, batchSize, _boolsFilters.GetLength(0) / inputShapes.Length);
                 if (_boolsFilters[0, 0].Length != Bools[0].Length || _floatsFilters[0, 0].Length != Floats[0].Length)
                 {
                     float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize * (Bools[0].Length + Floats[0].Length) + _inputDimensions * _filterSize * _filterSize * (Bools[0].Length + Floats[0].Length));
@@ -232,19 +232,26 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
-            _filters = new ColorVector[_outputDimensions, _batchSize];
-            _filterGradients = new ColorVector[_outputDimensions, _batchSize];
+            _filters = new Vector[_outputDimensions, _batchSize];
+            _filterGradients = new Vector[_outputDimensions, _batchSize];
 
             for (int i = 0; i < _outputDimensions; i++)
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _filters[i, j] = new ColorVector(_filterSize * _filterSize);
-                    _filterGradients[i, j] = new ColorVector(_filterSize * _filterSize);
+                    _filters[i, j] = new Vector(_filterSize * _filterSize);
+                    _filterGradients[i, j] = new Vector(_filterSize * _filterSize);
                 }
             }
 
-            _inputs = inputs;
+            _inputs = new FeatureMap[_inputDimensions, batchSize];
+            for (int i = 0; i < _inputDimensions; i++)
+            {
+                for (int j = 0; j < batchSize; j++)
+                {
+                    _inputs[i, j] = new FeatureMap(inputShapes[i]);
+                }
+            }
 
             _deviceInfos = new MemoryBuffer1D<LayerInfo, Stride1D.Dense>[_inputDimensions];
             for (int i = 0; i < _inputDimensions; i++)
@@ -252,7 +259,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 _deviceInfos[i] = GPUManager.Accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
             }
 
-            return _outputs;
+            return _outputShapes;
         }
 
         /// <summary>
@@ -273,12 +280,14 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int i = 0; i < _filterSize * _filterSize; i++)
                 {
-                    _boolsFilters[j, i].TestFilterGradient(this, input, _outputs[0, 0], j, _buffers);
+                    FeatureMap output = new(_outputShapes[i]);
+                    _boolsFilters[j, i].TestFilterGradient(this, input, output, j, _buffers);
                 }
 
                 for (int i = 0; i < _filterSize * _filterSize; i++)
                 {
-                    _floatsFilters[j, i].TestFilterGradient(this, input, _outputs[0, 0], j, _buffers);
+                    FeatureMap output = new(_outputShapes[i]);
+                    _floatsFilters[j, i].TestFilterGradient(this, input, output, j, _buffers);
                 }
             }
         }
