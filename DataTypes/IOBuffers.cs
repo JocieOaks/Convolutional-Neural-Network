@@ -12,18 +12,14 @@ namespace ConvolutionalNeuralNetwork.DataTypes
     /// </summary>
     public class IOBuffers
     {
-        ArrayView<float>[,] _floats1;
-        ArrayView<float>[,] _floats2;
+        private ArrayView<float> _view1;
+        private ArrayView<float> _view2;
+        private int _maxLength = 0;
 
-
-        readonly List<(int dimensions, int area)> _outputAllocationPairs = new();
-        public ArrayView<float>[,] InGradientsFloat => _floats1;
-        public ArrayView<float>[,] InputsFloat => _floats2;
-        public ArrayView<float>[,] OutGradientsFloat => _floats2;
-        public ArrayView<float>[,] OutputsFloat => _floats1;
-
-        public ArrayView<float> FinalOutput(int batchIndex) => _floats1[0, batchIndex];
-        public ArrayView<float> FirstGradient(int batchIndex) => _floats1[0, batchIndex];
+        public ArrayView<float> InGradient => _view1;
+        public ArrayView<float> Input => _view2;
+        public ArrayView<float> OutGradient => _view2;
+        public ArrayView<float> Output => _view1;
 
         /// <summary>
         /// Sets to <see cref="IOBuffers"/> to be reflections of eachother. Aka, the input of one is the output of the other.
@@ -32,7 +28,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="buffers2">The second <see cref="IOBuffers"/>.</param>
         public static void SetCompliment(IOBuffers buffers1, IOBuffers buffers2)
         {
-            (buffers1._floats2, buffers2._floats2) = (buffers2._floats1, buffers1._floats1);
+            (buffers1._view2, buffers2._view2) = (buffers2._view1, buffers1._view1);
         }
 
         /// <summary>
@@ -41,22 +37,9 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="batchSize">The number of elements in a single batch.</param>
         public void Allocate(int batchSize)
         {
-            int dimensions = _outputAllocationPairs.MaxBy(x => x.dimensions).dimensions;
-            _floats1 = new ArrayView<float>[dimensions, batchSize];
-            long memoryUsage = 0;
-
-            for (int i = 0; i < dimensions; i++)
-            {
-                int area = _outputAllocationPairs.Where(x => x.dimensions > i).MaxBy(x => x.area).area;
-                for (int j = 0; j < batchSize; j++)
-                {
-                    var buffer = GPUManager.Accelerator.Allocate1D<float>(area);
-                    _floats1[i, j] = new ArrayView<float>(buffer, 0, area);
-                    memoryUsage += area * 4;
-                }
-            }
-
-            GPUManager.AddExternalMemoryUsage(memoryUsage);
+            var buffer = GPUManager.Accelerator.Allocate1D<float>(_maxLength * batchSize);
+            _view1 = new ArrayView<float>(buffer, 0, _maxLength * batchSize);
+            GPUManager.AddExternalMemoryUsage(4 * _maxLength * batchSize);
         }
 
         /// <summary>
@@ -64,9 +47,10 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// </summary>
         /// <param name="dimensions"></param>
         /// <param name="area"></param>
-        public void OutputDimensionArea(int dimensions, int area)
+        public void OutputDimensionArea(int length)
         {
-            _outputAllocationPairs.Add((dimensions + 1, area));
+            if(length > _maxLength)
+                _maxLength = length;
         }
     }
 }

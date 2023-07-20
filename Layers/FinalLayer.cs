@@ -11,7 +11,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 {
     public abstract class FinalLayer : ILayer
     {
-        protected uint _batchSize;
+        protected int _batchSize;
         [JsonProperty] protected int _outputUnits;
         protected IOBuffers _buffers;
         protected int _inputDimensions;
@@ -30,13 +30,13 @@ namespace ConvolutionalNeuralNetwork.Layers
         public abstract void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay);
         public abstract void Forward();
         public abstract void Reset();
-        public abstract Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, uint batchSize);
+        public abstract Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, int batchSize);
 
-        protected void BaseStartup(Shape[] inputShapes, IOBuffers buffers, uint batchSize)
+        protected void BaseStartup(Shape[] inputShapes, IOBuffers buffers, int batchSize)
         {
             _inputDimensions = inputShapes.Length;
 
-            _batchSize = (uint)batchSize;
+            _batchSize = batchSize;
             _layerInfos = new ILayerInfo[_inputDimensions];
             _inputShapes = inputShapes;
 
@@ -46,6 +46,10 @@ namespace ConvolutionalNeuralNetwork.Layers
                 {
                     InputWidth = inputShapes[i].Width,
                     InputLength = inputShapes[i].Length,
+                    OutputWidth = _outputUnits,
+                    OutputLength = 1,
+                    InputDimensions = _inputDimensions,
+                    OutputDimensions = 1
                 };
             }
 
@@ -53,7 +57,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             _outputShapes[0] = new Shape(1, _outputUnits);
 
             _buffers = buffers;
-            buffers.OutputDimensionArea(0, _outputUnits);
+            buffers.OutputDimensionArea(_outputUnits);
         }
 
         protected static void DecrementCacheabble(Cacheable[,] caches, uint decrement = 1)
@@ -70,6 +74,49 @@ namespace ConvolutionalNeuralNetwork.Layers
         protected static void Synchronize()
         {
             GPUManager.Accelerator.Synchronize();
+        }
+
+        protected (Shape[], Shape[]) FilterTestSetup(int dimensionMultiplier, int batchSize)
+        {
+            int outputDimensions, inputDimensions;
+            if (dimensionMultiplier >= 1)
+            {
+                inputDimensions = 1;
+                outputDimensions = dimensionMultiplier;
+            }
+            else
+            {
+                inputDimensions = -dimensionMultiplier;
+                outputDimensions = 1;
+            }
+            Shape[] inputShape = new Shape[inputDimensions];
+            for (int i = 0; i < inputDimensions; i++)
+            {
+                inputShape[i] = new Shape(3, 3);
+            }
+
+            IOBuffers buffer = new();
+            IOBuffers complimentBuffer = new();
+            complimentBuffer.OutputDimensionArea(inputDimensions * 9);
+
+            Startup(inputShape, buffer, batchSize);
+            buffer.Allocate(batchSize);
+            complimentBuffer.Allocate(batchSize);
+            IOBuffers.SetCompliment(buffer, complimentBuffer);
+
+            inputShape = new Shape[inputDimensions * batchSize];
+            for (int i = 0; i < inputDimensions * batchSize; i++)
+            {
+                inputShape[i] = new Shape(3, 3);
+            }
+
+            Shape[] outputShape = new Shape[outputDimensions * batchSize];
+            for (int i = 0; i < outputDimensions * batchSize; i++)
+            {
+                outputShape[i] = _outputShapes[0];
+            }
+
+            return (inputShape, outputShape);
         }
     }
 }

@@ -8,14 +8,14 @@ using System.Runtime.Serialization;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
-    /*/// <summary>
+    /// <summary>
     /// The <see cref="FullyConnected"/> class is a <see cref="Layer"/> for that connects every input node to every output node,
     /// so that every output <see cref="FeatureMap"/> for an image is based on all every input <see cref="FeatureMap"/>.
     /// </summary>
     [Serializable]
     public class FullyConnected : Layer, IPrimaryLayer
     {
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>> s_backwardsGradientAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsGradientKernel);
+        /*private static readonly Action<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>> s_backwardsGradientAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsGradientKernel);
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>> s_backwardsOutAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<Color>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsOutKernel);
         private static readonly Action<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<StaticLayerInfo>> s_forwardAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<Color>, ArrayView<float>, ArrayView<Color>, ArrayView<StaticLayerInfo>>(ForwardKernel);
         private MemoryBuffer1D<StaticLayerInfo, Stride1D.Dense>[] _deviceInfos;
@@ -279,6 +279,27 @@ namespace ConvolutionalNeuralNetwork.Layers
             FeatureMap output = new(_outputShapes[0]);
 
             _filter.TestFilterGradient(this, input, output, 0, _buffers);
+        }*/
+        public override string Name => throw new NotImplementedException();
+
+        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
+        {
+            throw new NotImplementedException();
         }
-    }*/
+
+        public override void Forward()
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void Reset()
+        {
+            throw new NotImplementedException();
+        }
+
+        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, int batchSize)
+        {
+            throw new NotImplementedException();
+        }
+    }
 }

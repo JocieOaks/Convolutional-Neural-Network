@@ -10,7 +10,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     /// </summary>
     public class SkipConnectionConcatenate : Layer, IStructuralLayer
     {
-        private FeatureMap[,] _inputsSecondary;
+        /*private FeatureMap[,] _inputsSecondary;
         private FeatureMap[,] _outGradientsSecondary;
 
         private int _secondaryDimensions;
@@ -33,7 +33,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(_layerInfos[i].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    GPU.GPUManager.CopyAction(index, _buffers.InGradientsFloat[i, j], _buffers.OutGradientsFloat[i, j]);
+                    GPU.GPUManager.CopyAction(index, _buffers.InGradient[i, j], _buffers.OutGradient[i, j]);
                 }
             }
 
@@ -42,7 +42,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(_layerInfos[i + _inputDimensions].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    GPU.GPUManager.CopyAction(index, _buffers.InGradientsFloat[_inputDimensions + i, j], _outGradientsSecondary[i, j].GetArrayViewEmpty<float>());
+                    GPU.GPUManager.CopyAction(index, _buffers.InGradient[_inputDimensions + i, j], _outGradientsSecondary[i, j].GetArrayViewEmpty<float>());
                 }
             }
             Synchronize();
@@ -81,7 +81,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(_layerInfos[i].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    GPU.GPUManager.CopyAction(index, _buffers.InputsFloat[i, j], _buffers.OutputsFloat[i, j]);
+                    GPU.GPUManager.CopyAction(index, _buffers.Input[i, j], _buffers.Output[i, j]);
                 }
             }
 
@@ -90,7 +90,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(_layerInfos[i + _inputDimensions].InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    GPU.GPUManager.CopyAction(index, _inputsSecondary[i, j].GetArrayView<float>(), _buffers.OutputsFloat[_inputDimensions + i, j]);
+                    GPU.GPUManager.CopyAction(index, _inputsSecondary[i, j].GetArrayView<float>(), _buffers.Output[_inputDimensions + i, j]);
                 }
             }
 
@@ -141,6 +141,27 @@ namespace ConvolutionalNeuralNetwork.Layers
                 buffers.OutputDimensionArea(i, _outputShapes[i].Area);
 
             return _outputShapes;
+        }*/
+        public override string Name => throw new NotImplementedException();
+
+        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void Forward()
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void Reset()
+        {
+            throw new NotImplementedException();
+        }
+
+        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, int batchSize)
+        {
+            throw new NotImplementedException();
         }
     }
 }

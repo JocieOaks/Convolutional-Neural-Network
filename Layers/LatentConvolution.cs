@@ -13,7 +13,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     /// </summary>
     public class LatentConvolution : Layer, IPrimaryLayer
     {
-        protected MemoryBuffer1D<LayerInfo, Stride1D.Dense>[] _deviceInfos;
+        /*protected MemoryBuffer1D<LayerInfo, Stride1D.Dense>[] _deviceInfos;
         protected FeatureMap[,] _inputs;
 
         protected int _dimensionsMultiplier;
@@ -61,7 +61,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _buffers.OutGradientsFloat[i, j].SubView(0, Infos(i).InputArea).MemSetToZero();
+                    _buffers.OutGradient[i, j].SubView(0, Infos(i).InputArea).MemSetToZero();
                 }
             }
 
@@ -70,8 +70,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    Convolution.BackwardsOutGradientAction(index, _buffers.InGradientsFloat[i, j], _filters[i, j].GetArrayView<float>(), _buffers.OutGradientsFloat[i % _inputDimensions, j], _deviceInfos[i % _inputDimensions].View);
-                    Convolution.BackwardsFilterAction(index, _buffers.InGradientsFloat[i, j], _inputs[i % _inputDimensions, j].GetArrayView<float>(), _filterGradients[i, j].GetArrayViewZeroed<float>(), _deviceInfos[i % _inputDimensions].View);
+                    Convolution.BackwardsOutGradientAction(index, _buffers.InGradient[i, j], _filters[i, j].GetArrayView<float>(), _buffers.OutGradient[i % _inputDimensions, j], _deviceInfos[i % _inputDimensions].View);
+                    Convolution.BackwardsFilterAction(index, _buffers.InGradient[i, j], _inputs[i % _inputDimensions, j].GetArrayView<float>(), _filterGradients[i, j].GetArrayViewZeroed<float>(), _deviceInfos[i % _inputDimensions].View);
                 }
             }
 
@@ -137,7 +137,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    Convolution.ForwardAction(index, _buffers.InputsFloat[i % _inputDimensions, j], _buffers.OutputsFloat[i, j], _filters[i, j].GetArrayView<float>(), _deviceInfos[i % _inputDimensions].View);
+                    Convolution.ForwardAction(index, _buffers.Input[i % _inputDimensions, j], _buffers.Output[i, j], _filters[i, j].GetArrayView<float>(), _deviceInfos[i % _inputDimensions].View);
                 }
             }
 
@@ -148,7 +148,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(Infos(i).InputArea);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    GPUManager.CopyAction(index, _buffers.InputsFloat[i, j], _inputs[i, j].GetArrayViewEmpty<float>());
+                    GPUManager.CopyAction(index, _buffers.Input[i, j], _inputs[i, j].GetArrayViewEmpty<float>());
                 }
             }
         }
@@ -180,7 +180,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, uint batchSize)
+        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, int batchSize)
         {
             if (_boolsFilters == null || _floatsFilters == null)
             {
@@ -290,6 +290,27 @@ namespace ConvolutionalNeuralNetwork.Layers
                     _floatsFilters[j, i].TestFilterGradient(this, input, output, j, _buffers);
                 }
             }
+        }*/
+        public override string Name => throw new NotImplementedException();
+
+        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void Forward()
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void Reset()
+        {
+            throw new NotImplementedException();
+        }
+
+        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, int batchSize)
+        {
+            throw new NotImplementedException();
         }
     }
 }

@@ -15,15 +15,23 @@ namespace ConvolutionalNeuralNetwork.GPU
 {
     public static class GPUManager
     {
-
+        private const bool DEBUGCPU = false;
         private static readonly LRU _lru;
         static GPUManager()
         {
-            Context = Context.Create(builder => builder.Cuda());
-            Accelerator = Context.CreateCudaAccelerator(0);
+            if(DEBUGCPU)
+            {
+                Context = Context.Create(builder => builder.CPU());
+                Accelerator = Context.CreateCPUAccelerator(0);
+            }
+            else
+            {
+                Context = Context.Create(builder => builder.Cuda());
+                Accelerator = Context.CreateCudaAccelerator(0); 
+            }
             _lru = new LRU(Accelerator.MemorySize, 0.5f);
             CopyAction = Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(CopyKernel);
-            AddAction = Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(AddKernel);
+            AddAction = Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, int>(AddKernel);
         }
 
         /// <value>A Cuda <see cref="global::ILGPU.Runtime.Accelerator"/> for running <see cref="global::ILGPU"/> kernels.</value>
@@ -33,7 +41,7 @@ namespace ConvolutionalNeuralNetwork.GPU
         /// <value>An action for running the cuda kernel <see cref="CopyKernel(Index1D, ArrayView{Color}, ArrayView{Color})"/>.</value>
         public static Action<Index1D, ArrayView<float>, ArrayView<float>> CopyAction { get; }
 
-        public static Action<Index1D, ArrayView<float>, ArrayView<float>> AddAction { get; }
+        public static Action<Index3D, ArrayView<float>, ArrayView<float>, int> AddAction { get; }
 
         public static (uint, MemoryBuffer) Allocate<T>(Cacheable<T> cacheable) where T : unmanaged => _lru.Allocate(cacheable, Accelerator);
 
@@ -52,9 +60,22 @@ namespace ConvolutionalNeuralNetwork.GPU
             output[index] = input[index];
         }
 
-        private static void AddKernel(Index1D index, ArrayView<float> value, ArrayView<float> addition)
+        /// <summary>
+        /// An <see cref="ILGPU"/> kernel that adds the values from one <see cref="ArrayView{T}"/> of floats, to another. Each array is broken up into
+        /// subarrays of equal size, then every subarray from <paramref name="addition"/> is added to every subarray of <paramref name="value"/>.
+        /// Typically one of the two arrays only contains one subarray, with a single <paramref name="addition"/> subarray being added to every <paramref name="value"/> subarray
+        /// or multiple <paramref name="addition"/> subarrays added to a single <paramref name="value"/> subarray.
+        /// </summary>
+        /// <param name="index">The index of the arrays to sum.
+        /// X iterates over a single subarray.
+        /// Y iterates over the subarrays of <paramref name="value"/>.
+        /// Z iterates over the subarrays of <paramref name="addition"/>.</param>
+        /// <param name="value"> The array of floats to which <paramref name="addition"/> is being added.</param>
+        /// <param name="addition">The array of floats being added to <paramref name="value"/>.</param>
+        /// <param name="subarrayArea">The size of each subarray.</param>
+        private static void AddKernel(Index3D index, ArrayView<float> value, ArrayView<float> addition, int subarrayArea)
         {
-            value[index.X] += addition[index.X];
+            Atomic.Add( ref value[index.Y * subarrayArea + index.X], addition[index.Z * subarrayArea + index.X]);
         }
 
         public static uint GCItem(uint Id) => _lru.GCItem(Id);

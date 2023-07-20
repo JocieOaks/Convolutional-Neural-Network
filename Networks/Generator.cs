@@ -11,9 +11,10 @@ namespace ConvolutionalNeuralNetwork.Networks
     {
         private bool[][] _classificationBools;
         private float[][] _classificationFloats;
-        private FeatureMap[,] _outputs;
+        private FeatureMap[] _outputs;
         private FeatureMap[,] _latentSpace;
         private readonly int _latentDimensions = 50;
+        private int _outputArea;
 
         /// <summary>
         /// Loads a <see cref="Generator"/> from a json file.
@@ -53,12 +54,12 @@ namespace ConvolutionalNeuralNetwork.Networks
         /// <param name="gradients">An array of <see cref="FeatureMap"/>'s containing the gradients for the last layer of the <see cref="Generator"/>.</param>
         /// <param name="inputs">The images and their associatd labels for this iteration of training.</param>
         /// <param name="learningRate">The learning rate defining the degree to which each layer should be updated.</param>
-        public void Backwards(FeatureMap[,] inputs, FeatureMap[,] gradients)
+        public void Backwards(FeatureMap[] gradients)
         {
-            gradients = HyperTan.Backward(inputs, gradients);
+            HyperTan.Backward(_outputs, gradients);
             for (int i = 0; i < _batchSize; i++)
             {
-                gradients[0, i].CopyToBuffer(_endBuffers.OutputsFloat[0,i]);
+                gradients[i].CopyToBuffer(_endBuffers.InGradient.SubView(_outputArea * i, _outputArea));
             }
 
             _updateStep++;
@@ -84,7 +85,7 @@ namespace ConvolutionalNeuralNetwork.Networks
         /// </summary>
         /// <param name="input">The images and their asscoiated labels.</param>
         /// <param name="inference">Determines whether the <see cref="Generator"/> is training or inferring. Defaults to false.</param>
-        public FeatureMap[,] Forward(ImageInput[] input)
+        public FeatureMap[] Forward(ImageInput[] input)
         {
 
             for (int i = 0; i < _batchSize; i++)
@@ -98,7 +99,7 @@ namespace ConvolutionalNeuralNetwork.Networks
                 for(int j = 0; j < _batchSize; j++)
                 {
                     _latentSpace[i, j].Randomize(0, 1);
-                    _latentSpace[i, j].CopyToBuffer(_startBuffer.InputsFloat[i, j]);
+                    _latentSpace[i, j].CopyToBuffer(_startBuffers.Input.SubView(j * _latentDimensions + i, 1));
                 }
             }
 
@@ -109,10 +110,12 @@ namespace ConvolutionalNeuralNetwork.Networks
 
             for(int i = 0; i < _batchSize; i++)
             {
-                _outputs[0, i].SyncCPU(_endBuffers.OutputsFloat[0, i]);
+                _outputs[i].SyncCPU(_endBuffers.Output.SubView(_outputArea * i, _outputArea));
             }
 
-            return HyperTan.Forward(_outputs);
+            HyperTan.Forward(_outputs);
+
+            return _outputs;
         }
 
         /// <inheritdoc/>
@@ -130,13 +133,14 @@ namespace ConvolutionalNeuralNetwork.Networks
                     _layers.Remove(_layers[i]);
             }
 
-            _outputs = new FeatureMap[1, batchSize];
+            _outputs = new FeatureMap[batchSize];
+            _outputArea = width * length;
 
             _classificationBools = new bool[_batchSize][];
             _classificationFloats = new float[_batchSize][];
             for (int i = 0; i < batchSize; i++)
             {
-                _outputs[0, i] = new FeatureMap(width, length);
+                _outputs[i] = new FeatureMap(width, length);
                 _classificationBools[i] = new bool[labelBools];
                 _classificationFloats[i] = new float[labelFloats];
             }
@@ -153,23 +157,26 @@ namespace ConvolutionalNeuralNetwork.Networks
             Shape[] current = new Shape[_latentDimensions];
             for(int i = 0; i < _latentDimensions; i++)
                 current[i] = new Shape(1, 1);
-            IOBuffers inputBuffers = _startBuffer = new();
+            IOBuffers inputBuffers = _startBuffers = new();
             IOBuffers outputBuffers = new();
-            outputBuffers.OutputDimensionArea(_latentDimensions, 1);
+            outputBuffers.OutputDimensionArea(_latentDimensions);
 
             foreach (var layer in _layers)
             {
-                if (layer is LatentConvolution key)
+                /*if (layer is LatentConvolution key)
                 {
                     key.Bools = _classificationBools;
                     key.Floats = _classificationFloats;
-                }
+                }*/
 
-                current = layer.Startup(current, inputBuffers, (uint)batchSize);
-                (inputBuffers, outputBuffers) = (outputBuffers, inputBuffers);
+                current = layer.Startup(current, inputBuffers, batchSize);
+                if (layer is not IUnchangedLayer)
+                {
+                    (inputBuffers, outputBuffers) = (outputBuffers, inputBuffers); 
+                }
             }
             _endBuffers = outputBuffers;
-
+            _middleBuffers = inputBuffers;
             inputBuffers.Allocate(batchSize);
             outputBuffers.Allocate(batchSize);
             IOBuffers.SetCompliment(inputBuffers, outputBuffers);

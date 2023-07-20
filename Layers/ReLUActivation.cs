@@ -14,7 +14,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     {
         private static readonly Action<Index1D, ArrayView<int>, ArrayView<float>, ArrayView<float>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<int>, ArrayView<float>, ArrayView<float>>(BackwardsKernel);
         private static readonly Action<Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>>(ForwardKernel);
-        private MemoryBuffer1D<int, Stride1D.Dense>[,] _deviceZeroed;
+        private ArrayView<int> _deviceZeroed;
 
         private const float NEGATIVESCALING = 0.2f;
 
@@ -31,28 +31,16 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                Index1D index = new(_inputShapes[i].Area);
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    s_backwardsAction(index, _deviceZeroed[i, j].View, _buffers.InGradientsFloat[i, j], _buffers.OutGradientsFloat[i, j]);
-                }
-            }
+            Index1D index = new(_inputShapes[0].Area * _batchSize * _inputDimensions);
+            s_backwardsAction(index, _deviceZeroed, _buffers.InGradient, _buffers.OutGradient);
+
             Synchronize();
         }
         /// <inheritdoc/>
         public override void Forward()
         {
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                Index1D index = new(_inputShapes[i].Area);
-
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    s_forwardAction(index, _buffers.InputsFloat[i, j], _deviceZeroed[i, j].View, _buffers.OutputsFloat[i, j]);
-                }
-            }
+            Index1D index = new(_inputShapes[0].Area * _batchSize * _inputDimensions);
+            s_forwardAction(index, _buffers.Input, _deviceZeroed, _buffers.Output);
             Synchronize();
         }
 
@@ -62,19 +50,15 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, uint batchSize)
+        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, int batchSize)
         {
             BaseStartup(inputShapes, buffers, batchSize);
 
-            _deviceZeroed = new MemoryBuffer1D<int, Stride1D.Dense>[_inputDimensions, _batchSize];
+            int zeroArea = inputShapes[0].Area / 32 + (inputShapes[0].Area % 32 > 0 ? 1 : 0);
+            zeroArea *= _inputDimensions;
+            zeroArea *= _batchSize;
 
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _deviceZeroed[i, j] = GPU.GPUManager.Accelerator.Allocate1D<int>(inputShapes[i].Area / 32 + (inputShapes[i].Area % 32 > 0 ? 1 : 0));
-                }
-            }
+            _deviceZeroed = GPU.GPUManager.Accelerator.Allocate1D<int>(zeroArea).View;
             return _outputShapes;
         }
 

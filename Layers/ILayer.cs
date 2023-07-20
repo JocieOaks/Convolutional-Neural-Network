@@ -31,7 +31,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="inputs">The previous <see cref="Layer"/>'s output.</param>
         /// <param name="outGradients">The previous <see cref="Layer"/>'s inGradient.</param>
         /// <returns>Returns the output and inGradient to share with the next <see cref="Layer"/>.</returns>
-        Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, uint batchSize);
+        Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, int batchSize);
 
         /// <summary>
         /// Reset's the current <see cref="Layer"/> to it's initial weights or initial random weights.
@@ -58,5 +58,12 @@ namespace ConvolutionalNeuralNetwork.Layers
     /// These typically always follow <see cref="IPrimaryLayer"/>s.
     /// </summary>
     public interface ISecondaryLayer : ILayer
+    { }
+
+    /// <summary>
+    /// The <see cref="IUnchangedLayer"/> interface is for <see cref="Layer"/>s where the direct input is the same as the direct output. The layer may perform some alternate
+    /// task, such as modifying the shape of the output (but the single dimensional values remain constant) or copying the input for a later layer.
+    /// </summary>
+    public interface IUnchangedLayer : ILayer
     { }
 }

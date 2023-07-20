@@ -57,7 +57,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                     {
                         for (int x = 0; x < bitmap.Width; x++)
                         {
-                            map[x, bitmap.Height - y - 1] = bitmap.GetPixel(x, y).GetBrightness();
+                            map[x, bitmap.Height - y - 1] = (bitmap.GetPixel(x, y).R - 127.5f) / 127.5f;
                         }
                     }
                 }

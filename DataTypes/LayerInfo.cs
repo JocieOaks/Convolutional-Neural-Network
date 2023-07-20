@@ -64,34 +64,30 @@
         /// <inheritdoc/>
         public int OutputArea => OutputWidth * OutputLength;
 
+        public int InputDimensions { get; init; }
+
+        public int OutputDimensions { get; init; }
+
         /// <inheritdoc/>
         public int Stride { get; init; }
 
         public int Padding { get; init; }
 
-        /// <summary>
-        /// Calculates the single dimensional array index for a flattened output <see cref="FeatureMap"/>.
-        /// </summary>
-        /// <param name="x">The x coordinate of the desired index.</param>
-        /// <param name="y">The y coordinate of the desired index.</param>
-        /// <returns>Returns the index corresponding to (<paramref name="x"/>, <paramref name="y"/>).</returns>
-        public int OutputIndex(int x, int y)
+        public bool TryGetInputIndex(int outputIndex, int shiftX, int shiftY, out int index)
         {
-            return y * OutputWidth + x;
+            
+            int strideY = outputIndex / OutputWidth;
+            int strideX = outputIndex - (strideY * OutputWidth);
+
+            shiftX += strideX * Stride - Padding;
+            shiftY += strideY * Stride - Padding;
+            index = shiftY * InputWidth + shiftX;
+            return shiftX >= 0 && shiftY >= 0 && shiftX < InputWidth && shiftY < InputLength;
         }
 
-        /// <summary>
-        /// Calculates the single dimensional array index for a flattened input <see cref="FeatureMap"/>.
-        /// </summary>
-        /// <param name="x">The x coordinate of the desired index.</param>
-        /// <param name="y">The y coordinate of the desired index.</param>
-        /// <returns>Returns the index corresponding to (<paramref name="x"/>, <paramref name="y"/>).</returns>
-        public bool TryGetInputIndex(int strideX, int x, int strideY, int y, out int index)
+        public (int, int) GetOffset(int batchIndex,int dimension)
         {
-            x += strideX * Stride - Padding;
-            y += strideY * Stride - Padding;
-            index = y * InputWidth + x;
-            return x > 0 && y > 0 && x < InputWidth && y < InputLength;
+            return ((dimension % InputDimensions + batchIndex * InputDimensions) * InputArea, (dimension + batchIndex * OutputDimensions) * OutputArea);
         }
 
         /// <summary>
@@ -100,9 +96,9 @@
         /// <param name="x">The x coordinate of the desired index.</param>
         /// <param name="y">The y coordinate of the desired index.</param>
         /// <returns>Returns the index corresponding to (<paramref name="x"/>, <paramref name="y"/>).</returns>
-        public int FilterIndex(int x, int y)
+        public int FilterIndex(int x, int y, int dimension)
         {
-            return y * FilterSize + x;
+            return dimension * FilterSize * FilterSize + y * FilterSize + x;
         }
     }
 
@@ -132,34 +128,30 @@
         /// <inheritdoc/>
         public int OutputArea => OutputWidth * OutputLength;
 
+        public int InputDimensions { get; init; }
+
+        public int OutputDimensions { get; init; }
+
         /// <inheritdoc/>
         public int Stride { get; init; }
 
         public int Padding { get; init; }
 
-        /// <summary>
-        /// Calculates the single dimensional array index for a flattened output <see cref="FeatureMap"/>.
-        /// </summary>
-        /// <param name="x">The x coordinate of the desired index.</param>
-        /// <param name="y">The y coordinate of the desired index.</param>
-        /// <returns>Returns the index corresponding to (<paramref name="x"/>, <paramref name="y"/>).</returns>
-        public int InputIndex(int x, int y)
+        public bool TryGetOutputIndex(int inputIndex, int shiftX, int shiftY, out int index)
         {
-            return y * InputWidth + x;
+
+            int strideY = inputIndex / InputWidth;
+            int strideX = inputIndex - (strideY * InputWidth);
+
+            shiftX += strideX * Stride - Padding;
+            shiftY += strideY * Stride - Padding;
+            index = shiftY * OutputWidth + shiftX;
+            return shiftX >= 0 && shiftY >= 0 && shiftX < OutputWidth && shiftY < OutputLength;
         }
 
-        /// <summary>
-        /// Calculates the single dimensional array index for a flattened input <see cref="FeatureMap"/>.
-        /// </summary>
-        /// <param name="x">The x coordinate of the desired index.</param>
-        /// <param name="y">The y coordinate of the desired index.</param>
-        /// <returns>Returns the index corresponding to (<paramref name="x"/>, <paramref name="y"/>).</returns>
-        public bool TryGetOutputIndex(int strideX, int x, int strideY, int y, out int index)
+        public (int, int) GetOffset(int batchIndex, int dimension)
         {
-            x += strideX * Stride - Padding;
-            y += strideY * Stride - Padding;
-            index = y * OutputWidth + x;
-            return x > 0 && y > 0 && x < OutputWidth  && y < OutputLength;
+            return ((dimension % InputDimensions + batchIndex * InputDimensions) * InputArea, (dimension + batchIndex * OutputDimensions) * OutputArea);
         }
 
         /// <summary>
@@ -168,9 +160,9 @@
         /// <param name="x">The x coordinate of the desired index.</param>
         /// <param name="y">The y coordinate of the desired index.</param>
         /// <returns>Returns the index corresponding to (<paramref name="x"/>, <paramref name="y"/>).</returns>
-        public int FilterIndex(int x, int y)
+        public int FilterIndex(int x, int y, int dimension)
         {
-            return y * FilterSize + x;
+            return dimension * FilterSize * FilterSize + y * FilterSize + x;
         }
     }
 
@@ -207,6 +199,9 @@
 
         /// <inheritdoc/>
         public int OutputLength => Length;
+
+        public int OutputDimensions { get; init; }
+        public int InputDimensions { get; init; }
 
         /// <inheritdoc/>
         public int Stride => 1;

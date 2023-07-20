@@ -1,6 +1,8 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
+using ConvolutionalNeuralNetwork.GPU;
 using ILGPU;
 using ILGPU.Runtime;
+using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -20,25 +22,23 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class Summation : Layer, IStructuralLayer
     {
-        private readonly Action<Index1D, ArrayView<float>, ArrayView<float>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(ForwardKernel);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<StaticLayerInfo>> s_backwardsAction =
+            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsKernel);
+
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<StaticLayerInfo>> s_forwardAction =
+            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<StaticLayerInfo>>(ForwardKernel);
+
+        private ArrayView<StaticLayerInfo> _deviceInfo;
         [JsonProperty] private int _dimensionDivisor;
 
         [JsonConstructor] public Summation() : base(1, 1) { }
-
         /// <inheritdoc/>
         public override string Name => "Summation Layer";
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                int outputDimension = i % _outputDimensions;
-                Index1D index = new(Infos(i).Area);
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    GPU.GPUManager.CopyAction(index, _buffers.InGradientsFloat[outputDimension, j], _buffers.OutGradientsFloat[i, j]);
-                }
-            }
+            Index3D index = new(_batchSize, _inputDimensions, Infos(0).Area);
+            s_backwardsAction(index, _buffers.Input, _buffers.Output, _deviceInfo);
 
             Synchronize();
         }
@@ -46,27 +46,13 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Forward()
         {
-            for(int i = 0; i < _outputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _buffers.OutputsFloat[i, j].SubView(0, Infos(i).Area).MemSetToZero();
-                }
-            }
+            _buffers.Output.SubView(0, _batchSize * _outputDimensions * Infos(0).Area).MemSetToZero();
 
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                int outputDimension = i % _outputDimensions;
-                Index1D index = new(Infos(i).Area);
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    s_forwardAction(index, _buffers.InputsFloat[i, j], _buffers.OutputsFloat[outputDimension, j]);
-                }
-            }
+            Index3D index = new(_batchSize, _inputDimensions, Infos(0).Area);
+            s_forwardAction(index, _buffers.Input, _buffers.Output, _deviceInfo);
 
             Synchronize();
         }
-
         /// <inheritdoc/>
         public override void Reset()
         {
@@ -90,7 +76,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// Must be greater than 1.</param>
         public void SetOutputDivisor(int divisor)
         {
-            if(divisor <= 1)
+            if (divisor <= 1)
             {
                 throw new ArgumentException("Dimension divisor must be greater than 1.");
             }
@@ -98,29 +84,37 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, uint batchSize)
+        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, int batchSize)
         {
-            if(_outputDimensions != 0)
+            if (_outputDimensions != 0)
             {
                 _dimensionDivisor = inputShapes.Length / _outputDimensions;
             }
-            
+
             BaseStartup(inputShapes, buffers, batchSize, -_dimensionDivisor);
+
+            _deviceInfo = GPUManager.Accelerator.Allocate1D(Array.ConvertAll(_layerInfos, info => (StaticLayerInfo)info)).View;
 
             return _outputShapes;
         }
 
-        /// <summary>
-        /// An <see cref="ILGPU"/> kernel that adds the values from one <see cref="ArrayView{T}"/> of floats, to another.
-        /// </summary>
-        /// <param name="index">The index of the arrays to sum.</param>
-        /// <param name="input">The array of floats being added to <paramref name="output"/>.</param>
-        /// <param name="output">The array of floats to which <paramref name="input"/> is being added.</param>
-        private static void ForwardKernel(Index1D index, ArrayView<float> input, ArrayView<float> output)
+        private static void BackwardsKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, ArrayView<StaticLayerInfo> infoView)
         {
-            Atomic.Add(ref output[index.X], input[index.X]);
+            StaticLayerInfo info = infoView[index.Y];
+            int outGradientIndex = (index.X * info.InputDimensions + index.Y) * info.Area + index.Z;
+            int inGradientIndex = (index.X * info.OutputDimensions + index.Y % info.OutputDimensions) * info.Area + index.Z;
+
+            outGradient[outGradientIndex] = inGradient[inGradientIndex];
         }
 
+        private static void ForwardKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, ArrayView<StaticLayerInfo> infoView)
+        {
+            StaticLayerInfo info = infoView[index.Y];
+            int inputIndex = (index.X * info.InputDimensions + index.Y) * info.Area + index.Z;
+            int outputIndex = (index.X * info.OutputDimensions + index.Y % info.OutputDimensions) * info.Area + index.Z;
+
+            Atomic.Add(ref output[outputIndex], input[inputIndex]);
+        }
         /// <summary>
         /// Gets the <see cref="StaticLayerInfo"/> for a particular dimension.
         /// </summary>

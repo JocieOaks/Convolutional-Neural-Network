@@ -2,7 +2,6 @@
 using ConvolutionalNeuralNetwork.GPU;
 using ILGPU;
 using ILGPU.Runtime;
-using ILGPU.Runtime.OpenCL;
 using Newtonsoft.Json;
 using System.Runtime.Serialization;
 
@@ -15,10 +14,10 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class Convolution : Layer, IPrimaryLayer
     {
-        private MemoryBuffer1D<LayerInfo, Stride1D.Dense>[] _deviceInfos;
-        private FeatureMap[,] _inputs;
         private readonly int _dimensionsMultiplier;
-        [JsonProperty] private Weights[] _filters;
+        private ArrayView<LayerInfo> _deviceInfos;
+        [JsonProperty] private Weights _filters;
+        private Vector _inputCopy;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Convolution"/> layer.
@@ -44,11 +43,11 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
         }
 
-        public static Action<Index2D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>> BackwardsFilterAction { get; } = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsFilterKernel);
+        public static Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>> BackwardsFilterAction { get; } = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsFilterKernel);
 
-        public static Action<Index2D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>> BackwardsOutGradientAction { get; } = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsGradientKernel);
+        public static Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>> BackwardsOutGradientAction { get; } = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>>(BackwardsGradientKernel);
 
-        public static Action<Index2D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>> ForwardAction { get; } = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>>(ForwardKernel);
+        public static Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>> ForwardAction { get; } = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<LayerInfo>>(ForwardKernel);
 
         /// <inheritdoc/>
         public override string Name => "Convolutional Layer";
@@ -69,52 +68,51 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="learningRate">Controls how much the layer is updated with each backpropagation.</param>
         public void BackwardsUpdateOnly(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            for (int i = 0; i < _outputDimensions; i++)
-            {
-                Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    BackwardsFilterAction(index, _buffers.InGradientsFloat[i, j], _inputs[i % _inputDimensions, j].GetArrayView<float>(), _filters[i].GradientGPU<float>(), _deviceInfos[i % _inputDimensions].View);
-                }
-            }
+            Index3D index = new(_batchSize, _outputDimensions, Infos(0).OutputArea);
+
+            BackwardsFilterAction(index, _buffers.InGradient, _inputCopy.GetArrayView<float>(), _filters.GradientGPU<float>(), _deviceInfos);
+
+            Index3D biasIndex = new(_outputDimensions * _outputShapes[0].Area, 1, _batchSize);
+            GPUManager.AddAction(biasIndex, _bias.GradientGPU<float>(), _buffers.InGradient, _outputDimensions * _outputShapes[0].Area);
 
             Synchronize();
-            DecrementCacheabble(_inputs, (uint)(_outputDimensions / _inputDimensions));
 
-            for (int i = 0; i < _outputDimensions; i++)
-            {
-                _filters[i].DisposeGradient(_batchSize);
-                _filters[i].UpdateWeights(learningRate, firstMomentDecay, secondMomentDecay);
-            }
+            _inputCopy.DecrementLiveCount();
+            _bias.DecrementLiveGradient();
+            _bias.UpdateWeights(learningRate, firstMomentDecay, secondMomentDecay);
+
+            _filters.DecrementLiveGradient();
+            _filters.UpdateWeights(learningRate, firstMomentDecay, secondMomentDecay);
+        }
+
+        public void FilterTest(int outputMultiplier, int batchSize, int inputSize)
+        {
+            (Shape[] input, Shape[] output) = FilterTestSetup(outputMultiplier, batchSize, inputSize);
+
+            _filters.TestFilterGradient(this, input, output, _buffers);
+            _bias.TestFilterGradient(this, input, output, _buffers);
+            
         }
 
         /// <inheritdoc/>
         public override void Forward()
         {
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                Index1D index = new(Infos(i).InputArea);
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    GPUManager.CopyAction(index, _buffers.InputsFloat[i, j], _inputs[i, j].GetArrayViewEmpty<float>());
-                }
-            }
+            Index1D copyIndex = new(_inputDimensions * Infos(0).InputArea * _batchSize);
+            GPUManager.CopyAction(copyIndex, _buffers.Input, _inputCopy.GetArrayViewEmpty<float>());
 
-            for (int i = 0; i < _outputDimensions; i++)
-            {
-                Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    ForwardAction(index, _buffers.InputsFloat[i % _inputDimensions, j], _buffers.OutputsFloat[i, j], _filters[i].WeightsGPU<float>(), _deviceInfos[i % _inputDimensions].View);
-                }
-            }
+            Index3D index = new(_batchSize, _outputDimensions, Infos(0).OutputArea);
+            ForwardAction(index, _buffers.Input, _buffers.Output, _filters.WeightsGPU<float>(), _deviceInfos);
+
+            Index3D biasIndex = new(_outputDimensions * _outputShapes[0].Area, _batchSize, 1);
+            GPUManager.AddAction(biasIndex, _buffers.Output, _bias.WeightsGPU<float>(), _outputDimensions * _outputShapes[0].Area);
+
             Synchronize();
-            DecrementCacheabble(_inputs);
 
-            for(int i = 0; i < _outputDimensions; i++)
-            {
-                _filters[i].DisposeWeights(_batchSize);
-            }
+            _bias.DecrementLiveWeights();
+
+            _inputCopy.DecrementLiveCount();
+
+            _filters.DecrementLiveWeights();
         }
 
         /// <summary>
@@ -135,59 +133,36 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             for (int i = 0; i < _outputDimensions; i++)
             {
-                _filters[i].Reset(0, stdDev);
+                _filters.Reset(0, stdDev);
             }
         }
 
+        [JsonProperty] private Weights _bias;
+
         /// <inheritdoc/>
-        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, uint batchSize)
+        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, int batchSize)
         {
             if (_filters == null)
             {
                 BaseStartup(inputShapes, buffers, batchSize, _dimensionsMultiplier);
-                _filters = new Weights[_outputDimensions];
 
                 float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize + _inputDimensions * _filterSize * _filterSize);
                 float stdDev = MathF.Sqrt(variance);
 
-                int filterArea = _filterSize * _filterSize;
-
-                for (int i = 0; i < _filters.Length; i++)
-                {
-                    _filters[i] = new Weights(filterArea, 0, 0.02f);
-                }
+                _filters = new Weights(_filterSize * _filterSize * _outputDimensions, 0, 0.05f);
             }
             else
             {
-                BaseStartup(inputShapes, buffers, batchSize, _filters.Length / inputShapes.Length);
+                BaseStartup(inputShapes, buffers, batchSize, _filters.Length / _filterSize / _filterSize / inputShapes.Length);
             }
 
-            _deviceInfos = new MemoryBuffer1D<LayerInfo, Stride1D.Dense>[_inputDimensions];
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _deviceInfos[i] = GPUManager.Accelerator.Allocate1D(new LayerInfo[] { Infos(i) });
-            }
+            _bias ??= new Weights(_outputDimensions * _outputShapes[0].Area, 0);
 
-            _inputs = new FeatureMap[_inputDimensions, batchSize];
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < batchSize; j++)
-                {
-                    _inputs[i, j] = new FeatureMap(inputShapes[i]);
-                }
-            }
+            _deviceInfos = GPUManager.Accelerator.Allocate1D(Array.ConvertAll(_layerInfos, info => (LayerInfo)info)).View;
+
+            _inputCopy = new Vector(_inputDimensions * _batchSize * inputShapes[0].Area);
 
             return _outputShapes;
-        }
-
-        /// <summary>
-        /// Gets the <see cref="LayerInfo"/> for a particular dimension.
-        /// </summary>
-        /// <param name="index">The dimension who <see cref="LayerInfo"/> is needed.</param>
-        /// <returns>Return the <see cref="LayerInfo"/> corresponding to an input dimension.</returns>
-        private LayerInfo Infos(int index)
-        {
-            return (LayerInfo)_layerInfos[index % _inputDimensions];
         }
 
         /// <summary>
@@ -202,18 +177,21 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// Because <see cref="Color"/> cannot be summed atomically, every three floats represents a single
         /// <see cref="Color"/> in the gradient.</param>
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void BackwardsFilterKernel(Index2D index, ArrayView<float> inGradient, ArrayView<float> input, ArrayView<float> filterGradient, ArrayView<LayerInfo> info)
+        private static void BackwardsFilterKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> input, ArrayView<float> filterGradient, ArrayView<LayerInfo> infoView)
         {
-            float dL = inGradient[info[0].OutputIndex(index.X, index.Y)] * info[0].InverseKSquared;
+            LayerInfo info = infoView[0];
+            (int inputOffset, int inGradientOffset) = info.GetOffset(index.X, index.Y);
 
-            for (int j = 0; j < info[0].FilterSize; j++)
+            float dL = inGradient[index.Z + inGradientOffset];
+
+            for (int j = 0; j < info.FilterSize; j++)
             {
-                for (int i = 0; i < info[0].FilterSize; i++)
+                for (int i = 0; i < info.FilterSize; i++)
                 {
-                    if (info[0].TryGetInputIndex(index.X, i, index.Y, j, out int inputIndex))
+                    if (info.TryGetInputIndex(index.Z, i, j, out int inputIndex))
                     {
-                        int filterIndex = info[0].FilterIndex(i, j);
-                        float dK = dL * input[inputIndex];
+                        int filterIndex = info.FilterIndex(i, j, index.Y);
+                        float dK = dL * input[inputIndex + inputOffset];
                         Atomic.Add(ref filterGradient[filterIndex], dK);
                     }
                 }
@@ -232,19 +210,22 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// Because <see cref="Color"/> cannot be summed atomically, every three floats represents a single
         /// <see cref="Color"/> in the gradient.</param>
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void BackwardsGradientKernel(Index2D index, ArrayView<float> inGradient, ArrayView<float> filter, ArrayView<float> outGradient, ArrayView<LayerInfo> info)
+        private static void BackwardsGradientKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> filter, ArrayView<float> outGradient, ArrayView<LayerInfo> infoView)
         {
-            float dL = inGradient[info[0].OutputIndex(index.X, index.Y)] * info[0].InverseKSquared;
+            LayerInfo info = infoView[0];
+            (int outGradientOffset, int inGradientOffset) = info.GetOffset(index.X, index.Y);
 
-            for (int j = 0; j < info[0].FilterSize; j++)
+            float dL = inGradient[index.Z + inGradientOffset];
+
+            for (int j = 0; j < info.FilterSize; j++)
             {
-                for (int i = 0; i < info[0].FilterSize; i++)
+                for (int i = 0; i < info.FilterSize; i++)
                 {
-                    if (info[0].TryGetInputIndex(index.X, i, index.Y, j, out int inputIndex))
+                    if (info.TryGetInputIndex(index.Z, i, j, out int outGradientIndex))
                     {
-                        int filterIndex = info[0].FilterIndex(i, j);
+                        int filterIndex = info.FilterIndex(i, j, index.Y);
                         float dP = dL * filter[filterIndex];
-                        Atomic.Add(ref outGradient[inputIndex], dP);
+                        Atomic.Add(ref outGradient[outGradientIndex + outGradientOffset], dP);
                     }
                 }
             }
@@ -261,48 +242,37 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="filter">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing one of the
         /// <see cref="Convolution"/>'s filters.</param>
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void ForwardKernel(Index2D index, ArrayView<float> input, ArrayView<float> convoluted, ArrayView<float> filter, ArrayView<LayerInfo> info)
+        private static void ForwardKernel(Index3D index, ArrayView<float> input, ArrayView<float> convoluted, ArrayView<float> filter, ArrayView<LayerInfo> infoView)
         {
+            LayerInfo info = infoView[0];
+            (int inputOffset, int outputOffset) = info.GetOffset(index.X, index.Y);
             float sum = 0;
 
-            for (int j = 0; j < info[0].FilterSize; j++)
+            for (int j = 0; j < info.FilterSize; j++)
             {
-                for (int i = 0; i < info[0].FilterSize; i++)
+                for (int i = 0; i < info.FilterSize; i++)
                 {
-                    if (info[0].TryGetInputIndex(index.X, i, index.Y, j, out int inputIndex))
-                        sum += filter[info[0].FilterIndex(i, j)] * input[inputIndex];
+                    if (info.TryGetInputIndex(index.Z, i, j, out int inputIndex))
+                        sum += filter[info.FilterIndex(i, j, index.Y)] * input[inputIndex + inputOffset];
                 }
             }
 
-            convoluted[info[0].OutputIndex(index.X, index.Y)] = sum * info[0].InverseKSquared;
+            convoluted[index.Z + outputOffset] = sum;
         }
+
         /// <summary>
         /// Backpropagates through the layer without updating any of the filter weights. Called when learning rate is zero.
         /// </summary>
         private void BackwardsNoUpdate()
         {
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for(int j = 0; j < _batchSize; j++)
-                {
-                    _buffers.OutGradientsFloat[i, j].SubView(0, Infos(i).InputArea).MemSetToZero();
-                }
-            }
+            _buffers.OutGradient.SubView(0, _inputDimensions * _batchSize * Infos(0).InputArea).MemSetToZero();
 
-            for (int i = 0; i < _outputDimensions; i++)
-            {
-                Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    BackwardsOutGradientAction(index, _buffers.InGradientsFloat[i, j], _filters[i].WeightsGPU<float>(), _buffers.OutGradientsFloat[i % _inputDimensions, j], _deviceInfos[i % _inputDimensions].View);
-                }
-            }
+            Index3D index = new(_batchSize, _outputDimensions, Infos(0).OutputArea);
+            BackwardsOutGradientAction(index, _buffers.InGradient, _filters.WeightsGPU<float>(), _buffers.OutGradient, _deviceInfos);
+
             Synchronize();
 
-            for (int i = 0; i < _outputDimensions; i++)
-            {
-                _filters[i].DisposeWeights(_batchSize);
-            }
+            _filters.DecrementLiveWeights();
         }
 
         /// <summary>
@@ -313,45 +283,35 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="secondMomentDecay">The exponential decay rate for the second moment.</param>
         private void BackwardsUpdate(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    _buffers.OutGradientsFloat[i, j].SubView(0, Infos(i).InputArea).MemSetToZero();
-                }
-            }
+            _buffers.OutGradient.SubView(0, _inputDimensions * _batchSize * Infos(0).InputArea).MemSetToZero();
 
-            for (int i = 0; i < _outputDimensions; i++)
-            {
-                Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    BackwardsOutGradientAction(index, _buffers.InGradientsFloat[i, j], _filters[i].WeightsGPU<float>(), _buffers.OutGradientsFloat[i % _inputDimensions, j], _deviceInfos[i % _inputDimensions].View);
-                    BackwardsFilterAction(index, _buffers.InGradientsFloat[i, j], _inputs[i % _inputDimensions, j].GetArrayView<float>(), _filters[i].GradientGPU<float>(), _deviceInfos[i % _inputDimensions].View);
-                }
-            }
+            Index3D index = new(_batchSize, _outputDimensions, Infos(0).OutputArea);
+
+            BackwardsOutGradientAction(index, _buffers.InGradient, _filters.WeightsGPU<float>(), _buffers.OutGradient, _deviceInfos);
+            BackwardsFilterAction(index, _buffers.InGradient, _inputCopy.GetArrayView<float>(), _filters.GradientGPU<float>(), _deviceInfos);
+
+            Index3D biasIndex = new(_outputDimensions * _outputShapes[0].Area, 1, _batchSize);
+            GPUManager.AddAction(biasIndex, _bias.GradientGPU<float>(), _buffers.InGradient, _outputDimensions * _outputShapes[0].Area);
 
             Synchronize();
-            DecrementCacheabble(_inputs, (uint)(_outputDimensions / _inputDimensions));
 
-            for (int i = 0; i < _outputDimensions; i++)
-            {
-                _filters[i].DisposeGradient(_batchSize);
-                _filters[i].DisposeWeights(_batchSize);
-                _filters[i].UpdateWeights(learningRate, firstMomentDecay, secondMomentDecay);
-            }
+            _inputCopy.DecrementLiveCount();
+            _bias.DecrementLiveGradient();
+            _bias.UpdateWeights(learningRate, firstMomentDecay, secondMomentDecay);
+
+            _filters.DecrementLiveGradient();
+            _filters.DecrementLiveWeights();
+            _filters.UpdateWeights(learningRate, firstMomentDecay, secondMomentDecay);
         }
 
-        public void FilterTest(int outputMultiplier)
+        /// <summary>
+        /// Gets the <see cref="LayerInfo"/> for a particular dimension.
+        /// </summary>
+        /// <param name="index">The dimension who <see cref="LayerInfo"/> is needed.</param>
+        /// <returns>Return the <see cref="LayerInfo"/> corresponding to an input dimension.</returns>
+        private LayerInfo Infos(int index)
         {
-            FeatureMap[,] input = FilterTestSetup(outputMultiplier);
-
-            for (int i = 0; i < outputMultiplier; i++)
-            {
-                FeatureMap output = new(_outputShapes[i]);
-
-                _filters[i].TestFilterGradient(this, input, output, i, _buffers);
-            }
+            return (LayerInfo)_layerInfos[index % _inputDimensions];
         }
     }
 }

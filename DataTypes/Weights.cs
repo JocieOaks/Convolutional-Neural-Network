@@ -1,5 +1,6 @@
 ﻿using ConvolutionalNeuralNetwork.Layers;
 using ILGPU;
+using ILGPU.IR;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
 using System.Runtime.Serialization;
@@ -48,13 +49,26 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             _secondMoment = new float[length];
         }
 
-        public Weights(int length, float color)
+        public Weights(int length, float value)
         {
             _weights = new Vector(length);
 
             for (int i = 0; i < length; i++)
             {
-                _weights[i] = color;
+                _weights[i] = value;
+            }
+
+            _gradient = new Vector(length);
+            _firstMoment = new float[length];
+            _secondMoment = new float[length];
+        }
+
+        public Weights(int length, float limit, bool _)
+        {
+            _weights = new Vector(length);
+            for (int i = 0; i < length; i++)
+            {
+                _weights[i] = (float)(Utility.Random.NextDouble() * 2 - 1) * limit;
             }
 
             _gradient = new Vector(length);
@@ -105,14 +119,14 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return _weights.GetArrayView<T>();
         }
 
-        public void DisposeWeights(uint batchSize)
+        public void DecrementLiveWeights(int decrement = 1)
         {
-            _weights.DecrementLiveCount(batchSize);
+            _weights.DecrementLiveCount((uint)decrement);
         }
 
-        public void DisposeGradient(uint batchSize)
+        public void DecrementLiveGradient(int decrement = 1)
         {
-            _gradient.DecrementLiveCount(batchSize);
+            _gradient.DecrementLiveCount((uint)decrement);
         }
 
         /// <summary>
@@ -122,7 +136,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="firstMomentDecay">The exponential decay rate for the first moment.</param>
         /// <param name="secondMomentDecay">The exponential decay rate for the second moment.</param>
         /// <param name="clip">The maximum absolute value to clip the gradient to.</param>
-        public void UpdateWeights(float learningRate, float firstMomentDecay, float secondMomentDecay, float clip = 0.5f)
+        public void UpdateWeights(float learningRate, float firstMomentDecay, float secondMomentDecay, float clip = 1000f)
         {
             _gradient.SyncCPU();
 
@@ -136,77 +150,89 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         private void UpdateWeightsAtIndex(int index, float learningRate, float firstMomentDecay, float secondMomentDecay, float clip)
         {
             float gradient = Math.Clamp(_gradient[index], -clip, clip);
-            float first = _firstMoment[index] = firstMomentDecay * _firstMoment[index] + (1 - firstMomentDecay) * gradient;
-            float second = _secondMoment[index] = secondMomentDecay * _secondMoment[index] + (1 - secondMomentDecay) * MathF.Pow(gradient, 2);
-            _weights[index] -= learningRate * first / (MathF.Pow(second, 0.5f) + Utility.ASYMPTOTEERRORCORRECTION);
+            float first = firstMomentDecay * _firstMoment[index] + (1 - firstMomentDecay) * gradient;
+            float second = secondMomentDecay * _secondMoment[index] + (1 - secondMomentDecay) * MathF.Pow(gradient, 2);
+            _firstMoment[index] = first;
+            _secondMoment[index] = second;
+            float result = learningRate * first / (MathF.Pow(second, 0.5f) + Utility.ASYMPTOTEERRORCORRECTION);
+            _weights[index] -= result;
         }
 
-        public void TestFilterGradient(Layer layer, FeatureMap[,] inputs, FeatureMap output, int outputIndex, IOBuffers buffer)
+        public void TestFilterGradient(ILayer layer, Shape[] inputShapes, Shape[] outputShapes, IOBuffers buffer)
         {
-            /*int inputDimensions = inputs.GetLength(0);
-
+            int inputDimensions = inputShapes.Length;
+            int outputDimensions = outputShapes.Length;
+            FeatureMap[] inputs = new FeatureMap[inputDimensions];
             for (int i = 0; i < inputDimensions; i++)
             {
-                for (int j = 0; j < 3; j++)
+                inputs[i] = new FeatureMap(inputShapes[i]);
+                for (int j = 0; j < inputShapes[i].Length; j++)
                 {
-                    for (int k = 0; k < 3; k++)
+                    for (int k = 0; k < inputShapes[i].Width; k++)
                     {
-                        inputs[i, 0][j, k] = (i + 1) * new Color(j, k, j - k);
+                        inputs[i][j, k] = (i + 1) * (j - k);
                     }
                 }
             }
 
             for (int i = 0; i < inputDimensions; i++)
             {
-                inputs[i, 0].CopyToBuffer(buffer.InputsFloat[i, 0]);
+                inputs[i].CopyToBuffer(buffer.Input.SubView(inputShapes[i].Area * i, inputShapes[i].Area));
+            }
+
+            FeatureMap[] outputs = new FeatureMap[outputDimensions];
+            for (int i = 0; i < outputDimensions; i++)
+            {
+                outputs[i] = new FeatureMap(outputShapes[i]);
             }
 
             layer.Forward();
-            output.SyncCPU(buffer.OutputsColor[outputIndex, 0]);
-            FeatureMap gradient = new(output.Width, output.Length, Color.One);
-            gradient.CopyToBuffer(buffer.InGradientsColor[outputIndex, 0]);
+            for (int i = 0; i < outputDimensions; i++)
+            {
+                outputs[i].SyncCPU(buffer.Output.SubView(outputShapes[i].Area * i, outputShapes[i].Area));
+                new FeatureMap(outputs[i].Width, outputs[i].Length, 1).CopyToBuffer(buffer.InGradient.SubView(outputShapes[i].Area * i, outputShapes[i].Area));
+            }
+
             layer.Backwards(1, 1, 1);
 
-            FeatureMap testOutput = new(output.Width, output.Length);
+            FeatureMap[] testOutput = new FeatureMap[outputDimensions];
+            for (int i = 0; i < outputDimensions; i++)
+            {
+                testOutput[i] = new(outputs[i].Width, outputs[i].Length);
+            }
 
             for (int i = 0; i < inputDimensions; i++)
             {
-                inputs[i, 0].CopyToBuffer(buffer.InputsColor[i, 0]);
+                inputs[i].CopyToBuffer(buffer.Input.SubView(inputShapes[i].Area * i, inputShapes[i].Area));
             }
 
             float h = 0.001f;
 
             for (int i = 0; i < Length; i++)
             {
-                for (int k = 0; k < 3; k++)
+                _weights[i] += h;
+                _weights.UpdateIfAllocated();
+                layer.Forward();
+                
+                float testGradient = 0;
+                for (int i2 = 0; i2 < outputDimensions; i2++)
                 {
-                    Color hColor = k switch
+                    testOutput[i2].SyncCPU(buffer.Output.SubView(outputShapes[i2].Area * i2, outputShapes[i2].Area));
+                    for (int j2 = 0; j2 < testOutput[i2].Width; j2++)
                     {
-                        0 => new Color(h, 0, 0),
-                        1 => new Color(0, h, 0),
-                        2 => new Color(0, 0, h)
-                    };
-                    _weights[i] += hColor;
-
-                    layer.Forward();
-                    testOutput.SyncCPU(buffer.OutputsColor[outputIndex, 0]);
-
-                    float testGradient = 0;
-                    for (int i2 = 0; i2 < output.Width; i2++)
-                    {
-                        for (int j2 = 0; j2 < output.Length; j2++)
+                        for (int k2 = 0; k2 < testOutput[i2].Length; k2++)
                         {
-                            for (int k2 = 0; k2 < 3; k2++)
-                            {
-                                testGradient += (testOutput[i2, j2][k2] - output[i2, j2][k2]) / h;
-                            }
+
+                            testGradient += (testOutput[i2][j2, k2] - outputs[i2][j2, k2]) / h;
+
                         }
                     }
-
-                    Console.WriteLine($"Expected Gradient: {_gradient[i][k]:f4} \t Test Gradient: {testGradient:f4}");
-                    _weights[i] -= hColor;
                 }
-            }*/
+
+                Console.WriteLine($"Expected Gradient: {_gradient[i]:f4} \t Test Gradient: {testGradient:f4}");
+                _weights[i] -= h;
+            }
+            
         }
     }
 }

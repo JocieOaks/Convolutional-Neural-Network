@@ -14,11 +14,12 @@ namespace ConvolutionalNeuralNetwork.Networks
     public class Discriminator : Network
     {
         private Vector[] _discriminatorGradients;
-        private FeatureMap[,] _finalOutGradient;
+        private FeatureMap[] _finalOutGradient;
         private Vector[] _generatorGradients;
         private Vector[] _imageVectors;
         private Vector[] _imageVectorsNorm;
         private Vector[] _finalOutput;
+        private int _inputArea;
 
         delegate (float, Vector) LossFunction(ImageInput input, Vector vector, float targetValue);
 
@@ -86,14 +87,16 @@ namespace ConvolutionalNeuralNetwork.Networks
         /// <param name="learningRate">The learning rate defining the degree to which each layer should be updated.</param>
         public void Backwards(Vector[] gradients, float learningRate)
         {
-            _updateStep++;
+            if(learningRate > 0)
+                _updateStep++;
+            
             float correctionLearningRate = CorrectionLearningRate(learningRate, _firstMomentDecay, _secondMomentDecay);
 
             Vector[] sigmoidGradients = Sigmoid.Backward(_finalOutput, gradients);
 
             for (int i = 0; i < _batchSize; i++)
             {
-                sigmoidGradients[i].CopyToBuffer(_endBuffers.FirstGradient(i));
+                sigmoidGradients[i].CopyToBuffer(_endBuffers.InGradient.SubView(i * LabelCount, LabelCount));
             }
 
             for (int j = Depth - 1; j > 0; j--)
@@ -102,7 +105,7 @@ namespace ConvolutionalNeuralNetwork.Networks
             }
 
             //A learning rate of 0 indicates that the gradient is going to be used by a generator.
-            if (correctionLearningRate == 0 || _layers[0] is not Convolution convolution)
+            if (correctionLearningRate == 0 || _layers[0] is not Convolution convolution || true)
             {
                 Utility.StopWatch(() => _layers[0].Backwards(correctionLearningRate, _firstMomentDecay, _secondMomentDecay), $"Backwards {0} {_layers[0].Name}", PRINTSTOPWATCH);
             }
@@ -121,7 +124,11 @@ namespace ConvolutionalNeuralNetwork.Networks
         {
             for (int i = 0; i < _batchSize; i++)
             {
-                input[i].Image.CopyToBuffer(_startBuffer.InputsFloat[0, i]);
+                if (input[i].Image.Area != _inputArea)
+                {
+                    throw new ArgumentException("Input images are incorrectly sized.");
+                }
+                input[i].Image.CopyToBuffer(_startBuffers.Input.SubView(_inputArea * i, _inputArea));
             }
 
             for (int j = 0; j < Depth; j++)
@@ -131,7 +138,7 @@ namespace ConvolutionalNeuralNetwork.Networks
 
             for(int i = 0; i < _batchSize; i++)
             {
-                _finalOutput[i].SyncCPU(_endBuffers.FinalOutput(i));
+                _finalOutput[i].SyncCPU(_endBuffers.Output.SubView(i * LabelCount, LabelCount));
             }
 
             _imageVectors = Sigmoid.Forward(_finalOutput);
@@ -147,17 +154,15 @@ namespace ConvolutionalNeuralNetwork.Networks
         /// </summary>
         /// <param name="inputs">The images and their associatd labels for this iteration of training.</param>
         /// <returns>Returns an array of <see cref="FeatureMap"/>s containing the <see cref="Generator"/> gradients.</returns>
-        public FeatureMap[,] GeneratorGradient()
+        public FeatureMap[] GeneratorGradient()
         {
             Backwards(_generatorGradients, 0);
-            FeatureMap[,] gradient = new FeatureMap[1, _batchSize];
             for (int i = 0; i < _batchSize; i++)
             {
-                _finalOutGradient[0, i].SyncCPU(_startBuffer.InputsFloat[0, i]);
-                gradient[0, i] = _finalOutGradient[0, i];
+                _finalOutGradient[i].SyncCPU(_startBuffers.OutGradient.SubView(i * _inputArea, _inputArea));
             }
 
-            return gradient;
+            return _finalOutGradient;
         }
 
         /// <inheritdoc/>
@@ -171,6 +176,8 @@ namespace ConvolutionalNeuralNetwork.Networks
         {
             base.StartUp(batchSize, width, length, labelBools, labelFloats, learningRate, firstDecay, secondDecay);
 
+            _inputArea = width * length;
+
             if(_layers.Count == 0 || _layers.Last() is not FinalLayer)
             {
                 _layers.Add(new Dense(labelFloats + labelBools));
@@ -178,22 +185,28 @@ namespace ConvolutionalNeuralNetwork.Networks
 
             Shape[] current = new Shape[1];
             current[0] = new Shape(width, length);
-            _finalOutGradient = new FeatureMap[1, batchSize];
+            _finalOutGradient = new FeatureMap[batchSize];
             _finalOutput = new Vector[_batchSize];
             for (int j = 0; j < batchSize; j++)
             {
-                _finalOutGradient[0,j] = new FeatureMap(width, length);
+                _finalOutGradient[j] = new FeatureMap(width, length);
                 _finalOutput[j] = new Vector(labelBools + labelFloats);
             }
 
-            IOBuffers inputBuffers = _startBuffer = new();
-            IOBuffers outputBuffers = new();
-            outputBuffers.OutputDimensionArea(1, width * length);
+            _startBuffers ??= new();
+            _middleBuffers ??= new();
+
+            IOBuffers inputBuffers = _startBuffers;
+            IOBuffers outputBuffers = _middleBuffers;
+            outputBuffers.OutputDimensionArea(width * length);
 
             foreach (var layer in _layers)
             {
-                current = layer.Startup(current, inputBuffers, (uint)batchSize);
-                (inputBuffers, outputBuffers) = (outputBuffers, inputBuffers);
+                current = layer.Startup(current, inputBuffers, batchSize);
+                if (layer is not IUnchangedLayer)
+                {
+                    (inputBuffers, outputBuffers) = (outputBuffers, inputBuffers);
+                }
             }
 
             _endBuffers = outputBuffers;

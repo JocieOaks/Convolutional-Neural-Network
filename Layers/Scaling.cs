@@ -10,7 +10,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     /// </summary>
     public class Scaling : Layer, IStructuralLayer
     {
-        private MemoryBuffer1D<ScalingLayerInfo, Stride1D.Dense>[] _deviceInfos;
+        /*private MemoryBuffer1D<ScalingLayerInfo, Stride1D.Dense>[] _deviceInfos;
         [JsonProperty] private int _outputLength;
         [JsonProperty] private int _outputWidth;
         private float _scaleLength;
@@ -29,8 +29,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    _buffers.OutGradientsFloat[i, j].SubView(0, Infos(i).InputArea).MemSetToZero();
-                    s_backwardsAction(index, _buffers.InGradientsFloat[i, j], _buffers.OutGradientsFloat[i, j], _deviceInfos[i].View);
+                    _buffers.OutGradient[i, j].SubView(0, Infos(i).InputArea).MemSetToZero();
+                    s_backwardsAction(index, _buffers.InGradient[i, j], _buffers.OutGradient[i, j], _deviceInfos[i].View);
                 }
             }
             Synchronize();
@@ -46,7 +46,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    s_forwardAction(index, _buffers.InputsFloat[i, j], _buffers.OutputsFloat[i, j], _deviceInfos[i].View);
+                    s_forwardAction(index, _buffers.Input[i, j], _buffers.Output[i, j], _deviceInfos[i].View);
                 }
             }
             Synchronize();
@@ -273,6 +273,27 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 return y * OutputWidth + x;
             }
+        }*/
+        public override string Name => throw new NotImplementedException();
+
+        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void Forward()
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void Reset()
+        {
+            throw new NotImplementedException();
+        }
+
+        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, int batchSize)
+        {
+            throw new NotImplementedException();
         }
     }
 }

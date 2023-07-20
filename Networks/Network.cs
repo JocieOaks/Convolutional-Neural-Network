@@ -27,11 +27,14 @@ namespace ConvolutionalNeuralNetwork
         private ActivationPattern _activationPattern;
         [JsonProperty] private List<(int, int)> _skipConnections;
 
-        protected IOBuffers _startBuffer;
+        protected IOBuffers _startBuffers;
+        protected IOBuffers _middleBuffers;
         protected IOBuffers _endBuffers;
         protected float _learningRate;
         protected float _firstMomentDecay;
         protected float _secondMomentDecay;
+
+        protected int LabelCount => _floatLabels + _boolLabels;
 
         /// <value>Enumerates over the <see cref="IPrimaryLayer"/>'s of the <see cref="Network"/> that define its structure.</value>
         [JsonIgnore]
@@ -75,13 +78,13 @@ namespace ConvolutionalNeuralNetwork
         /// <exception cref="InvalidOperationException">Thrown if the <see cref="Network"/> is not being configured.</exception>
         public void AddSkipConnection(int index1, int index2)
         {
-            if (_configured)
+            /*if (_configured)
                 throw new InvalidOperationException("Network is already configured.");
 
             SkipConnectionSplit skipLayer = new();
             SkipConnectionConcatenate concatenationLayer = skipLayer.GetConcatenationLayer();
             _primaryLayers.Insert(index2, concatenationLayer);
-            _primaryLayers.Insert(index1, skipLayer);
+            _primaryLayers.Insert(index1, skipLayer);*/
         }
 
         /// <summary>
@@ -340,12 +343,18 @@ namespace ConvolutionalNeuralNetwork
             {
                 foreach ((int skipIndex, int concatIndex) in _skipConnections)
                 {
-                    SkipConnectionSplit skip = new();
+                    /*SkipConnectionSplit skip = new();
                     SkipConnectionConcatenate concat = skip.GetConcatenationLayer();
                     _layers[skipIndex] = skip;
-                    _layers[concatIndex] = concat;
+                    _layers[concatIndex] = concat;*/
                 }
             }
+        }
+
+        public void SetStartBuffers(Network network)
+        {
+            _startBuffers = network._endBuffers;
+            _middleBuffers = network._middleBuffers;
         }
 
         /// <summary>
@@ -361,7 +370,7 @@ namespace ConvolutionalNeuralNetwork
             {
                 if (_layers[i] is SkipConnectionSplit skip)
                 {
-                    _skipConnections.Add((i, _layers.IndexOf(skip.GetConcatenationLayer())));
+                    //_skipConnections.Add((i, _layers.IndexOf(skip.GetConcatenationLayer())));
                 }
             }
         }

@@ -12,6 +12,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     /// </summary>
     public class SkipConnectionSplit : Layer, IStructuralLayer
     {
+        /*
         /// <inheritdoc/>
         public override string Name => "Skip Connection Layer";
 
@@ -48,7 +49,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(Infos(i).Area);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    s_backwardsAction(index, _buffers.InGradientsFloat[i, j], _inGradientSecondary[i, j].GetArrayView<float>(), _buffers.OutGradientsFloat[i, j]);
+                    s_backwardsAction(index, _buffers.InGradient[i, j], _inGradientSecondary[i, j].GetArrayView<float>(), _buffers.OutGradient[i, j]);
                 }
             }
             Synchronize();
@@ -62,8 +63,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Index1D index = new(Infos(i).Area);
                 for (int j = 0; j < _batchSize; j++)
                 {
-                    GPU.GPUManager.CopyAction(index, _buffers.InputsFloat[i, j], _outputs[i, j].GetArrayViewEmpty<float>());
-                    GPU.GPUManager.CopyAction(index, _buffers.InputsFloat[i, j], _buffers.OutputsFloat[i, j]);
+                    GPU.GPUManager.CopyAction(index, _buffers.Input[i, j], _outputs[i, j].GetArrayViewEmpty<float>());
+                    GPU.GPUManager.CopyAction(index, _buffers.Input[i, j], _buffers.Output[i, j]);
                 }
             }
 
@@ -124,6 +125,27 @@ namespace ConvolutionalNeuralNetwork.Layers
         private StaticLayerInfo Infos(int index)
         {
             return (StaticLayerInfo)_layerInfos[index];
+        }*/
+        public override string Name => throw new NotImplementedException();
+
+        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void Forward()
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void Reset()
+        {
+            throw new NotImplementedException();
+        }
+
+        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, int batchSize)
+        {
+            throw new NotImplementedException();
         }
     }
 }
