@@ -29,15 +29,20 @@ namespace ConvolutionalNeuralNetwork.Layers
             GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<StaticLayerInfo>>(ForwardKernel);
 
         private ArrayView<StaticLayerInfo> _deviceInfo;
-        [JsonProperty] private int _dimensionDivisor;
 
+        [JsonProperty]
+        private int Dimensions
+        {
+            get => _outputDimensions;
+            set => _outputDimensions = value;
+        }
         [JsonConstructor] public Summation() : base(1, 1) { }
         /// <inheritdoc/>
         public override string Name => "Summation Layer";
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            Index3D index = new(_batchSize, _inputDimensions, Infos(0).Area);
+            Index3D index = new(_batchSize, _inputDimensions, _inputShape.Area);
             s_backwardsAction(index, _buffers.Input, _buffers.Output, _deviceInfo);
 
             Synchronize();
@@ -46,9 +51,9 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Forward()
         {
-            _buffers.Output.SubView(0, _batchSize * _outputDimensions * Infos(0).Area).MemSetToZero();
+            _buffers.Output.SubView(0, _batchSize * _outputDimensions * _inputShape.Area).MemSetToZero();
 
-            Index3D index = new(_batchSize, _inputDimensions, Infos(0).Area);
+            Index3D index = new(_batchSize, _inputDimensions, _inputShape.Area);
             s_forwardAction(index, _buffers.Input, _buffers.Output, _deviceInfo);
 
             Synchronize();
@@ -68,34 +73,12 @@ namespace ConvolutionalNeuralNetwork.Layers
             _outputDimensions = dimensions;
         }
 
-        /// <summary>
-        /// Sets the number of dimensions for the output as a multiple of the input dimensions.
-        /// Is Overwritten by <see cref="SetOutputDimensions(int)"/>.
-        /// </summary>
-        /// <param name="divisor">The factor to multiply the input dimensions to set the output dimensions.
-        /// Must be greater than 1.</param>
-        public void SetOutputDivisor(int divisor)
-        {
-            if (divisor <= 1)
-            {
-                throw new ArgumentException("Dimension divisor must be greater than 1.");
-            }
-            _dimensionDivisor = divisor;
-        }
-
         /// <inheritdoc/>
-        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, int batchSize)
+        public override Shape Startup(Shape inputShapes, IOBuffers buffers, int batchSize)
         {
-            if (_outputDimensions != 0)
-            {
-                _dimensionDivisor = inputShapes.Length / _outputDimensions;
-            }
+            BaseStartup(inputShapes, buffers, batchSize, _outputDimensions);
 
-            BaseStartup(inputShapes, buffers, batchSize, -_dimensionDivisor);
-
-            _deviceInfo = GPUManager.Accelerator.Allocate1D(Array.ConvertAll(_layerInfos, info => (StaticLayerInfo)info)).View;
-
-            return _outputShapes;
+            return _outputShape;
         }
 
         private static void BackwardsKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, ArrayView<StaticLayerInfo> infoView)
@@ -114,15 +97,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             int outputIndex = (index.X * info.OutputDimensions + index.Y % info.OutputDimensions) * info.Area + index.Z;
 
             Atomic.Add(ref output[outputIndex], input[inputIndex]);
-        }
-        /// <summary>
-        /// Gets the <see cref="StaticLayerInfo"/> for a particular dimension.
-        /// </summary>
-        /// <param name="index">The dimension who <see cref="StaticLayerInfo"/> is needed.</param>
-        /// <returns>Return the <see cref="StaticLayerInfo"/> corresponding to an input dimension.</returns>
-        private StaticLayerInfo Infos(int index)
-        {
-            return (StaticLayerInfo)_layerInfos[index];
         }
     }
 }

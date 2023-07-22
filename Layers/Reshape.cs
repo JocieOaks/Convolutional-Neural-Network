@@ -12,11 +12,11 @@ namespace ConvolutionalNeuralNetwork.Layers
 {
     public class Reshape : Layer, IStructuralLayer, IUnchangedLayer
     {
-        [JsonProperty] public Shape[] OutputShapes { get => _outputShapes; set => _outputShapes = value; }
+        [JsonProperty] public Shape OutputShape { get => _outputShape; set => _outputShape = value; }
 
-        public Reshape(Shape[] outputShapes)
+        public Reshape(Shape outputShape)
         {
-            _outputShapes = outputShapes;
+            _outputShape = outputShape;
         }
 
         [JsonConstructor] private Reshape() { }
@@ -35,30 +35,22 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
         }
 
-        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, int batchSize)
+        public override Shape Startup(Shape inputShapes, IOBuffers buffers, int batchSize)
         {
 
-            _inputDimensions = inputShapes.Length;
-            _outputDimensions = _outputShapes.Length;
+            _inputDimensions = inputShapes.Dimensions;
+            _outputDimensions = _outputShape.Dimensions;
 
-            int inputLength = 0;
-            for(int i = 0; i < _inputDimensions; i++)
-            {
-                inputLength += inputShapes[i].Area;
-            }
+            int inputLength = inputShapes.Area * _inputDimensions;
 
-            int outputLength = 0;
-            for(int i = 0; i < _outputDimensions; i++)
-            {
-                outputLength += _outputShapes[i].Area;
-            }
+            int outputLength = _outputShape.Area * _outputDimensions;
 
             if(inputLength != outputLength)
             {
                 throw new ArgumentException("Input and output shapes have different lengths.");
             }
 
-            return _outputShapes;
+            return _outputShape;
         }
     }
 }

@@ -158,52 +158,52 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             _weights[index] -= result;
         }
 
-        public void TestFilterGradient(ILayer layer, Shape[] inputShapes, Shape[] outputShapes, IOBuffers buffer)
+        public void TestFilterGradient(ILayer layer, Shape inputShape, Shape outputShapes, IOBuffers buffer, int batchSize)
         {
-            int inputDimensions = inputShapes.Length;
-            int outputDimensions = outputShapes.Length;
-            FeatureMap[] inputs = new FeatureMap[inputDimensions];
-            for (int i = 0; i < inputDimensions; i++)
+            int inputDimensions = inputShape.Dimensions;
+            int outputDimensions = outputShapes.Dimensions;
+            FeatureMap[] inputs = new FeatureMap[inputDimensions * batchSize];
+            for (int i = 0; i < inputDimensions * batchSize; i++)
             {
-                inputs[i] = new FeatureMap(inputShapes[i]);
-                for (int j = 0; j < inputShapes[i].Length; j++)
+                inputs[i] = new FeatureMap(inputShape);
+                for (int j = 0; j < inputShape.Length; j++)
                 {
-                    for (int k = 0; k < inputShapes[i].Width; k++)
+                    for (int k = 0; k < inputShape.Width; k++)
                     {
                         inputs[i][j, k] = (i + 1) * (j - k);
                     }
                 }
             }
 
-            for (int i = 0; i < inputDimensions; i++)
+            for (int i = 0; i < inputDimensions * batchSize; i++)
             {
-                inputs[i].CopyToBuffer(buffer.Input.SubView(inputShapes[i].Area * i, inputShapes[i].Area));
+                inputs[i].CopyToBuffer(buffer.Input.SubView(inputShape.Area * i, inputShape.Area));
             }
 
-            FeatureMap[] outputs = new FeatureMap[outputDimensions];
-            for (int i = 0; i < outputDimensions; i++)
+            FeatureMap[] outputs = new FeatureMap[outputDimensions * batchSize];
+            for (int i = 0; i < outputDimensions * batchSize; i++)
             {
-                outputs[i] = new FeatureMap(outputShapes[i]);
+                outputs[i] = new FeatureMap(outputShapes);
             }
 
             layer.Forward();
-            for (int i = 0; i < outputDimensions; i++)
+            for (int i = 0; i < outputDimensions * batchSize; i++)
             {
-                outputs[i].SyncCPU(buffer.Output.SubView(outputShapes[i].Area * i, outputShapes[i].Area));
-                new FeatureMap(outputs[i].Width, outputs[i].Length, 1).CopyToBuffer(buffer.InGradient.SubView(outputShapes[i].Area * i, outputShapes[i].Area));
+                outputs[i].SyncCPU(buffer.Output.SubView(outputShapes.Area * i, outputShapes.Area));
+                new FeatureMap(outputs[i].Width, outputs[i].Length, 1).CopyToBuffer(buffer.InGradient.SubView(outputShapes.Area * i, outputShapes.Area));
             }
 
             layer.Backwards(1, 1, 1);
 
-            FeatureMap[] testOutput = new FeatureMap[outputDimensions];
-            for (int i = 0; i < outputDimensions; i++)
+            FeatureMap[] testOutput = new FeatureMap[outputDimensions * batchSize];
+            for (int i = 0; i < outputDimensions * batchSize; i++)
             {
                 testOutput[i] = new(outputs[i].Width, outputs[i].Length);
             }
 
-            for (int i = 0; i < inputDimensions; i++)
+            for (int i = 0; i < inputDimensions * batchSize; i++)
             {
-                inputs[i].CopyToBuffer(buffer.Input.SubView(inputShapes[i].Area * i, inputShapes[i].Area));
+                inputs[i].CopyToBuffer(buffer.Input.SubView(inputShape.Area * i, inputShape.Area));
             }
 
             float h = 0.001f;
@@ -215,9 +215,9 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 layer.Forward();
                 
                 float testGradient = 0;
-                for (int i2 = 0; i2 < outputDimensions; i2++)
+                for (int i2 = 0; i2 < outputDimensions * batchSize; i2++)
                 {
-                    testOutput[i2].SyncCPU(buffer.Output.SubView(outputShapes[i2].Area * i2, outputShapes[i2].Area));
+                    testOutput[i2].SyncCPU(buffer.Output.SubView(outputShapes.Area * i2, outputShapes.Area));
                     for (int j2 = 0; j2 < testOutput[i2].Width; j2++)
                     {
                         for (int k2 = 0; k2 < testOutput[i2].Length; k2++)

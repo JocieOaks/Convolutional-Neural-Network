@@ -31,7 +31,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
         {
-            Index1D index = new(_inputShapes[0].Area * _batchSize * _inputDimensions);
+            Index1D index = new(_inputShape.Area * _batchSize * _inputDimensions);
             s_backwardsAction(index, _deviceZeroed, _buffers.InGradient, _buffers.OutGradient);
 
             Synchronize();
@@ -39,7 +39,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Forward()
         {
-            Index1D index = new(_inputShapes[0].Area * _batchSize * _inputDimensions);
+            Index1D index = new(_inputShape.Area * _batchSize * _inputDimensions);
             s_forwardAction(index, _buffers.Input, _deviceZeroed, _buffers.Output);
             Synchronize();
         }
@@ -50,16 +50,16 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, int batchSize)
+        public override Shape Startup(Shape inputShapes, IOBuffers buffers, int batchSize)
         {
             BaseStartup(inputShapes, buffers, batchSize);
 
-            int zeroArea = inputShapes[0].Area / 32 + (inputShapes[0].Area % 32 > 0 ? 1 : 0);
+            int zeroArea = inputShapes.Area / 32 + (inputShapes.Area % 32 > 0 ? 1 : 0);
             zeroArea *= _inputDimensions;
             zeroArea *= _batchSize;
 
             _deviceZeroed = GPU.GPUManager.Accelerator.Allocate1D<int>(zeroArea).View;
-            return _outputShapes;
+            return _outputShape;
         }
 
         private static void BackwardsKernel(Index1D index, ArrayView<int> zeroed, ArrayView<float> inGradient, ArrayView<float> outGradient)
@@ -92,16 +92,6 @@ namespace ConvolutionalNeuralNetwork.Layers
                 Atomic.Or(ref zeroed[byteIndex], mask);
                 output[index.X] = input[index.X];
             }
-        }
-
-        /// <summary>
-        /// Gets the <see cref="StaticLayerInfo"/> for a particular dimension.
-        /// </summary>
-        /// <param name="index">The dimension who <see cref="StaticLayerInfo"/> is needed.</param>
-        /// <returns>Return the <see cref="StaticLayerInfo"/> corresponding to an input dimension.</returns>
-        private StaticLayerInfo Infos(int index)
-        {
-            return (StaticLayerInfo)_layerInfos[index];
         }
     }
 }

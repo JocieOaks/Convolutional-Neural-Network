@@ -65,18 +65,9 @@ namespace ConvolutionalNeuralNetwork.Networks
             _updateStep++;
             float correctionLearningRate = CorrectionLearningRate(_learningRate, _firstMomentDecay, _secondMomentDecay);
 
-            for (int i = Depth - 1; i > 0; i--)
+            for (int i = Depth - 1; i >= 0; i--)
             {
-                Utility.StopWatch(() => _layers[i].Backwards(correctionLearningRate, _firstMomentDecay, _secondMomentDecay), $"Backwards {i} {_layers[i].Name}", PRINTSTOPWATCH);
-            }
-
-            if (_layers[0] is not Convolution convolution)
-            {
-                Utility.StopWatch(() => _layers[0].Backwards(correctionLearningRate, _firstMomentDecay, _secondMomentDecay), $"Backwards {0} {_layers[0].Name}", PRINTSTOPWATCH);
-            }
-            else
-            {
-                Utility.StopWatch(() => convolution.BackwardsUpdateOnly(correctionLearningRate, _firstMomentDecay, _secondMomentDecay), $"Backwards {0} {_layers[0].Name}", PRINTSTOPWATCH);
+                Utility.StopWatch(() => _layers[i].Backwards(correctionLearningRate, _firstMomentDecay, _secondMomentDecay), $"Backwards {i} {_layers[i].Name}", true);
             }
         }
 
@@ -105,7 +96,7 @@ namespace ConvolutionalNeuralNetwork.Networks
 
             for (int i = 0; i < Depth; i++)
             {
-                Utility.StopWatch(() => _layers[i].Forward(), $"Forwards {i} {_layers[i].Name}", PRINTSTOPWATCH);
+                Utility.StopWatch(() => _layers[i].Forward(), $"Forwards {i} {_layers[i].Name}", true);
             }
 
             for(int i = 0; i < _batchSize; i++)
@@ -154,9 +145,7 @@ namespace ConvolutionalNeuralNetwork.Networks
                 }
             }
 
-            Shape[] current = new Shape[_latentDimensions];
-            for(int i = 0; i < _latentDimensions; i++)
-                current[i] = new Shape(1, 1);
+            Shape current  = new Shape(1, 1, _latentDimensions);
             IOBuffers inputBuffers = _startBuffers = new();
             IOBuffers outputBuffers = new();
             outputBuffers.OutputDimensionArea(_latentDimensions);

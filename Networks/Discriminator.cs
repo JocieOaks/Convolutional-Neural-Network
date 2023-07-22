@@ -99,19 +99,9 @@ namespace ConvolutionalNeuralNetwork.Networks
                 sigmoidGradients[i].CopyToBuffer(_endBuffers.InGradient.SubView(i * LabelCount, LabelCount));
             }
 
-            for (int j = Depth - 1; j > 0; j--)
+            for (int j = Depth - 1; j >= 0; j--)
             {
                 Utility.StopWatch(() => _layers[j].Backwards(correctionLearningRate, _firstMomentDecay, _secondMomentDecay), $"Backwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
-            }
-
-            //A learning rate of 0 indicates that the gradient is going to be used by a generator.
-            if (correctionLearningRate == 0 || _layers[0] is not Convolution convolution || true)
-            {
-                Utility.StopWatch(() => _layers[0].Backwards(correctionLearningRate, _firstMomentDecay, _secondMomentDecay), $"Backwards {0} {_layers[0].Name}", PRINTSTOPWATCH);
-            }
-            else
-            {
-                Utility.StopWatch(() => convolution.BackwardsUpdateOnly(correctionLearningRate, _firstMomentDecay, _secondMomentDecay), $"Backwards {0} {_layers[0].Name}", PRINTSTOPWATCH);
             }
         }
 
@@ -183,8 +173,7 @@ namespace ConvolutionalNeuralNetwork.Networks
                 _layers.Add(new Dense(labelFloats + labelBools));
             }
 
-            Shape[] current = new Shape[1];
-            current[0] = new Shape(width, length);
+            Shape current = new Shape(width, length, 1);
             _finalOutGradient = new FeatureMap[batchSize];
             _finalOutput = new Vector[_batchSize];
             for (int j = 0; j < batchSize; j++)
@@ -292,12 +281,12 @@ namespace ConvolutionalNeuralNetwork.Networks
             float score = Vector.Dot(vector, classificationVector);
             if (sign == 1)
             {
-                loss = -MathF.Log(score + Utility.ASYMPTOTEERRORCORRECTION);
-                gradient = (-1 / score) * classificationVector;
+                loss = -MathF.Log(score);
+                gradient = (-1 / (score)) * classificationVector;
             }
             else
             {
-                loss = -MathF.Log(1 - score + Utility.ASYMPTOTEERRORCORRECTION);
+                loss = -score * MathF.Log(1 - score);
                 gradient = (1 / (1 - score)) * classificationVector;
             }
             return (loss, gradient);

@@ -87,7 +87,7 @@
 
         public (int, int) GetOffset(int batchIndex,int dimension)
         {
-            return ((dimension % InputDimensions + batchIndex * InputDimensions) * InputArea, (dimension + batchIndex * OutputDimensions) * OutputArea);
+            return ((dimension % InputDimensions + batchIndex * InputDimensions) * InputArea, (dimension % OutputDimensions + batchIndex * OutputDimensions) * OutputArea);
         }
 
         /// <summary>
@@ -151,7 +151,7 @@
 
         public (int, int) GetOffset(int batchIndex, int dimension)
         {
-            return ((dimension % InputDimensions + batchIndex * InputDimensions) * InputArea, (dimension + batchIndex * OutputDimensions) * OutputArea);
+            return ((dimension % InputDimensions + batchIndex * InputDimensions) * InputArea, (dimension % OutputDimensions + batchIndex * OutputDimensions) * OutputArea);
         }
 
         /// <summary>

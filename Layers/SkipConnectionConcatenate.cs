@@ -159,7 +159,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             throw new NotImplementedException();
         }
 
-        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, int batchSize)
+        public override Shape Startup(Shape inputShapes, IOBuffers buffers, int batchSize)
         {
             throw new NotImplementedException();
         }
