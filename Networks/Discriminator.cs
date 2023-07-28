@@ -1,9 +1,9 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using ConvolutionalNeuralNetwork.Layers;
-using ILGPU.Runtime;
-using ILGPU.Runtime.Cuda;
+using ConvolutionalNeuralNetwork.Layers.Initializers;
+using ConvolutionalNeuralNetwork.Layers.Activations;
 using Newtonsoft.Json;
-using System.Reflection.Emit;
+using ConvolutionalNeuralNetwork.Layers.Weighted;
 
 namespace ConvolutionalNeuralNetwork.Networks
 {
@@ -18,10 +18,9 @@ namespace ConvolutionalNeuralNetwork.Networks
         private Vector[] _generatorGradients;
         private Vector[] _imageVectors;
         private Vector[] _imageVectorsNorm;
-        private Vector[] _finalOutput;
         private int _inputArea;
 
-        delegate (float, Vector) LossFunction(ImageInput input, Vector vector, float targetValue);
+        private delegate (float, bool, Vector) LossFunction(ImageInput input, Vector vector, float targetValue);
 
         /// <value>The function to use to calculate loss.</value>
         private LossFunction Loss => CrossEntropyLoss;
@@ -85,23 +84,18 @@ namespace ConvolutionalNeuralNetwork.Networks
         /// <param name="gradients">The gradients for each vector output by the network.</param>
         /// <param name="input">The images and their associatd labels for this iteration of training.</param>
         /// <param name="learningRate">The learning rate defining the degree to which each layer should be updated.</param>
-        public void Backwards(Vector[] gradients, float learningRate)
+        public void Backwards(Vector[] gradients, int batchSize, bool update = true)
         {
-            if(learningRate > 0)
-                _updateStep++;
-            
-            float correctionLearningRate = CorrectionLearningRate(learningRate, _firstMomentDecay, _secondMomentDecay);
+            _adamHyperParameters.Update(update);
 
-            Vector[] sigmoidGradients = Sigmoid.Backward(_finalOutput, gradients);
-
-            for (int i = 0; i < _batchSize; i++)
+            for (int i = 0; i < batchSize; i++)
             {
-                sigmoidGradients[i].CopyToBuffer(_endBuffers.InGradient.SubView(i * LabelCount, LabelCount));
+                gradients[i].CopyToBuffer(InGradient.SubView(i * LabelCount, LabelCount));
             }
 
             for (int j = Depth - 1; j >= 0; j--)
             {
-                Utility.StopWatch(() => _layers[j].Backwards(correctionLearningRate, _firstMomentDecay, _secondMomentDecay), $"Backwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
+                Utility.StopWatch(() => _layers[j].Backwards(batchSize), $"Backwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
             }
         }
 
@@ -112,26 +106,17 @@ namespace ConvolutionalNeuralNetwork.Networks
         /// <param name="inference">Determines whether the <see cref="Discriminator"/> is training or inferring. Defaults to false.</param>
         public void Forward(ImageInput[] input)
         {
-            for (int i = 0; i < _batchSize; i++)
-            {
-                if (input[i].Image.Area != _inputArea)
-                {
-                    throw new ArgumentException("Input images are incorrectly sized.");
-                }
-                input[i].Image.CopyToBuffer(_startBuffers.Input.SubView(_inputArea * i, _inputArea));
-            }
+            int batchSize = input.Length;
 
             for (int j = 0; j < Depth; j++)
             {
-                Utility.StopWatch(() => _layers[j].Forward(), $"Forwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
+                Utility.StopWatch(() => _layers[j].Forward(batchSize), $"Forwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
             }
 
-            for(int i = 0; i < _batchSize; i++)
+            for (int i = 0; i < batchSize; i++)
             {
-                _finalOutput[i].SyncCPU(_endBuffers.Output.SubView(i * LabelCount, LabelCount));
+                _imageVectors[i].SyncCPU(Output.SubView(i * LabelCount, LabelCount));
             }
-
-            _imageVectors = Sigmoid.Forward(_finalOutput);
 
             if (_floatLabels + _boolLabels > 1)
                 _imageVectorsNorm = VectorNormalization.Forward(_imageVectors);
@@ -144,15 +129,9 @@ namespace ConvolutionalNeuralNetwork.Networks
         /// </summary>
         /// <param name="inputs">The images and their associatd labels for this iteration of training.</param>
         /// <returns>Returns an array of <see cref="FeatureMap"/>s containing the <see cref="Generator"/> gradients.</returns>
-        public FeatureMap[] GeneratorGradient()
+        public void GeneratorGradient(int batchSize)
         {
-            Backwards(_generatorGradients, 0);
-            for (int i = 0; i < _batchSize; i++)
-            {
-                _finalOutGradient[i].SyncCPU(_startBuffers.OutGradient.SubView(i * _inputArea, _inputArea));
-            }
-
-            return _finalOutGradient;
+            Backwards(_generatorGradients, batchSize, false);
         }
 
         /// <inheritdoc/>
@@ -162,52 +141,53 @@ namespace ConvolutionalNeuralNetwork.Networks
         }
 
         ///<inheritdoc/>
-        public override void StartUp(int batchSize, int width, int length, int labelBools, int labelFloats, float learningRate, float firstDecay, float secondDecay)
+        public override void StartUp(int maxBatchSize, int width, int length, int labelBools, int labelFloats, AdamHyperParameters hyperParameters, int inputChannels)
         {
-            base.StartUp(batchSize, width, length, labelBools, labelFloats, learningRate, firstDecay, secondDecay);
+            base.StartUp(maxBatchSize, width, length, labelBools, labelFloats, hyperParameters, inputChannels);
 
             _inputArea = width * length;
 
-            if(_layers.Count == 0 || _layers.Last() is not FinalLayer)
+            Shape current = new(width, length, inputChannels);
+            _finalOutGradient = new FeatureMap[maxBatchSize];
+            _imageVectors = new Vector[maxBatchSize];
+            for (int j = 0; j < maxBatchSize; j++)
             {
-                _layers.Add(new Dense(labelFloats + labelBools));
+                _finalOutGradient[j] = new FeatureMap(current);
+                _imageVectors[j] = new Vector(LabelCount);
             }
 
-            Shape current = new Shape(width, length, 1);
-            _finalOutGradient = new FeatureMap[batchSize];
-            _finalOutput = new Vector[_batchSize];
-            for (int j = 0; j < batchSize; j++)
+            InitializeLayers(ref current, maxBatchSize);
+
+            if (current.Area != LabelCount)
             {
-                _finalOutGradient[j] = new FeatureMap(width, length);
-                _finalOutput[j] = new Vector(labelBools + labelFloats);
+                var dense = new Dense(LabelCount, GlorotUniform.Instance);
+                dense.SetUpWeights(_adamHyperParameters);
+                _layers.Add(dense);
+                _layers.Add(new HyperTan());
+                InitializeLayers(ref current, maxBatchSize);
             }
 
-            _startBuffers ??= new();
-            _middleBuffers ??= new();
-
-            IOBuffers inputBuffers = _startBuffers;
-            IOBuffers outputBuffers = _middleBuffers;
-            outputBuffers.OutputDimensionArea(width * length);
-
-            foreach (var layer in _layers)
-            {
-                current = layer.Startup(current, inputBuffers, batchSize);
-                if (layer is not IUnchangedLayer)
-                {
-                    (inputBuffers, outputBuffers) = (outputBuffers, inputBuffers);
-                }
-            }
-
-            _endBuffers = outputBuffers;
-
-            inputBuffers.Allocate(batchSize);
-            outputBuffers.Allocate(batchSize);
-            IOBuffers.SetCompliment(inputBuffers, outputBuffers);
-
-            _discriminatorGradients = new Vector[_batchSize];
-            _generatorGradients = new Vector[_batchSize];
+            _discriminatorGradients = new Vector[maxBatchSize];
+            _generatorGradients = new Vector[maxBatchSize];
 
             _ready = true;
+        }
+
+        private void LoadImages(ImageInput[] input)
+        {
+            int batchSize = input.Length;
+
+            for (int i = 0; i < batchSize; i++)
+            {
+                for (int j = 0; j < _inputChannels; j++)
+                {
+                    if (input[i].Image[j].Area != _inputArea)
+                    {
+                        throw new ArgumentException("Input images are incorrectly sized.");
+                    }
+                    input[i].Image[j].CopyToBuffer(_startBuffers.Input.SubView(_inputArea * (i * _inputChannels + j), _inputArea));
+                }
+            }
         }
 
         /// <summary>
@@ -229,67 +209,82 @@ namespace ConvolutionalNeuralNetwork.Networks
         /// 2 - Training the <see cref="Generator"/>.</param>
         /// <returns>Returns the loss for the current step.</returns>
         /// <exception cref="InvalidOperationException">Thrown if the <see cref="Discriminator"/> has not completed it's initial setup.</exception>
-        public float Train(ImageInput[] images, int step)
+        public (float, float) Train(ImageInput[] images, int step)
         {
             if (!_ready)
                 throw new InvalidOperationException("Network has not finished setup");
 
+            //if (step == 0)
+            {
+                LoadImages(images);
+            }
+
             Forward(images);
 
             float totalLoss = 0;
+            float hitCount = 0;
             for (int i = 0; i < images.Length; i++)
             {
                 float loss = 0;
+                bool accurate = false;
                 switch (step)
                 {
                     case 0:
-                        (loss, _discriminatorGradients[i]) = Loss(images[i], _imageVectorsNorm[i], 1);
+                        (loss, accurate,  _discriminatorGradients[i]) = Loss(images[i], _imageVectorsNorm[i], 1);
                         break;
 
                     case 1:
-                        (loss, _discriminatorGradients[i]) = Loss(images[i], _imageVectorsNorm[i], -1);
+                        (loss, accurate, _discriminatorGradients[i]) = Loss(images[i], _imageVectorsNorm[i], -1);
                         break;
 
                     case 2:
-                        (loss, _generatorGradients[i]) = Loss(images[i], _imageVectorsNorm[i], 1);
+                        (loss, accurate, _generatorGradients[i]) = Loss(images[i], _imageVectorsNorm[i], 1);
                         break;
                 }
 
+                if (accurate)
+                    hitCount++;
+                
                 totalLoss += loss;
             }
 
             if (step != 2)
-            { 
-                Backwards(_discriminatorGradients, _learningRate);
+            {
+                Backwards(_discriminatorGradients, images.Length);
             }
 
-            return totalLoss / images.Length;
+            return (totalLoss / images.Length, hitCount / images.Length);
         }
+
         /// <summary>
-        /// Caculates loss based on the log of the probability of the image being real or fake, where the probability is based on the angle 
+        /// Caculates loss based on the log of the probability of the image being real or fake, where the probability is based on the angle
         /// between the image vector and the classification vector.
         /// </summary>
         /// <param name="input">The <see cref="ImageInput"/> corresponding to <paramref name="vector"/>.</param>
         /// <param name="vector">The <see cref="Vector"/> produced by the <see cref="Discriminator"/>.</param>
         /// <param name="sign">Should be 1 or -1. -1 Inverts the probability for when the discriminator is testing the probability that a value is fake.</param>
         /// <returns>Returns the current loss, and the gradient <see cref="Vector"/>.</returns>
-        private (float, Vector) CrossEntropyLoss(ImageInput input, Vector vector, float sign)
+        private (float, bool, Vector) CrossEntropyLoss(ImageInput input, Vector vector, float sign)
         {
             Vector classificationVector = VectorizeLabel(input.Bools, input.Floats);
             float loss;
             Vector gradient;
-            float score = Vector.Dot(vector, classificationVector);
+            float score = (Vector.Dot(vector, classificationVector) + 1) / 2;
+            bool accurate;
             if (sign == 1)
             {
-                loss = -MathF.Log(score);
-                gradient = (-1 / (score)) * classificationVector;
+                loss = -MathF.Log(score + Utility.ASYMPTOTEERRORCORRECTION);
+                gradient = (-1 / (score + Utility.ASYMPTOTEERRORCORRECTION)) * classificationVector;
+                accurate = score > 0.5;
             }
             else
             {
-                loss = -score * MathF.Log(1 - score);
-                gradient = (1 / (1 - score)) * classificationVector;
+                loss = -MathF.Log(1 - score + Utility.ASYMPTOTEERRORCORRECTION);
+                gradient = (1 / (1 - score + Utility.ASYMPTOTEERRORCORRECTION)) * classificationVector;
+                accurate = score < 0.5;
             }
-            return (loss, gradient);
+
+            return (loss, accurate, gradient);
         }
 
         /// <summary>

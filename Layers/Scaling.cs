@@ -24,10 +24,10 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Backwards(float learningRatee, float firstMomentDecay, float secondMomentDecay)
         {
-            for (int i = 0; i < _inputDimensions; i++)
+            for (int i = 0; i < _inputShape.Dimensions; i++)
             {
                 Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
-                for (int j = 0; j < _batchSize; j++)
+                for (int j = 0; j < batchSize; j++)
                 {
                     _buffers.OutGradient[i, j].SubView(0, Infos(i).InputArea).MemSetToZero();
                     s_backwardsAction(index, _buffers.InGradient[i, j], _buffers.OutGradient[i, j], _deviceInfos[i].View);
@@ -41,10 +41,10 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Forward()
         {
-            for (int i = 0; i < _inputDimensions; i++)
+            for (int i = 0; i < _inputShape.Dimensions; i++)
             {
                 Index2D index = new(Infos(i).OutputWidth, Infos(i).OutputLength);
-                for (int j = 0; j < _batchSize; j++)
+                for (int j = 0; j < batchSize; j++)
                 {
                     s_forwardAction(index, _buffers.Input[i, j], _buffers.Output[i, j], _deviceInfos[i].View);
                 }
@@ -82,13 +82,17 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, uint batchSize)
         {
-            _outputDimensions = _inputDimensions = inputShapes.Length;
-            _buffers = buffers;
-            _batchSize = batchSize;
-            _layerInfos = new ILayerInfo[_inputDimensions];
-            _outputShapes = new Shape[_outputDimensions];
 
-            for (int i = 0; i < _inputDimensions; i++)
+        if (_ready)
+                return _outputShape;
+            _ready = true;
+            _outputShape.Dimensions = _inputShape.Dimensions = inputShapes.Length;
+            _buffers = buffers;
+            batchSize = batchSize;
+            _layerInfos = new ILayerInfo[_inputShape.Dimensions];
+            _outputShapes = new Shape[_outputShape.Dimensions];
+
+            for (int i = 0; i < _inputShape.Dimensions; i++)
             {
                 int outputWidth, outputLength;
                 float scaleWidth, scaleLength;
@@ -132,11 +136,11 @@ namespace ConvolutionalNeuralNetwork.Layers
                 inputShapes[i] = new Shape(outputWidth, outputLength);
             }
 
-            for (int i = 0; i < _outputDimensions; i++)
+            for (int i = 0; i < _outputShape.Dimensions; i++)
                 buffers.OutputDimensionArea(i, _outputShapes[i].Area);
 
-            _deviceInfos = new MemoryBuffer1D<ScalingLayerInfo, Stride1D.Dense>[_inputDimensions];
-            for (int i = 0; i < _inputDimensions; i++)
+            _deviceInfos = new MemoryBuffer1D<ScalingLayerInfo, Stride1D.Dense>[_inputShape.Dimensions];
+            for (int i = 0; i < _inputShape.Dimensions; i++)
             {
                 _deviceInfos[i] = GPU.GPUManager.Accelerator.Allocate1D(new ScalingLayerInfo[] { Infos(i) });
             }
@@ -276,12 +280,12 @@ namespace ConvolutionalNeuralNetwork.Layers
         }*/
         public override string Name => throw new NotImplementedException();
 
-        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
+        public override void Backwards(int batchSize)
         {
             throw new NotImplementedException();
         }
 
-        public override void Forward()
+        public override void Forward(int batchSize)
         {
             throw new NotImplementedException();
         }
@@ -291,7 +295,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             throw new NotImplementedException();
         }
 
-        public override Shape Startup(Shape inputShapes, IOBuffers buffers, int batchSize)
+        public override Shape Startup(Shape inputShapes, IOBuffers buffers, int maxBatchSize)
         {
             throw new NotImplementedException();
         }

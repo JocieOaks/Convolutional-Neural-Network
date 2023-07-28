@@ -5,14 +5,14 @@ using ILGPU;
 using Newtonsoft.Json;
 using System.Runtime.Serialization;
 using System.Reflection.Emit;
+using ConvolutionalNeuralNetwork.Layers.Initializers;
 
-namespace ConvolutionalNeuralNetwork.Layers
+namespace ConvolutionalNeuralNetwork.Layers.Weighted
 {
     [Serializable]
-    public class TransposeConvolution : Layer, IPrimaryLayer
+    public class TransposeConvolution : WeightedLayer, IPrimaryLayer
     {
-        private readonly int _dimensionsMultiplier;
-        [JsonProperty] private Weights _bias;
+        private readonly int _outputDimensions;
         [JsonProperty] private Weights _filters;
         private Vector _inputCopy;
         /// <summary>
@@ -20,15 +20,15 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// </summary>
         /// <param name="filterSize">The width and height of a filter.</param>
         /// <param name="stride">The amount of movement over the image for each filter pass.</param>
-        /// <param name="outputDimensionsMultiplier">A factor relating the number of input layers to the number of output layers.
+        /// <param name="outputDimensions">A factor relating the number of input layers to the number of output layers.
         /// Must be positive. To reduce the number of output dimensions, use a <see cref="Summation"/> layer afterwards.</param>
-        public TransposeConvolution(int filterSize, int stride, int outputDimensionsMultiplier) : base(filterSize, stride)
+        public TransposeConvolution(int filterSize, int stride, int outputDimensions, IWeightInitializer initializer, bool useBias = true) : base(filterSize, stride, initializer, useBias)
         {
-            if (outputDimensionsMultiplier < 1)
+            if (outputDimensions < 1)
             {
                 throw new ArgumentException("Dimension multiplier must be greater than or equal to 1.");
             }
-            _dimensionsMultiplier = outputDimensionsMultiplier;
+            _outputDimensions = outputDimensions;
         }
 
         /// <summary>
@@ -46,44 +46,31 @@ namespace ConvolutionalNeuralNetwork.Layers
         public static Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, InverseLayerInfo> ForwardAction { get; } = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, InverseLayerInfo>(ForwardKernel);
 
         /// <inheritdoc/>
-        public override string Name => "Convolutional Layer";
+        public override string Name => "Transpose Convolutional Layer";
 
         private InverseLayerInfo Info => (InverseLayerInfo)_layerInfo;
 
-        /// <inheritdoc/>
-        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
-        {
-            if (learningRate <= 0)
-                BackwardsNoUpdate();
-            else
-                BackwardsUpdate(learningRate, firstMomentDecay, secondMomentDecay);
-        }
         public void FilterTest(int inputDimensions, int batchSize, int inputSize)
         {
             (Shape input, Shape output) = FilterTestSetup(inputDimensions, batchSize, inputSize);
 
             _filters.TestFilterGradient(this, input, output, _buffers, batchSize);
-            _bias.TestFilterGradient(this, input, output, _buffers, batchSize);
+            BiasTest(input, output, batchSize);
         }
 
         /// <inheritdoc/>
-        public override void Forward()
+        protected override void ForwardChild(int batchSize)
         {
 
-            Index1D copyIndex = new(_batchSize * _inputDimensions * _inputShape.Area);
+            Index1D copyIndex = new(batchSize * _inputShape.Volume);
             GPUManager.CopyAction(copyIndex, _buffers.Input, _inputCopy.GetArrayViewEmpty<float>());
 
-            _buffers.Output.SubView(0, _batchSize * _outputDimensions * _outputShape.Area).MemSetToZero();
+            _buffers.Output.SubView(0, batchSize * _outputShape.Volume).MemSetToZero();
 
-            Index3D index = new(_batchSize, _outputDimensions * _inputDimensions, _inputShape.Area);
+            Index3D index = new(batchSize, _outputShape.Dimensions * _inputShape.Dimensions, _inputShape.Area);
             ForwardAction(index, _buffers.Input, _buffers.Output, _filters.WeightsGPU<float>(), Info);
 
-            Index3D biasIndex = new(_outputDimensions * _outputShape.Area, _batchSize, 1);
-            GPUManager.AddAction(biasIndex, _buffers.Output, _bias.WeightsGPU<float>(), _outputDimensions * _outputShape.Area);
-
             Synchronize();
-
-            _bias.DecrementLiveWeights();
 
             _inputCopy.DecrementLiveCount();
 
@@ -103,33 +90,32 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Reset()
         {
-            float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize + _inputDimensions * _filterSize * _filterSize);
+            float variance = 0.6666f / (_outputShape.Dimensions * _filterSize * _filterSize + _inputShape.Dimensions * _filterSize * _filterSize);
             float stdDev = MathF.Sqrt(variance);
 
             _filters.Reset(0, 0.02f);
         }
         /// <inheritdoc/>
-        public override Shape Startup(Shape inputShape, IOBuffers buffers, int batchSize)
+        public override Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize)
         {
+            if (_ready)
+                return _outputShape;
+            _ready = true;
+
             if (_filters == null)
             {
-                BaseStartup(inputShape, buffers, batchSize, _dimensionsMultiplier);
+                BaseStartup(inputShape, buffers, _outputDimensions);
 
-                float variance = 0.6666f / (_outputDimensions * _filterSize * _filterSize + _inputDimensions * _filterSize * _filterSize);
-                float stdDev = MathF.Sqrt(variance);
+                int filterArea = _filterSize * _filterSize * _outputShape.Dimensions * _inputShape.Dimensions;
+                _filters = new Weights(filterArea, _weightInitializer, this);
 
-                int filterArea = _filterSize * _filterSize * _outputDimensions;
-                _filters = new Weights(filterArea, 0, 0.02f);
-                
             }
             else
             {
-                BaseStartup(inputShape, buffers, batchSize, _filters.Length / _filterSize / _filterSize / inputShape.Dimensions);
+                BaseStartup(inputShape, buffers, _filters.Length / _filterSize / _filterSize / inputShape.Dimensions);
             }
 
-            _bias ??= new Weights(_outputDimensions * _outputShape.Area, 0);
-
-            _inputCopy = new Vector(_inputDimensions * batchSize * _inputShape.Area);
+            _inputCopy = new Vector(_inputShape.Dimensions * maxBatchSize * _inputShape.Area);
 
             return _outputShape;
         }
@@ -139,34 +125,18 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// </summary>
         /// <param name="inputShape">The previous <see cref="Layer"/>'s output.</param>
         /// <param name="outGradients">The previous <see cref="Layer"/>'s inGradient.</param>
-        /// <param name="outputDimensionFactor">A factor relating the number of input layers to the number of output layers.
+        /// <param name="outputDimensions">A factor relating the number of input layers to the number of output layers.
         /// A positive number multiplies the number of input dimensions. A negative number divides the number of dimensions.</param>
         /// <exception cref="ArgumentException">Thrown if the ratio of input layers and output layers is not an integer.</exception>
-        protected new void BaseStartup(Shape inputShape, IOBuffers buffers, int batchSize, int outputDimensionFactor = 1)
+        protected new void BaseStartup(Shape inputShape, IOBuffers buffers, int outputDimensions = 1)
         {
-            _inputDimensions = inputShape.Dimensions;
-
-            _outputDimensions = outputDimensionFactor;
-            _batchSize = batchSize;
             _inputShape = inputShape;
-            _outputShape = new Shape(inputShape.Width * _stride, inputShape.Length * _stride, _outputDimensions);
+            _outputShape = new Shape(inputShape.Width * _stride, inputShape.Length * _stride, outputDimensions);
 
-            _layerInfo = new InverseLayerInfo()
-            {
-                FilterSize = _filterSize,
-                Stride = _stride,
-                InverseKSquared = 1f / (_filterSize * _filterSize),
-                InputWidth = inputShape.Width,
-                InputLength = inputShape.Length,
-                OutputWidth = _outputShape.Width,
-                OutputLength = _outputShape.Length,
-                InputDimensions = _inputDimensions,
-                OutputDimensions = _outputDimensions,
-                Padding = _filterSize - _stride
-            };
+            _layerInfo = new InverseLayerInfo(inputShape, _outputShape, _filterSize, _stride);
 
             _buffers = buffers;
-            buffers.OutputDimensionArea(_outputDimensions * _outputShape.Area);
+            buffers.OutputDimensionArea(_outputShape.Volume);
         }
 
         /// <summary>
@@ -261,18 +231,18 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <summary>
         /// Backpropagates through the layer without updating any of the filter weights. Called when learning rate is zero.
         /// </summary>
-        private void BackwardsNoUpdate()
+        protected override void BackwardsNoUpdate(int batchSize)
         {
-            _buffers.OutGradient.SubView(0, _batchSize * _inputDimensions * _inputShape.Area).MemSetToZero();
+            _buffers.OutGradient.SubView(0, batchSize * _inputShape.Volume).MemSetToZero();
 
-            Index3D index = new(_batchSize, _outputDimensions * _inputDimensions, _inputShape.Area);
+            Index3D index = new(batchSize, _outputShape.Dimensions * _inputShape.Dimensions, _inputShape.Area);
             BackwardsOutGradientAction(index, _buffers.InGradient, _buffers.OutGradient, _filters.WeightsGPU<float>(), Info);
 
             Synchronize();
 
             _filters.DecrementLiveWeights();
         }
-        
+
 
         /// <summary>
         /// Perform standard backpropagation through the layer, updating it's weights. Called when learning rate is greater than 0.
@@ -280,28 +250,23 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="learningRate">The overall learning rate for the layer updates, corrected for the influence of bias in the first and second moments.</param>
         /// <param name="firstMomentDecay">The exponential decay rate for the first moment.</param>
         /// <param name="secondMomentDecay">The exponential decay rate for the second moment.</param>
-        private void BackwardsUpdate(float learningRate, float firstMomentDecay, float secondMomentDecay)
+        protected override void BackwardsUpdate(int batchSize)
         {
 
-            _buffers.OutGradient.SubView(0, _batchSize * _inputDimensions * _inputShape.Area).MemSetToZero();
+            _buffers.OutGradient.SubView(0, batchSize * _inputShape.Volume).MemSetToZero();
 
-            Index3D index = new(_batchSize, _outputDimensions * _inputDimensions, _inputShape.Area);
+            Index3D index = new(batchSize, _outputShape.Dimensions * _inputShape.Dimensions, _inputShape.Area);
             BackwardsOutGradientAction(index, _buffers.InGradient, _buffers.OutGradient, _filters.WeightsGPU<float>(), Info);
             BackwardsFilterAction(index, _buffers.InGradient, _inputCopy.GetArrayView<float>(), _filters.GradientGPU<float>(), Info);
-            
-            Index3D biasIndex = new(_outputDimensions * _outputShape.Area, 1, _batchSize);
-            GPUManager.AddAction(biasIndex, _bias.GradientGPU<float>(), _buffers.InGradient, _outputDimensions * _outputShape.Area);
 
             Synchronize();
 
             _inputCopy.DecrementLiveCount();
-            _bias.DecrementLiveGradient();
-            _bias.UpdateWeights(learningRate, firstMomentDecay, secondMomentDecay);
 
             _filters.DecrementLiveGradient();
             _filters.DecrementLiveWeights();
-            _filters.UpdateWeights(learningRate, firstMomentDecay, secondMomentDecay);
-            
+            _filters.UpdateWeights(_adamHyperParameters);
+
         }
     }
 }

@@ -34,10 +34,10 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         private Vector() { }
 
         /// <value>The number of dimensions of the <see cref="Vector"/>.</value>
-        public int Length => _values.Length;
+        [JsonIgnore] public int Length => _values.Length;
 
         /// <value>The magnitude of the <see cref="Vector"/>.</value>
-        public float Magnitude
+        [JsonIgnore] public float Magnitude
         {
             get
             {
@@ -51,7 +51,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             }
         }
 
-        public override long MemorySize => Length * 4;
+        [JsonIgnore] public override long MemorySize => Length * 4;
 
         /// <summary>
         /// Indexes the <see cref="Vector"/> retrieving the value at the desired index.
@@ -141,25 +141,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return new Vector(values);
         }
 
-        /// <summary>
-        /// Normalizes the <see cref="Vector"/> returning a new unit <see cref="Vector"/> that is parralel to the original <see cref="Vector"/>.
-        /// </summary>
-        /// <returns>Returns a unit <see cref="Vector"/> with magnitude one that is parralel to the original <see cref="Vector"/>.</returns>
-        public Vector Normalized()
-        {
-            float magnitude = Magnitude;
-
-            if (magnitude == 0)
-                return this;
-
-            return this * (1 / magnitude);
-        }
-
-        public override void SyncCPU(ArrayView<float> arrayView)
-        {
-            arrayView.SubView(0, Length).CopyToCPU(_values);
-        }
-
         public void CopyToBuffer(ArrayView<float> arrayView)
         {
             arrayView.SubView(0, Length).CopyFromCPU(_values);
@@ -180,20 +161,16 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             ID = GPUManager.GCItem(ID);
         }
 
-        public override void SyncCPU()
+        public ArrayView<T> GetArrayView<T>() where T : unmanaged
         {
-            if (ID == 0)
-                return;
-
+            IncrementLiveCount();
             MemoryBuffer buffer = GetBuffer();
-
-            if (buffer != null)
-                SyncCPU(buffer);
-        }
-
-        public override void SyncCPU(MemoryBuffer buffer)
-        {
-            buffer.AsArrayView<float>(0, Length).CopyToCPU(_values);
+            if (buffer == null)
+            {
+                (ID, buffer) = GPUManager.Allocate(this);
+            }
+            int bytes = Interop.SizeOf<T>();
+            return new ArrayView<T>(buffer, 0, 4 * Length / bytes);
         }
 
         public ArrayView<T> GetArrayViewEmpty<T>() where T : unmanaged
@@ -203,18 +180,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             if (buffer == null)
             {
                 (ID, buffer) = GPUManager.AllocateEmpty<float>(this, Length);
-            }
-            int bytes = Interop.SizeOf<T>();
-            return new ArrayView<T>(buffer, 0, 4 * Length / bytes);
-        }
-
-        public ArrayView<T> GetArrayView<T>() where T : unmanaged
-        {
-            IncrementLiveCount();
-            MemoryBuffer buffer = GetBuffer();
-            if (buffer == null)
-            {
-                (ID, buffer) = GPUManager.Allocate(this);
             }
             int bytes = Interop.SizeOf<T>();
             return new ArrayView<T>(buffer, 0, 4 * Length / bytes);
@@ -232,6 +197,39 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return _values;
         }
 
+        /// <summary>
+        /// Normalizes the <see cref="Vector"/> returning a new unit <see cref="Vector"/> that is parralel to the original <see cref="Vector"/>.
+        /// </summary>
+        /// <returns>Returns a unit <see cref="Vector"/> with magnitude one that is parralel to the original <see cref="Vector"/>.</returns>
+        public Vector Normalized()
+        {
+            float magnitude = Magnitude;
+
+            if (magnitude == 0)
+                return this;
+
+            return this * (1 / magnitude);
+        }
+
+        public override void SyncCPU(ArrayView<float> arrayView)
+        {
+            arrayView.SubView(0, Length).CopyToCPU(_values);
+        }
+        public override void SyncCPU()
+        {
+            if (ID == 0)
+                return;
+
+            MemoryBuffer buffer = GetBuffer();
+
+            if (buffer != null)
+                SyncCPU(buffer);
+        }
+
+        public override void SyncCPU(MemoryBuffer buffer)
+        {
+            buffer.AsArrayView<float>(0, Length).CopyToCPU(_values);
+        }
         public void UpdateIfAllocated()
         {
             if (ID == 0)

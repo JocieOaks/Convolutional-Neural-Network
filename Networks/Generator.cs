@@ -1,6 +1,7 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using ConvolutionalNeuralNetwork.Layers;
 using Newtonsoft.Json;
+using ConvolutionalNeuralNetwork.Layers.Activations;
 
 namespace ConvolutionalNeuralNetwork.Networks
 {
@@ -9,11 +10,8 @@ namespace ConvolutionalNeuralNetwork.Networks
     /// </summary>
     public class Generator : Network
     {
-        private bool[][] _classificationBools;
-        private float[][] _classificationFloats;
-        private FeatureMap[] _outputs;
-        private FeatureMap[,] _latentSpace;
-        private readonly int _latentDimensions = 50;
+        private FeatureMap[,] _outputs;
+        private readonly int _latentDimensions = 100;
         private int _outputArea;
 
         /// <summary>
@@ -54,20 +52,13 @@ namespace ConvolutionalNeuralNetwork.Networks
         /// <param name="gradients">An array of <see cref="FeatureMap"/>'s containing the gradients for the last layer of the <see cref="Generator"/>.</param>
         /// <param name="inputs">The images and their associatd labels for this iteration of training.</param>
         /// <param name="learningRate">The learning rate defining the degree to which each layer should be updated.</param>
-        public void Backwards(FeatureMap[] gradients)
+        public void Backwards(int batchSize)
         {
-            HyperTan.Backward(_outputs, gradients);
-            for (int i = 0; i < _batchSize; i++)
-            {
-                gradients[i].CopyToBuffer(_endBuffers.InGradient.SubView(_outputArea * i, _outputArea));
-            }
-
-            _updateStep++;
-            float correctionLearningRate = CorrectionLearningRate(_learningRate, _firstMomentDecay, _secondMomentDecay);
+            _adamHyperParameters.Update();
 
             for (int i = Depth - 1; i >= 0; i--)
             {
-                Utility.StopWatch(() => _layers[i].Backwards(correctionLearningRate, _firstMomentDecay, _secondMomentDecay), $"Backwards {i} {_layers[i].Name}", true);
+                Utility.StopWatch(() => _layers[i].Backwards(batchSize), $"Backwards {i} {_layers[i].Name}", PRINTSTOPWATCH);
             }
         }
 
@@ -76,43 +67,39 @@ namespace ConvolutionalNeuralNetwork.Networks
         /// </summary>
         /// <param name="input">The images and their asscoiated labels.</param>
         /// <param name="inference">Determines whether the <see cref="Generator"/> is training or inferring. Defaults to false.</param>
-        public FeatureMap[] Forward(ImageInput[] input)
+        public void Forward(ImageInput[] input)
         {
+            int batchSize = input.Length;
 
-            for (int i = 0; i < _batchSize; i++)
+            for(int i = 0; i < batchSize; i++)
             {
-                _classificationBools[i] = input[i].Bools;
-                _classificationFloats[i] = input[i].Floats;
-            }
-
-            for(int i = 0; i < _latentDimensions; i++)
-            {
-                for(int j = 0; j < _batchSize; j++)
-                {
-                    _latentSpace[i, j].Randomize(0, 1);
-                    _latentSpace[i, j].CopyToBuffer(_startBuffers.Input.SubView(j * _latentDimensions + i, 1));
-                }
+                Vector latentVector = input[i].LabelVector(_latentDimensions);
+                latentVector.CopyToBuffer(Input.SubView(i * latentVector.Length, latentVector.Length));
             }
 
             for (int i = 0; i < Depth; i++)
             {
-                Utility.StopWatch(() => _layers[i].Forward(), $"Forwards {i} {_layers[i].Name}", true);
+                Utility.StopWatch(() => _layers[i].Forward(batchSize), $"Forwards {i} {_layers[i].Name}", PRINTSTOPWATCH);
             }
+        }
 
-            for(int i = 0; i < _batchSize; i++)
+        public FeatureMap[,] GetFeatureMaps(int batchSize)
+        {
+            for (int i = 0; i < batchSize; i++)
             {
-                _outputs[i].SyncCPU(_endBuffers.Output.SubView(_outputArea * i, _outputArea));
+                for (int j = 0; j < _inputChannels; j++)
+                { 
+                    _outputs[i,j].SyncCPU(Output.SubView(_outputArea * (i * _inputChannels + j), _outputArea));
+                }
             }
-
-            HyperTan.Forward(_outputs);
 
             return _outputs;
         }
 
         /// <inheritdoc/>
-        public override void StartUp(int batchSize, int width, int length, int labelBools, int labelFloats, float learningRate, float firstDecay, float secondDecay)
+        public override void StartUp(int maxBatchSize, int width, int length, int labelBools, int labelFloats, AdamHyperParameters hyperParameters, int inputChannels)
         {
-            base.StartUp(batchSize, width, length, labelBools, labelFloats, learningRate, firstDecay, secondDecay);
+            base.StartUp(maxBatchSize, width, length, labelBools, labelFloats, hyperParameters, inputChannels);
 
             for(int i = _layers.Count - 1; i >= 0; i--)
             {
@@ -120,55 +107,26 @@ namespace ConvolutionalNeuralNetwork.Networks
                 {
                     break;
                 }
-                if (_layers[i] is ReLUActivation || _layers[i] is BatchNormalization)
+                if (_layers[i] is ISecondaryLayer)
                     _layers.Remove(_layers[i]);
             }
 
-            _outputs = new FeatureMap[batchSize];
+            _layers.Add(new HyperTan());
+
+            _outputs = new FeatureMap[maxBatchSize, inputChannels];
             _outputArea = width * length;
 
-            _classificationBools = new bool[_batchSize][];
-            _classificationFloats = new float[_batchSize][];
-            for (int i = 0; i < batchSize; i++)
+            for (int i = 0; i < maxBatchSize; i++)
             {
-                _outputs[i] = new FeatureMap(width, length);
-                _classificationBools[i] = new bool[labelBools];
-                _classificationFloats[i] = new float[labelFloats];
-            }
-
-            _latentSpace = new FeatureMap[_latentDimensions, _batchSize];
-            for(int i = 0; i < _latentDimensions; i++)
-            {
-                for(int j = 0; j < _batchSize; j++)
+                for (int j = 0; j < inputChannels; j++)
                 {
-                    _latentSpace[i, j] = new FeatureMap(1, 1);
+                    _outputs[i, j] = new FeatureMap(width, length);
                 }
             }
 
-            Shape current  = new Shape(1, 1, _latentDimensions);
-            IOBuffers inputBuffers = _startBuffers = new();
-            IOBuffers outputBuffers = new();
-            outputBuffers.OutputDimensionArea(_latentDimensions);
+            Shape inputShape = new(1, 1, _latentDimensions + LabelCount);
 
-            foreach (var layer in _layers)
-            {
-                /*if (layer is LatentConvolution key)
-                {
-                    key.Bools = _classificationBools;
-                    key.Floats = _classificationFloats;
-                }*/
-
-                current = layer.Startup(current, inputBuffers, batchSize);
-                if (layer is not IUnchangedLayer)
-                {
-                    (inputBuffers, outputBuffers) = (outputBuffers, inputBuffers); 
-                }
-            }
-            _endBuffers = outputBuffers;
-            _middleBuffers = inputBuffers;
-            inputBuffers.Allocate(batchSize);
-            outputBuffers.Allocate(batchSize);
-            IOBuffers.SetCompliment(inputBuffers, outputBuffers);
+            InitializeLayers(ref inputShape, maxBatchSize);
 
             _ready = true;
         }

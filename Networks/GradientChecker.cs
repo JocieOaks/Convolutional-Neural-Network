@@ -1,5 +1,4 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
-using ConvolutionalNeuralNetwork.Layers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,16 +12,16 @@ namespace ConvolutionalNeuralNetwork.Networks
         FeatureMap[,] _input;
         FeatureMap[,] _output;
 
-        public override void StartUp(int batchSize, int width, int length, int boolLabels, int floatLabels, float learningRate, float firstDecay, float secondDecay)
+        public override void StartUp(int maxBatchSize, int width, int length, int boolLabels, int floatLabels, AdamHyperParameters hyperParameters, int inputChannels)
         {
-            base.StartUp(batchSize, width, length, boolLabels, floatLabels, learningRate, firstDecay, secondDecay);
+            base.StartUp(maxBatchSize, width, length, boolLabels, floatLabels, hyperParameters, 3);
 
             int inputArea = width * length;
 
             /*Shape[] current = new Shape[1];
             current[0] = new Shape(width, length);
             _finalOutGradient = new FeatureMap[batchSize];
-            _finalOutput = new Vector[_batchSize];
+            _finalOutput = new Vector[batchSize];
             for (int j = 0; j < batchSize; j++)
             {
                 _finalOutGradient[j] = new FeatureMap(width, length);
@@ -51,8 +50,8 @@ namespace ConvolutionalNeuralNetwork.Networks
             outputBuffers.Allocate(batchSize);
             IOBuffers.SetCompliment(inputBuffers, outputBuffers);
 
-            _discriminatorGradients = new Vector[_batchSize];
-            _generatorGradients = new Vector[_batchSize];
+            _discriminatorGradients = new Vector[batchSize];
+            _generatorGradients = new Vector[batchSize];
 
             _ready = true;*/
         }

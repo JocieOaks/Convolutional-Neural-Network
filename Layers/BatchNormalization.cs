@@ -1,8 +1,11 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
+using ConvolutionalNeuralNetwork.GPU;
 using ILGPU;
+using ILGPU.Algorithms;
 using ILGPU.Runtime;
 using ILGPU.Runtime.OpenCL;
 using Newtonsoft.Json;
+using System.Reflection.Metadata;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 
@@ -13,22 +16,29 @@ namespace ConvolutionalNeuralNetwork.Layers
     /// so that their mean is 0 and standard deviation 1.
     /// </summary>
     [Serializable]
-    public class BatchNormalization : Layer, ISecondaryLayer
+    public class BatchNormalization : Layer, ISecondaryLayer, IUnchangedLayer
     {
-        /*private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>>(BackwardsKernel);
-        private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>> s_gradientAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>>(GradientsKernel);
-        private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>> s_normalizeAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(ForwardKernel);
-        private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>> s_sumAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(MeanKernel);
-        private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>> s_varianceAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(VarianceKernel);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Views, Shape> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Views, Shape>(BackwardsKernel);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Views, Shape> s_gradientAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Views, Shape>(GradientsKernel);
+        private static readonly Action<Index3D, ArrayView<float>, Views, Shape> s_normalizeAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, Views, Shape>(ForwardKernel);
+        private static readonly Action<Index3D, ArrayView<float>, Views, Shape> s_sumAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, Views, Shape>(SumKernel);
+        private static readonly Action<Index3D, ArrayView<float>, Views, Shape> s_varianceAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, Views, Shape>(VarianceKernel);
+        private static readonly Action<Index1D, Views, float> s_meanAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, Views, float>(MeanKernel);
+        private static readonly Action<Index1D, Views, float> s_sigmaAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, Views, float>(SigmaKernel);
+        private static readonly Action<Index1D, Views, float> s_meanSigmaGradientAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, Views, float>(MeanSigmaGradientKernel);
 
         [JsonProperty] private Weights _bias;
         private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceGradients;
         private MemoryBuffer1D<float, Stride1D.Dense>[] _deviceValues;
         private Gradients[] _gradients;
-        private FeatureMap[,] _inputs;
+        private Vector _inputCopy;
         private Vector _mean;
+        private Vector _meanGradient;
         private Vector _sigma;
+        private Vector _sigmaGradient;
         [JsonProperty] private Weights _weights;
+
+        private AdamHyperParameters _adamHyperParameters;
         /// <summary>
         /// Initializes a new instance of the <see cref="BatchNormalization"/> class.
         /// </summary>
@@ -41,143 +51,98 @@ namespace ConvolutionalNeuralNetwork.Layers
         [JsonIgnore] public override string Name => "Batch Normalization Layer";
 
         /// <inheritdoc/>
-        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
+        public override void Backwards(int batchSize)
         {
-            GPUGradients();
-            GPUBackPropogate();
-            UpdateWeights(learningRate,firstMomentDecay, secondMomentDecay);
-        }
+            Views views = new()
+            {
+                Mean = _mean.GetArrayView<float>(),
+                Sigma = _sigma.GetArrayView<float>(),
+                Weight = _weights.WeightsGPU<float>(),
+                Bias = _bias.WeightsGPU<float>(),
+                MeanGradient = _meanGradient.GetArrayView<float>(),
+                SigmaGradient = _sigmaGradient.GetArrayView<float>(),
+                WeightGradient = _weights.GradientGPU<float>(),
+                BiasGradient = _bias.GradientGPU<float>()
+            };
 
-        public void FilterTest()
-        {
-            FeatureMap[,] input = FilterTestSetup(1);
+            Index3D index = new(batchSize, _inputShape.Dimensions, _inputShape.Area);
+            s_gradientAction(index, _inputCopy.GetArrayView<float>(), _buffers.Gradient, views, _inputShape);
 
-            FeatureMap output = new FeatureMap(_outputShapes[0]);
+            Synchronize();
 
-            _weights.TestFilterGradient(this, input, output, 0, _buffers);
-            _bias.TestFilterGradient(this, input, output, 0, _buffers);
+
+            Index1D dimensionIndex = new(_inputShape.Dimensions);
+            s_meanSigmaGradientAction(dimensionIndex, views, 1f / (batchSize * _inputShape.Area));
+
+            Synchronize();
+
+
+            s_backwardsAction(index, _inputCopy.GetArrayView<float>(), _buffers.Gradient, views, _inputShape);
+
+            Synchronize();
+
+            _weights.UpdateWeights(_adamHyperParameters);
+            _bias.UpdateWeights(_adamHyperParameters);
+            _mean.DecrementLiveCount();
+            _sigma.DecrementLiveCount();
+            _weights.DecrementLiveWeights();
+            _bias.DecrementLiveWeights();
+            _meanGradient.DecrementLiveCount();
+            _sigmaGradient.DecrementLiveCount();
+            _weights.DecrementLiveGradient();
+            _bias.DecrementLiveGradient();
+            _inputCopy.DecrementLiveCount(2);
         }
 
         /// <inheritdoc/>
-        public override void Forward()
+        public override void Forward(int batchSize)
         {
-            for (int i = 0; i < _inputDimensions; i++)
+            Index1D copyIndex = new(batchSize * _inputShape.Volume);
+            GPUManager.CopyAction(copyIndex, _buffers.Input, _inputCopy.GetArrayViewEmpty<float>());
+
+
+            Views views = new()
             {
-                Index1D index = new(Infos(i).Area);
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    GPU.GPUManager.CopyAction(index, _buffers.Input[i, j], _inputs[i, j].GetArrayViewEmpty<float>());
-                }
-            }
-            MeanGPU();
-            VarianceGPU();
-            NormalizeGPU();
-        }
+                Mean = _mean.GetArrayViewZeroed<float>(),
+                Sigma = _sigma.GetArrayViewZeroed<float>(),
+                Weight = _weights.WeightsGPU<float>(),
+                Bias = _bias.WeightsGPU<float>()
+            };
 
-        public void GPUBackPropogate()
-        {
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                float invM = 1f / (Infos(i).Area * _batchSize);
+            Index3D index = new(batchSize, _inputShape.Dimensions, _inputShape.Area);
 
-                _deviceValues[i] = GPU.GPUManager.Accelerator.Allocate1D(new float[] { _weights[i] / _sigma[i], 2 * invM * _gradients[i].SigmaGradient, _mean[i], invM * _gradients[i].MeanGradient });
+            s_sumAction(index, _buffers.Input, views, _inputShape);
 
-                Index1D index = new(Infos(i).Area);
-
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    s_backwardsAction(index, _inputs[i, j].GetArrayView<float>(), _buffers.InGradient[i, j], _buffers.OutGradient[i, j], _deviceValues[i].View);
-                }
-            }
             Synchronize();
-            DecrementCacheabble(_inputs);
 
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _deviceValues[i].Dispose();
-            }
-        }
 
-        public void GPUGradients()
-        {
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                float invM = 1f / (Infos(i).Area * _batchSize);
+            Index1D dimensionIndex = new(_inputShape.Dimensions);
+            float inverseArea = 1f / (batchSize * _inputShape.Area);
+            s_meanAction(dimensionIndex, views, inverseArea);
 
-                _deviceValues[i] = GPU.GPUManager.Accelerator.Allocate1D(new float[] { _mean[i], _weights[i] / _sigma[i], _bias[i] });
-
-                _deviceGradients[i] = GPU.GPUManager.Accelerator.Allocate1D<float>(9);
-                _deviceGradients[i].MemSetToZero();
-                Index1D index = new(Infos(i).Area);
-
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    s_gradientAction(index, _inputs[i, j].GetArrayView<float>(), _buffers.InGradient[i, j], _deviceValues[i].View, _deviceGradients[i].View);
-                }
-            }
             Synchronize();
-            DecrementCacheabble(_inputs);
 
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _deviceValues[i].Dispose();
-                _gradients[i] = new();
-                _gradients[i].CopyFromBuffer(_deviceGradients[i]);
-                _deviceGradients[i].Dispose();
 
-                _gradients[i].SigmaGradient *= MathF.Pow(_sigma[i], -1.5f) * _weights[i] * -0.5f;
-                _gradients[i].MeanGradient = -_gradients[i].BiasGradient * _weights[i] / _sigma[i];
-            }
-        }
-
-        /// <summary>
-        /// Calculates the mean of each dimension using an <see cref="ILGPU"/> kernel.
-        /// </summary>
-        public void MeanGPU()
-        {
-            var buffer = _mean.GetArrayView<float>();
-            buffer.MemSetToZero();
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                Index1D index = new(Infos(i).Area);
-
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    s_sumAction(index, _buffers.Input[i, j], buffer.SubView(i));
-                }
-            }
+            s_varianceAction(index, _buffers.Input, views, _inputShape);
+            
             Synchronize();
-            _mean.SyncCPU(buffer);
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _mean[i] = _mean[i] / (Infos(i).Area * (int)_batchSize);
-            }
-            _mean.UpdateIfAllocated();
-            _mean.DecrementLiveCount(1);
-        }
 
-        /// <summary>
-        /// Normalizes the input <see cref="FeatureMap"/>s using an <see cref="ILGPU"/> kernel.
-        /// </summary>
-        public void NormalizeGPU()
-        {
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                Index1D index = new(Infos(i).Area);
-                _deviceValues[i] = GPU.GPUManager.Accelerator.Allocate1D(new float[] { _mean[i], _weights[i] / _sigma[i], _bias[i] });
 
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    s_normalizeAction(index, _buffers.Input[i, j], _buffers.Output[i, j], _deviceValues[i].View);
-                }
-            }
+            s_sigmaAction(dimensionIndex, views, inverseArea);
+            
             Synchronize();
-            DecrementCacheabble(_inputs);
 
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _deviceValues[i].Dispose();
-            }
+
+            s_normalizeAction(index, _buffers.Input, views, _inputShape);
+            
+            Synchronize();
+
+            _inputCopy.DecrementLiveCount();
+
+            _mean.DecrementLiveCount();
+            _sigma.DecrementLiveCount();
+            _weights.DecrementLiveWeights();
+            _bias.DecrementLiveWeights();
         }
 
         /// <summary>
@@ -198,68 +163,31 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, uint batchSize)
+        public override Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize)
         {
-            BaseStartup(inputShapes, buffers, batchSize);
+            if (_ready)
+                return _outputShape;
+            _ready = true;
+
+            BaseStartup(inputShape, buffers);
 
             if (_weights == null)
             {
-                _weights = new Weights(_inputDimensions, 1);
-                _bias = new Weights(_inputDimensions, 0);
+                _weights = new Weights(_inputShape.Dimensions, new Initializers.Constant(1), null);
+                _bias = new Weights(_inputShape.Dimensions);
             }
 
-            _mean = new Vector(_inputDimensions);
-            _sigma = new Vector(_inputDimensions);
-            _gradients = new Gradients[_inputDimensions];
+            _mean = new Vector(_inputShape.Dimensions);
+            _meanGradient = new Vector(_inputShape.Dimensions);
+            _sigma = new Vector(_inputShape.Dimensions);
+            _sigmaGradient = new Vector(_inputShape.Dimensions);
+            _gradients = new Gradients[_inputShape.Dimensions];
 
-            _deviceGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
-            _deviceValues = new MemoryBuffer1D<float, Stride1D.Dense>[_inputDimensions];
-            _inputs = new FeatureMap[_inputDimensions, batchSize];
-            for(int i = 0; i < _inputDimensions; i++)
-            {
-                for(int j = 0; j < batchSize; j++)
-                {
-                    _inputs[i, j] = new FeatureMap(inputShapes[i]);
-                }
-            }
+            _deviceGradients = new MemoryBuffer1D<float, Stride1D.Dense>[_inputShape.Dimensions];
+            _deviceValues = new MemoryBuffer1D<float, Stride1D.Dense>[_inputShape.Dimensions];
+            _inputCopy = new Vector(maxBatchSize * inputShape.Volume);
 
-            return _outputShapes;
-        }
-
-        public void UpdateWeights(float learningRate, float firstMomentDecay, float secondMomentDecay)
-        {
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _weights.SetGradient(i, _gradients[i].WeightGradient, learningRate, firstMomentDecay, secondMomentDecay);
-                _bias.SetGradient(i, _gradients[i].BiasGradient, learningRate, firstMomentDecay, secondMomentDecay);
-            }
-        }
-        /// <summary>
-        /// Calculates the standard deviation of each dimension using an <see cref="ILGPU"/> kernel.
-        /// </summary>
-        public void VarianceGPU()
-        {
-            var varBuffer = _sigma.GetArrayView<float>();
-            varBuffer.MemSetToZero();
-            var meanBuffer = _mean.GetArrayView<float>();
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                Index1D index = new(Infos(i).Area);
-
-                for (int j = 0; j < _batchSize; j++)
-                {
-                    s_varianceAction(index, _buffers.Input[i, j], meanBuffer.SubView(i), varBuffer.SubView(i));
-                }
-            }
-            Synchronize();
-            _sigma.SyncCPU(varBuffer);
-            for (int i = 0; i < _inputDimensions; i++)
-            {
-                _sigma[i] = MathF.Pow(_sigma[i] / (Infos(i).Area * (int)_batchSize) + Utility.ASYMPTOTEERRORCORRECTION, 0.5f);
-            }
-            _sigma.UpdateIfAllocated();
-            _sigma.DecrementLiveCount();
-            _mean.DecrementLiveCount();
+            return _outputShape;
         }
 
         /// <summary>
@@ -268,7 +196,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="index">The index of the current kernel calculation to be made.</param>
         /// <param name="input">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the input from the
         /// previous <see cref="Layer"/>.</param>
-        /// <param name="inGradient">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the incoming
+        /// <param name="gradient">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the incoming
         /// gradient from the following <see cref="Layer"/>.</param>
         /// <param name="outGradient">An <see cref="ArrayView1D{T, TStride}"/> of floats to sum the outgoing gradient.
         /// Because <see cref="Color"/> cannot be summed atomically, every three floats represents a single
@@ -276,11 +204,26 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="values">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s used in the equation
         /// to calculate the outGradient.</param>
         /// <param name="info">The <see cref="StaticLayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void BackwardsKernel(Index3D index, ArrayView<float> input, ArrayView<float> inGradient, ArrayView<float> outGradient, ArrayView<float> values, ArrayView<StaticLayerInfo> infoView)
+        private static void BackwardsKernel(Index3D index, ArrayView<float> input, ArrayView<float> gradient, Views values, Shape shape)
         {
-            StaticLayerInfo info = infoView[index.X];
-            int ind = index.X * index.Y * info.Area + index.Z;
-            outGradient[ind] = inGradient[ind] * values[0] + values[1] * (input[ind] - values[2]) + values[3];
+            int ind = index.X * shape.Volume +  index.Y * shape.Area + index.Z;
+            gradient[ind] = XMath.Clamp(gradient[ind] * values.Weight[index.Y] / values.Sigma[index.Y] + values.SigmaGradient[index.Y] * (input[ind] - values.Mean[index.Y]) + values.MeanGradient[index.Y], -1, 1);
+        }
+
+        private static void MeanSigmaGradientKernel(Index1D index, Views values, float inverseArea)
+        {
+            values.MeanGradient[index] = -inverseArea * values.BiasGradient[index] * values.Weight[index] / values.Sigma[index];
+            values.SigmaGradient[index] *= inverseArea * XMath.Pow(values.Sigma[index], -3) * values.Weight[index];
+        }
+
+        private static void MeanKernel(Index1D index, Views values, float inverseArea)
+        {
+            values.Mean[index] = values.Mean[index] * inverseArea;
+        }
+
+        private static void SigmaKernel(Index1D index, Views values, float inverseArea)
+        {
+            values.Sigma[index] = XMath.Pow(values.Sigma[index] * inverseArea + Utility.ASYMPTOTEERRORCORRECTION, 0.5f);
         }
 
         /// <summary>
@@ -294,47 +237,48 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="values">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s used in the equation to
         /// calculate the normalized <see cref="Color"/>.</param>
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void ForwardKernel(Index3D index, ArrayView<float> input, ArrayView<float> normalized, ArrayView<float> values, ArrayView<StaticLayerInfo> infoView)
+        private static void ForwardKernel(Index3D index, ArrayView<float> input, Views values, Shape shape)
         {
-            StaticLayerInfo info = infoView[index.X];
-            int ind = index.X * index.Y * info.Area + index.Z;
-            normalized[ind] = (input[ind] - values[0]) * values[1] + values[2];
+            int ind = index.X * shape.Volume + index.Y * shape.Area + index.Z;
+            input[ind] = (input[ind] - values.Mean[index.Y]) * values.Weight[index.Y] / values.Sigma[index.Y] + values.Bias[index.Y];
         }
 
-        private static void GradientsKernel(Index3D index, ArrayView<float> input, ArrayView<float> inGradient, ArrayView<float> values, ArrayView<float> gradients, ArrayView<StaticLayerInfo> infoView)
+        private static void GradientsKernel(Index3D index, ArrayView<float> input, ArrayView<float> inGradient, Views values, Shape shape)
         {
-            StaticLayerInfo info = infoView[index.X];
-            int ind = index.X * index.Y * info.Area + index.Z;
+            int ind = index.X * shape.Volume + index.Y * shape.Area + index.Z;
 
-            float meanOffset = input[ind] - values[0];
+            float meanOffset = input[ind] - values.Mean[index.Y];
             float gradient = inGradient[ind];
             
-            float normalized = meanOffset * values[1] + values[2];
+            float normalized = meanOffset * values.Weight[index.Y] / values.Sigma[index.Y] + values.Bias[index.Y];
 
-            Atomic.Add(ref gradients[0], gradient * normalized);
-            Atomic.Add(ref gradients[1], gradient);
-            Atomic.Add(ref gradients[2], gradient * meanOffset);
+            Atomic.Add(ref values.SigmaGradient[index.Y], gradient * meanOffset);
+            Atomic.Add(ref values.WeightGradient[index.Y], gradient * normalized);
+            Atomic.Add(ref values.BiasGradient[index.Y], gradient);
         }
 
-        private static void MeanKernel(Index1D index, ArrayView<float> input, ArrayView<float> mean)
+        private static void SumKernel(Index3D index, ArrayView<float> input, Views values, Shape shape)
         {
-            Atomic.Add(ref mean[0], input[index.X]);
+
+            Atomic.Add(ref values.Mean[index.Y], input[index.X * shape.Volume + index.Y * shape.Area + index.Z]);
         }
 
-        private static void VarianceKernel(Index1D index, ArrayView<float> input, ArrayView<float> mean, ArrayView<float> variance)
+        private static void VarianceKernel(Index3D index, ArrayView<float> input, Views values, Shape shape)
         {
-            float difference = input[index.X] - mean[0];
-            Atomic.Add(ref variance[0], difference * difference);
+            float difference = input[index.X * shape.Volume + index.Y * shape.Area + index.Z] - values.Mean[index.Y];
+            Atomic.Add(ref values.Sigma[index.Y], difference * difference);
         }
 
-        /// <summary>
-        /// Gets the <see cref="StaticLayerInfo"/> for a particular dimension.
-        /// </summary>
-        /// <param name="index">The dimension who <see cref="StaticLayerInfo"/> is needed.</param>
-        /// <returns>Return the <see cref="StaticLayerInfo"/> corresponding to an input dimension.</returns>
-        private StaticLayerInfo Infos(int index)
-        {
-            return (StaticLayerInfo)_layerInfos[index];
+        private readonly struct Views
+        { 
+            public ArrayView<float> Mean { get; init; }
+            public ArrayView<float> Sigma { get; init; }
+            public ArrayView<float> Weight { get; init; }
+            public ArrayView<float> Bias { get; init; }
+            public ArrayView<float> MeanGradient { get; init; }
+            public ArrayView<float> SigmaGradient { get; init; }
+            public ArrayView<float> WeightGradient { get; init; }
+            public ArrayView<float> BiasGradient { get; init; }
         }
 
         /// <summary>
@@ -374,27 +318,6 @@ namespace ConvolutionalNeuralNetwork.Layers
                         buffer.AsArrayView<float>(0, 3).CopyToCPU(new Span<float>(startAddress, 3));
                 }
             }
-        }*/
-        public override string Name => throw new NotImplementedException();
-
-        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
-        {
-            throw new NotImplementedException();
-        }
-
-        public override void Forward()
-        {
-            throw new NotImplementedException();
-        }
-
-        public override void Reset()
-        {
-            throw new NotImplementedException();
-        }
-
-        public override Shape Startup(Shape inputShapes, IOBuffers buffers, int batchSize)
-        {
-            throw new NotImplementedException();
         }
     }
 }

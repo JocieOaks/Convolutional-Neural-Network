@@ -22,39 +22,37 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class Summation : Layer, IStructuralLayer
     {
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<StaticLayerInfo>> s_backwardsAction =
-            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<StaticLayerInfo>>(BackwardsKernel);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Shape, int> s_backwardsAction =
+            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Shape, int>(BackwardsKernel);
 
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<StaticLayerInfo>> s_forwardAction =
-            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<StaticLayerInfo>>(ForwardKernel);
-
-        private ArrayView<StaticLayerInfo> _deviceInfo;
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Shape, int> s_forwardAction =
+            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Shape, int>(ForwardKernel);
 
         [JsonProperty]
-        private int Dimensions
+        private Shape Output
         {
-            get => _outputDimensions;
-            set => _outputDimensions = value;
+            get => _outputShape;
+            set => _outputShape = value;
         }
         [JsonConstructor] public Summation() : base(1, 1) { }
         /// <inheritdoc/>
         public override string Name => "Summation Layer";
         /// <inheritdoc/>
-        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
+        public override void Backwards(int batchSize)
         {
-            Index3D index = new(_batchSize, _inputDimensions, _inputShape.Area);
-            s_backwardsAction(index, _buffers.Input, _buffers.Output, _deviceInfo);
+            Index3D index = new(batchSize, _inputShape.Dimensions, _inputShape.Area);
+            s_backwardsAction(index, _buffers.Input, _buffers.Output, _inputShape, _outputShape.Dimensions);
 
             Synchronize();
         }
 
         /// <inheritdoc/>
-        public override void Forward()
+        public override void Forward(int batchSize)
         {
-            _buffers.Output.SubView(0, _batchSize * _outputDimensions * _inputShape.Area).MemSetToZero();
+            _buffers.Output.SubView(0, batchSize * _outputShape.Dimensions * _inputShape.Area).MemSetToZero();
 
-            Index3D index = new(_batchSize, _inputDimensions, _inputShape.Area);
-            s_forwardAction(index, _buffers.Input, _buffers.Output, _deviceInfo);
+            Index3D index = new(batchSize, _inputShape.Dimensions, _inputShape.Area);
+            s_forwardAction(index, _buffers.Input, _buffers.Output, _inputShape, _outputShape.Dimensions);
 
             Synchronize();
         }
@@ -70,31 +68,33 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="dimensions">The number of output dimensions.</param>
         public void SetOutputDimensions(int dimensions)
         {
-            _outputDimensions = dimensions;
+            _outputShape = new Shape(0, 0, dimensions);
         }
 
         /// <inheritdoc/>
-        public override Shape Startup(Shape inputShapes, IOBuffers buffers, int batchSize)
+        public override Shape Startup(Shape inputShapes, IOBuffers buffers, int maxBatchSize)
         {
-            BaseStartup(inputShapes, buffers, batchSize, _outputDimensions);
+            if (_ready)
+                return _outputShape;
+            _ready = true;
+
+            BaseStartup(inputShapes, buffers, _outputShape.Dimensions);
 
             return _outputShape;
         }
 
-        private static void BackwardsKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, ArrayView<StaticLayerInfo> infoView)
+        private static void BackwardsKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, Shape shape, int outputDimensions)
         {
-            StaticLayerInfo info = infoView[index.Y];
-            int outGradientIndex = (index.X * info.InputDimensions + index.Y) * info.Area + index.Z;
-            int inGradientIndex = (index.X * info.OutputDimensions + index.Y % info.OutputDimensions) * info.Area + index.Z;
+            int outGradientIndex = (index.X * shape.Dimensions + index.Y) * shape.Area + index.Z;
+            int inGradientIndex = (index.X * outputDimensions + index.Y % outputDimensions) * shape.Area + index.Z;
 
             outGradient[outGradientIndex] = inGradient[inGradientIndex];
         }
 
-        private static void ForwardKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, ArrayView<StaticLayerInfo> infoView)
+        private static void ForwardKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, Shape shape, int outputDimensions)
         {
-            StaticLayerInfo info = infoView[index.Y];
-            int inputIndex = (index.X * info.InputDimensions + index.Y) * info.Area + index.Z;
-            int outputIndex = (index.X * info.OutputDimensions + index.Y % info.OutputDimensions) * info.Area + index.Z;
+            int inputIndex = (index.X * shape.Dimensions + index.Y) * shape.Area + index.Z;
+            int outputIndex = (index.X * outputDimensions + index.Y % outputDimensions) * shape.Area + index.Z;
 
             Atomic.Add(ref output[outputIndex], input[inputIndex]);
         }

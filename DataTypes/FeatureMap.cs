@@ -14,8 +14,14 @@ namespace ConvolutionalNeuralNetwork.DataTypes
     [Serializable]
     public class FeatureMap : ColorTensor
     {
-        private readonly static float s_colorMean = -0.7386f;
-        private readonly static float s_colorDeviation = 0.6026f;
+        private readonly static float s_colorMean = 0;
+        private readonly static float s_colorDeviation = 0.5f;
+        private readonly static float s_colorMeanR = 0.059f;
+        private readonly static float s_colorDeviationR = 0.158f;
+        private readonly static float s_colorMeanG = 0.052f;
+        private readonly static float s_colorDeviationG = 0.143f;
+        private readonly static float s_colorMeanB = 0.047f;
+        private readonly static float s_colorDeviationB = 0.126f;
 
         /// <summary>
         /// Initializes a new <see cref="FeatureMap"/> with the given dimensions.
@@ -47,21 +53,40 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// </summary>
         /// <param name="bitmap">The <see cref="Bitmap"/> being converted.</param>
         /// <returns>Returns the <see cref="FeatureMap"/> representation of the <see cref="Bitmap"/>.</returns>
-        public static FeatureMap FromBitmap(Bitmap bitmap)
+        public static FeatureMap[] FromBitmap(Bitmap bitmap, int channels, int width = -1, int length = -1)
         {
             if (OperatingSystem.IsWindows())
             {
-                FeatureMap map = new(bitmap.Width, bitmap.Height);
+                if(width == -1 || length == -1)
                 {
+                    width = bitmap.Width;
+                    length = bitmap.Height;
+                }
+
+                int paddingX = (width - bitmap.Width) / 2;
+                int paddingY = (length - bitmap.Height) / 2;
+
+                FeatureMap[] maps = new FeatureMap[channels];
+                for (int i = 0; i < maps.Length; i++)
+                {
+                    maps[i] = new(width, length);
+
                     for (int y = 0; y < bitmap.Height; y++)
                     {
                         for (int x = 0; x < bitmap.Width; x++)
                         {
-                            map[x, bitmap.Height - y - 1] = (bitmap.GetPixel(x, y).R - 127.5f) / 127.5f;
+                            maps[i][paddingX + x, paddingY + bitmap.Height - y - 1] = i switch
+                            {
+                                0 => (bitmap.GetPixel(x, y).R - 127.5f) / 127.5f,
+                                1 => (bitmap.GetPixel(x, y).G - 127.5f) / 127.5f,
+                                2 => (bitmap.GetPixel(x, y).B - 127.5f) / 127.5f,
+                                _ => (bitmap.GetPixel(x, y).A - 127.5f) / 127.5f,
+                            };
                         }
                     }
                 }
-                return map;
+
+                return maps;
             }
             return null;
         }
@@ -101,22 +126,90 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// </summary>
         /// <param name="setNormalized">If true, the <see cref="FeatureMap"/> will be set to the normalized values.</param>
         /// <returns>Returns the <see cref="FeatureMap"/> as a <see cref="Bitmap"/>.</returns>
-        public Bitmap ConstructBitmap(bool setNormalized = false)
+        public static Bitmap ConstructBitmap(FeatureMap[,] maps, int index)
         {
             if (OperatingSystem.IsWindows())
             {
-                Bitmap bitmap = new(Width, Length);
+                Bitmap bitmap = new(maps[index, 0].Width, maps[index, 0].Length);
 
-                float[] normalizedMap = Normalize(s_colorMean, s_colorDeviation);
+                float[][] normalizedMaps = new float[maps.GetLength(1)][];
 
-                if (setNormalized)
-                    _tensor = normalizedMap;
-
-                for (int y = 0; y < Length; y++)
+                for (int i = 0; i < maps.GetLength(1); i++)
                 {
-                    for (int x = 0; x < Width; x++)
+                    normalizedMaps[i] = i switch
                     {
-                        bitmap.SetPixel(x, Length - y - 1, System.Drawing.Color.FromArgb(Math.Clamp((int)(normalizedMap[y * Width + x] * 255), 0, 255), System.Drawing.Color.White));
+                        0 => Normalize(maps[index, i], s_colorMeanR, s_colorDeviationR),
+                        1 => Normalize(maps[index, i], s_colorMeanG, s_colorDeviationG),
+                        2 => Normalize(maps[index, i], s_colorMeanB, s_colorDeviationB),
+                        _ => Normalize(maps[index, i], s_colorMean, s_colorDeviation),
+                    };
+                }
+
+                for (int y = 0; y < bitmap.Height; y++)
+                {
+                    for (int x = 0; x < bitmap.Width; x++)
+                    {
+                        if (maps.GetLength(1) == 1)
+                        {
+                            bitmap.SetPixel(x, bitmap.Height - y - 1, System.Drawing.Color.FromArgb(Math.Clamp((int)(normalizedMaps[0][y * bitmap.Width + x] * 255), 0, 255), System.Drawing.Color.White));
+                        }
+                        else
+                        {
+                            bitmap.SetPixel(x, bitmap.Height - y - 1, System.Drawing.Color.FromArgb(
+                                Math.Clamp((int)(normalizedMaps[0][y * bitmap.Width + x] * 255), 0, 255),
+                                Math.Clamp((int)(normalizedMaps[1][y * bitmap.Width + x] * 255), 0, 255), 
+                                Math.Clamp((int)(normalizedMaps[2][y * bitmap.Width + x] * 255), 0, 255))
+                                );
+                        }
+                    }
+                }
+
+                return bitmap;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Creates a <see cref="Bitmap"/> representation of the <see cref="FeatureMap"/>.
+        /// The map is normalized to fit in the range of <see cref="System.Drawing.Color"/>.
+        /// </summary>
+        /// <param name="setNormalized">If true, the <see cref="FeatureMap"/> will be set to the normalized values.</param>
+        /// <returns>Returns the <see cref="FeatureMap"/> as a <see cref="Bitmap"/>.</returns>
+        public static Bitmap ConstructBitmap(FeatureMap[] maps)
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                Bitmap bitmap = new(maps[0].Width, maps[0].Length);
+
+                float[][] normalizedMaps = new float[maps.Length][];
+
+                for (int i = 0; i < maps.Length; i++)
+                {
+                    normalizedMaps[i] = i switch
+                    {
+                        0 => Normalize(maps[i], s_colorMeanR, s_colorDeviationR),
+                        1 => Normalize(maps[i], s_colorMeanG, s_colorDeviationG),
+                        2 => Normalize(maps[i], s_colorMeanB, s_colorDeviationB),
+                        _ => Normalize(maps[i], s_colorMean, s_colorDeviation),
+                    };
+                }
+
+                for (int y = 0; y < bitmap.Height; y++)
+                {
+                    for (int x = 0; x < bitmap.Width; x++)
+                    {
+                        if (maps.Length == 1)
+                        {
+                            bitmap.SetPixel(x, bitmap.Height - y - 1, System.Drawing.Color.FromArgb(Math.Clamp((int)(normalizedMaps[0][y * bitmap.Width + x] * 255), 0, 255), System.Drawing.Color.White));
+                        }
+                        else
+                        {
+                            bitmap.SetPixel(x, bitmap.Height - y - 1, System.Drawing.Color.FromArgb(
+                                Math.Clamp((int)(normalizedMaps[0][y * bitmap.Width + x] * 255), 0, 255),
+                                Math.Clamp((int)(normalizedMaps[1][y * bitmap.Width + x] * 255), 0, 255),
+                                Math.Clamp((int)(normalizedMaps[2][y * bitmap.Width + x] * 255), 0, 255))
+                                );
+                        }
                     }
                 }
 
@@ -131,7 +224,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="file">The file to save the image to.</param>
         public void PrintFeatureMap(string file)
         {
-            Bitmap image = ConstructBitmap();
+            Bitmap image = ConstructBitmap(new FeatureMap[,] { { this } }, 0);
 
             if (OperatingSystem.IsWindows())
             {
@@ -170,47 +263,47 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// Normalizes the <see cref="FeatureMap"/>.
         /// </summary>
         /// <returns>Returns the normalized <see cref="FeatureMap"/> as a single dimensional array of <see cref="Color"/>s.</returns>
-        public float[] Normalize(float normalMean, float normalDeviation)
+        public static float[] Normalize(FeatureMap map, float normalMean, float normalDeviation)
         {
 
             var deviceSum = GPUManager.Accelerator.Allocate1D<float>(1);
             deviceSum.MemSetToZero();
 
-            Index1D index = new(Area);
+            Index1D index = new(map.Area);
 
-            s_sumAction(index, GetArrayView<float>(), deviceSum.View);
+            s_sumAction(index, map.GetArrayView<float>(), deviceSum.View);
             GPUManager.Accelerator.Synchronize();
 
-            DecrementLiveCount();
+            map.DecrementLiveCount();
             float[] value = new float[1];
             deviceSum.CopyToCPU(value);
 
-            float mean = value[0] / Area;
+            float mean = value[0] / map.Area;
 
             var deviceMean = GPUManager.Accelerator.Allocate1D(new float[] { mean });
             var deviceVariance = GPUManager.Accelerator.Allocate1D<float>(1);
             deviceVariance.MemSetToZero();
 
-            s_varianceAction(index, GetArrayView<float>(), deviceMean.View, deviceVariance.View);
+            s_varianceAction(index, map.GetArrayView<float>(), deviceMean.View, deviceVariance.View);
             GPUManager.Accelerator.Synchronize();
 
-            DecrementLiveCount();
+            map.DecrementLiveCount();
 
             deviceVariance.CopyToCPU(value);
 
-            float sigma = float.Pow(value[0] / Area + Utility.ASYMPTOTEERRORCORRECTION, 0.5f);
+            float sigma = float.Pow(value[0] / map.Area + Utility.ASYMPTOTEERRORCORRECTION, 0.5f);
 
             var deviceValues = GPUManager.Accelerator.Allocate1D(new float[] { mean, normalDeviation / sigma, normalMean });
 
-            var deviceOutput = GPUManager.Accelerator.Allocate1D<float>(Area);
+            var deviceOutput = GPUManager.Accelerator.Allocate1D<float>(map.Area);
 
 
-            s_normalizeAction(new Index1D(Area), GetArrayView<float>(), deviceOutput.View, deviceValues.View);
+            s_normalizeAction(new Index1D(map.Area), map.GetArrayView<float>(), deviceOutput.View, deviceValues.View);
             GPUManager.Accelerator.Synchronize();
 
-            DecrementLiveCount();
+            map.DecrementLiveCount();
 
-            float[] Normalized = new float[Area];
+            float[] Normalized = new float[map.Area];
             deviceOutput.CopyToCPU(Normalized);
 
             deviceSum.Dispose();
@@ -218,6 +311,8 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             deviceMean.Dispose();
             deviceVariance.Dispose();
             deviceValues.Dispose();
+
+            map.DeCache();
 
             return Normalized;
         }

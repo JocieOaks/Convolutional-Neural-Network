@@ -1,4 +1,6 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
+using ILGPU;
+using System;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
@@ -10,20 +12,26 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <value>The name of the <see cref="Layer"/>, used for logging.</value>
         string Name { get; }
 
+        ArrayView<float> Input { get; }
+        ArrayView<float> Output {get; }
+        ArrayView<float> InGradient { get; }
+        ArrayView<float> OutGradient { get; }
+
         /// <summary>
         /// Backpropagates through the <see cref="Layer"/> updating any layer weights, and calculating the outgoing gradient that is
         /// shared with the previous layer.
         /// </summary>
-        /// <param name="learningRate">The overall learning rate for the layer updates, corrected for the influence of bias in the first and second moments.</param>
-        /// <param name="firstMomentDecay">The exponential decay rate for the first moment.</param>
-        /// <param name="secondMomentDecay">The exponential decay rate for the second moment.</param>
-        void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay);
+        /// <param name="batchSize"></param>
+        /// 
+        /// 
+        /// 
+        void Backwards(int batchSize);
 
         /// <summary>
         /// Forward propagates through the <see cref="Layer"/> calculating the output <see cref="FeatureMap"/> that is shared with
         /// the next layer.
         /// </summary>
-        void Forward();
+        void Forward(int batchSize);
 
         /// <summary>
         /// Initializes the <see cref="Layer"/> for the data set being used.
@@ -31,7 +39,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="inputs">The previous <see cref="Layer"/>'s output.</param>
         /// <param name="outGradients">The previous <see cref="Layer"/>'s inGradient.</param>
         /// <returns>Returns the output and inGradient to share with the next <see cref="Layer"/>.</returns>
-        Shape Startup(Shape inputShapes, IOBuffers buffers, int batchSize);
+        Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize);
 
         /// <summary>
         /// Reset's the current <see cref="Layer"/> to it's initial weights or initial random weights.

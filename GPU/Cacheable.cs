@@ -1,13 +1,14 @@
 ﻿using ILGPU;
 using ILGPU.Runtime;
+using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.GPU
 {
     //Code from https://github.com/MPSQUARK/BAVCL
     public abstract class Cacheable
     {
-        public uint LiveCount { get; private set; }
-        public uint ID { get; set; }
+        [JsonIgnore] public uint LiveCount { get; private set; }
+        [JsonIgnore] public uint ID { get; set; }
         public abstract long MemorySize { get; }
 
         public abstract void DeCache();

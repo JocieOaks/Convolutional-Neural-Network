@@ -5,6 +5,9 @@ using Newtonsoft.Json;
 using System.Runtime.Serialization;
 using ILGPU;
 using ILGPU.Runtime;
+using ILGPU.Runtime.Cuda;
+using ConvolutionalNeuralNetwork.Layers.Skip;
+using ConvolutionalNeuralNetwork.Layers.Weighted;
 
 namespace ConvolutionalNeuralNetwork
 {
@@ -13,28 +16,32 @@ namespace ConvolutionalNeuralNetwork
     /// </summary>
     public abstract class Network
     {
-        protected const bool PRINTSTOPWATCH = false;
+        protected const bool PRINTSTOPWATCH = true;
 
         [JsonProperty] protected readonly List<ILayer> _layers = new();
-        protected int _batchSize;
         protected int _boolLabels;
         [JsonProperty] protected bool _configured = false;
         protected int _floatLabels;
         protected bool _ready = false;
-        [JsonProperty] protected int _updateStep;
         private readonly List<IPrimaryLayer> _primaryLayers = new();
 
         private ActivationPattern _activationPattern;
-        [JsonProperty] private List<(int, int)> _skipConnections;
 
         protected IOBuffers _startBuffers;
         protected IOBuffers _middleBuffers;
         protected IOBuffers _endBuffers;
-        protected float _learningRate;
-        protected float _firstMomentDecay;
-        protected float _secondMomentDecay;
+        [JsonProperty] protected AdamHyperParameters _adamHyperParameters;
+        protected int _inputChannels;
 
-        protected int LabelCount => _floatLabels + _boolLabels;
+        [JsonIgnore] public ArrayView<float> Input => _layers.First().Input;
+
+        [JsonIgnore] public ArrayView<float> Output => _layers.Last().Output;
+
+        [JsonIgnore] public ArrayView<float> InGradient => _layers.Last().InGradient;
+
+        [JsonIgnore] public ArrayView<float> OutGradient => _layers.First().OutGradient;
+
+        [JsonIgnore] protected int LabelCount => _floatLabels + _boolLabels;
 
         /// <value>Enumerates over the <see cref="IPrimaryLayer"/>'s of the <see cref="Network"/> that define its structure.</value>
         [JsonIgnore]
@@ -71,10 +78,10 @@ namespace ConvolutionalNeuralNetwork
         }
 
         /// <summary>
-        /// Adds a <see cref="SkipConnectionSplit"/> and <see cref="SkipConnectionConcatenate"/> to connect two layers in the <see cref="Network"/>.
+        /// Adds a <see cref="SkipSplit"/> and <see cref="SkipConcatenate"/> to connect two layers in the <see cref="Network"/>.
         /// </summary>
-        /// <param name="index1">The index of the <see cref="SkipConnectionSplit"/>.</param>
-        /// <param name="index2">The index of the <see cref="SkipConnectionConcatenate"/>.</param>
+        /// <param name="index1">The index of the <see cref="SkipSplit"/>.</param>
+        /// <param name="index2">The index of the <see cref="SkipConcatenate"/>.</param>
         /// <exception cref="InvalidOperationException">Thrown if the <see cref="Network"/> is not being configured.</exception>
         public void AddSkipConnection(int index1, int index2)
         {
@@ -151,39 +158,6 @@ namespace ConvolutionalNeuralNetwork
         }
 
         /// <summary>
-        /// Prints every <see cref="FeatureMap"/> associated with a particular input, so that they can be evaluated.
-        /// </summary>
-        /// <param name="directory">The directory within which to save the <see cref="FeatureMap"/>'s as an image.</param>
-        /// <param name="name">The name of the image, for labeling the files.</param>
-        /// <param name="batchIndex">The index of the batch member to be printed.</param>
-        public void PrintFeatureMaps(string directory, string name, int batchIndex)
-        {
-            /*directory = Path.Combine(directory, name);
-            try
-            {
-                // create the directory the file will be written to if it doesn't already exist
-                Directory.CreateDirectory(directory);
-            }
-            catch (System.Exception e)
-            {
-                Console.WriteLine("Error occured when trying to create director: " + directory + "\n" + e.ToString());
-            }
-            string layerDirectory;
-            for (int i = 0; i < Depth; i++)
-            {
-                if (_layers[i] is BatchNormalization)
-                {
-                    layerDirectory = Path.Combine(directory, $"{i} {_layers[i].Name}");
-                    Directory.CreateDirectory(layerDirectory);
-                    for (int j = 0; j < _layers[i].OutputDimensions; j++)
-                    {
-                        _layers[i].Outputs[j, batchIndex].PrintFeatureMap(Path.Combine(layerDirectory, $"{name} {j}.png"));
-                    }
-                }
-            }*/
-        }
-
-        /// <summary>
         /// Set's the <see cref="Network"/> into the state so that it's structure can be altered.
         /// </summary>
         public void ReconfigureNetwork()
@@ -235,7 +209,7 @@ namespace ConvolutionalNeuralNetwork
         /// Serializes the <see cref="Network"/> and saves it to a json file.
         /// </summary>
         /// <param name="file">The path of the json file.</param>
-        public void SaveToFile(string file)
+        public virtual void SaveToFile(string file)
         {
             try
             {
@@ -284,7 +258,7 @@ namespace ConvolutionalNeuralNetwork
         /// <param name="floatLabels">The number of floats used to label each image.</param>
         /// While <see cref="Network"/> is designed as a Conditional GAN, but it can function as a non-Conditional GAN
         /// by only useing one bool or float label whose value is always true/1.
-        public virtual void StartUp(int batchSize, int inputWidth, int inputLength, int boolLabels, int floatLabels, float learningRate, float firstDecay, float secondDecay)
+        public virtual void StartUp(int maxBatchSize, int inputWidth, int inputLength, int boolLabels, int floatLabels, AdamHyperParameters hyperParameters, int inputChannels)
         {
             if (!_configured)
             {
@@ -311,68 +285,44 @@ namespace ConvolutionalNeuralNetwork
                 _configured = true;
             }
 
-            _batchSize = batchSize;
             _boolLabels = boolLabels;
             _floatLabels = floatLabels;
-            _learningRate = learningRate;
-            _firstMomentDecay = firstDecay;
-            _secondMomentDecay = secondDecay;
+            _adamHyperParameters ??= hyperParameters;
+            _inputChannels = inputChannels;
         }
 
-        /// <summary>
-        /// Calculates the learning rate with the correction for moment bias.
-        /// </summary>
-        /// <param name="learningRate">The overall learning rate for the layer updates, corrected for the influence of bias in the first and second moments.</param>
-        /// <param name="firstMomentDecay">The exponential decay rate for the first moment.</param>
-        /// <param name="secondMomentDecay">The exponential decay rate for the second moment.</param>
-        /// <returns>Returns the learning rate multiplied by the correction term.</returns>
-        protected float CorrectionLearningRate(float learningRate, float firstMomentDecay, float secondMomentDecay)
+        protected void InitializeLayers(ref Shape current, int maxBatchSize)
         {
-            return learningRate * MathF.Sqrt(1 - MathF.Pow(secondMomentDecay, _updateStep)) / (1 - MathF.Pow(firstMomentDecay, _updateStep));
-        }
+            _startBuffers ??= new();
+            _middleBuffers ??= new();
 
-        /// <summary>
-        /// Called when the <see cref="Network"/> has finished deserializing. Serialization does not maintain the connections
-        /// between a <see cref="SkipConnectionSplit"/> and a <see cref="SkipConnectionConcatenate"/> so they must be added back in.
-        /// </summary>
-        /// <param name="context">The <see cref="StreamingContext"/> stating what kind of deserialization is taking place.</param>
-        [OnDeserialized]
-        private void OnDeserialized(StreamingContext context)
-        {
-            if (_skipConnections != null)
+            IOBuffers inputBuffers = _startBuffers;
+            IOBuffers outputBuffers = _middleBuffers;
+            outputBuffers.OutputDimensionArea(current.Volume);
+
+            foreach (var layer in _layers)
             {
-                foreach ((int skipIndex, int concatIndex) in _skipConnections)
+                current = layer.Startup(current, inputBuffers, maxBatchSize);
+                if(layer is WeightedLayer weighted)
                 {
-                    /*SkipConnectionSplit skip = new();
-                    SkipConnectionConcatenate concat = skip.GetConcatenationLayer();
-                    _layers[skipIndex] = skip;
-                    _layers[concatIndex] = concat;*/
+                    weighted.SetUpWeights(_adamHyperParameters);
+                }
+                if (layer is not IUnchangedLayer)
+                {
+                    (inputBuffers, outputBuffers) = (outputBuffers, inputBuffers);
                 }
             }
+            _endBuffers = outputBuffers;
+
+            inputBuffers.Allocate(maxBatchSize);
+            outputBuffers.Allocate(maxBatchSize);
+            IOBuffers.SetCompliment(inputBuffers, outputBuffers);
         }
 
         public void SetStartBuffers(Network network)
         {
-            _startBuffers = network._endBuffers;
-            _middleBuffers = network._middleBuffers;
-        }
-
-        /// <summary>
-        /// Called when the <see cref="Network"/> has begins serialization. Serialization does not maintain the connections
-        /// between a <see cref="SkipConnectionSplit"/> and a <see cref="SkipConnectionConcatenate"/> so they must saved separately.
-        /// </summary>
-        /// <param name="context">The <see cref="StreamingContext"/> stating what kind of serialization is taking place.</param>
-        [OnSerializing]
-        private void OnSerializing(StreamingContext context)
-        {
-            _skipConnections = new List<(int, int)>();
-            for (int i = 0; i < _layers.Count; i++)
-            {
-                if (_layers[i] is SkipConnectionSplit skip)
-                {
-                    //_skipConnections.Add((i, _layers.IndexOf(skip.GetConcatenationLayer())));
-                }
-            }
+            _startBuffers = network._endBuffers == network._middleBuffers ? network._startBuffers : network._middleBuffers; 
+            _middleBuffers = network._endBuffers;
         }
     }
 }

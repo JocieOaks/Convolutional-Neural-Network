@@ -3,6 +3,7 @@ using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
 using ConvolutionalNeuralNetwork.DataTypes;
 using ConvolutionalNeuralNetwork.Layers;
+using ConvolutionalNeuralNetwork.Layers.Weighted;
 
 namespace ConvolutionalNeuralNetwork
 {
@@ -48,6 +49,15 @@ namespace ConvolutionalNeuralNetwork
             complimentBuffer.OutputDimensionArea(inputDimensions * inputSize * inputSize);
 
             Shape outputShape = layer.Startup(inputShapes, buffer, batchSize);
+            if(layer is WeightedLayer weight)
+            {
+                var adam = new AdamHyperParameters()
+                {
+                    LearningRate = 0
+                };
+                adam.Update();
+                weight.SetUpWeights(adam);
+            }
             FeatureMap[] outputs = new FeatureMap[outputDimensions * batchSize];
             for(int i = 0; i < outputDimensions * batchSize; i++)
             {
@@ -61,14 +71,14 @@ namespace ConvolutionalNeuralNetwork
                 inputs[i].CopyToBuffer(buffer.Input.SubView(inputShapes.Area * i, inputShapes.Area));
             }
 
-            layer.Forward();
+            layer.Forward(batchSize);
             for (int i = 0; i < outputDimensions * batchSize; i++)
             {
                 outputs[i].SyncCPU(buffer.Output.SubView(outputShape.Area * i, outputShape.Area));
                 new FeatureMap(outputs[i].Width, outputs[i].Length, 1).CopyToBuffer(buffer.InGradient.SubView(outputShape.Area * i, outputShape.Area));
             }
 
-            layer.Backwards(0, 1, 1);
+            layer.Backwards(batchSize);
             FeatureMap[] outGradients = new FeatureMap[inputDimensions * batchSize];
             for (int i = 0; i < inputDimensions * batchSize; i++)
             {
@@ -93,32 +103,38 @@ namespace ConvolutionalNeuralNetwork
                 {
                     inputs[j].CopyToBuffer(buffer.Input.SubView(inputShapes.Area * j, inputShapes.Area));
                 }
-                for (int j = 0; j < inputSize; j++)
+                for (int k = 0; k < inputSize; k++)
                 {
-                    for (int k = 0; k < inputSize; k++)
+                    for (int j = 0; j < inputSize; j++)
                     {
+
                         inputs[i][j, k] += h;
                         inputs[i].CopyToBuffer(buffer.Input.SubView(inputShapes.Area * i, inputShapes.Area));
-                        
 
-                        layer.Forward();
+
+                        layer.Forward(batchSize);
 
                         float testGradient = 0;
                         for (int i2 = 0; i2 < outputDimensions * batchSize; i2++)
                         {
                             testOutput[i2].SyncCPU(buffer.Output.SubView(outputShape.Area * i2, outputShape.Area));
-                            for (int j2 = 0; j2 < testOutput[i2].Width; j2++)
+                            for (int k2 = 0; k2 < testOutput[i2].Length; k2++)
                             {
-                                for (int k2 = 0; k2 < testOutput[i2].Length; k2++)
+                                for (int j2 = 0; j2 < testOutput[i2].Width; j2++)
                                 {
+
 
                                     testGradient += (testOutput[i2][j2, k2] - outputs[i2][j2, k2]) / h;
 
                                 }
                             }
                         }
-                        Console.WriteLine($"Expected Gradient: {outGradients[i][j, k]:f4} \t Test Gradient: {testGradient:f4}");
-                        inputs[i][j, k] -= h;
+                        if (MathF.Abs(outGradients[i][j, k] - testGradient) > Math.Max(0.01, testGradient * 0.001))
+                        {
+                            Console.WriteLine($"Expected Gradient: {outGradients[i][j, k]:f4} \t Test Gradient: {testGradient:f4}");
+                            Console.ReadLine();
+                        }
+                        inputs[i][j, k] = i * 0.5f + (i + 1) * j - k;
                     }
                 }
             }

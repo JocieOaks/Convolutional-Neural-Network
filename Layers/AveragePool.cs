@@ -1,7 +1,7 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
+using ConvolutionalNeuralNetwork.Layers.Weighted;
 using ILGPU;
 using ILGPU.Runtime;
-using ILGPU.Runtime.OpenCL;
 using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers
@@ -35,20 +35,20 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         [JsonIgnore] public override string Name => "Average Pool Layer";
         /// <inheritdoc/>
-        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
+        public override void Backwards(int batchSize)
         {
 
-            Index3D index = new(_batchSize, _inputDimensions, _outputShape.Area);
+            Index3D index = new(batchSize, _inputShape.Dimensions, _outputShape.Area);
             s_backwardsAction(index, _buffers.InGradient, _buffers.OutGradient, Info);
 
             Synchronize();
         }
 
         /// <inheritdoc/>
-        public override void Forward()
+        public override void Forward(int batchSize)
         {
             
-            Index3D index = new(_batchSize, _inputDimensions, _outputShape.Area);
+            Index3D index = new(batchSize, _inputShape.Dimensions, _outputShape.Area);
             s_forwardAction(index, _buffers.Input, _buffers.Output, Info);
 
             Synchronize();
@@ -60,9 +60,14 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override Shape Startup(Shape inputShapes, IOBuffers buffers, int batchSize)
+        public override Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize)
         {
-            BaseStartup(inputShapes, buffers, batchSize);
+            if (_ready)
+                return _outputShape;
+            _ready = true;
+
+            BaseStartup(inputShape, buffers);
+            
             return _outputShape;
         }
 
@@ -117,7 +122,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                 }
             }
 
-            pooled[index.Z + outputOffset] = sum * info.InverseKSquared;
+            pooled[index.Z + outputOffset] = sum * info.InverseFilterArea;
         }
 
         /// <summary>

@@ -1,4 +1,5 @@
 ﻿using ConvolutionalNeuralNetwork.Layers;
+using ConvolutionalNeuralNetwork.Layers.Activations;
 
 namespace ConvolutionalNeuralNetwork.Design
 {

@@ -15,11 +15,13 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         private ArrayView<float> _view1;
         private ArrayView<float> _view2;
         private int _maxLength = 0;
+        private MemoryBuffer1D<float, Stride1D.Dense> _buffer;
 
         public ArrayView<float> InGradient => _view1;
         public ArrayView<float> Input => _view2;
         public ArrayView<float> OutGradient => _view2;
         public ArrayView<float> Output => _view1;
+        public ArrayView<float> Gradient => _view2;
 
         /// <summary>
         /// Sets to <see cref="IOBuffers"/> to be reflections of eachother. Aka, the input of one is the output of the other.
@@ -37,8 +39,11 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="batchSize">The number of elements in a single batch.</param>
         public void Allocate(int batchSize)
         {
-            var buffer = GPUManager.Accelerator.Allocate1D<float>(_maxLength * batchSize);
-            _view1 = new ArrayView<float>(buffer, 0, _maxLength * batchSize);
+            if (_buffer != null)
+                _buffer.Dispose();
+
+            _buffer = GPUManager.Accelerator.Allocate1D<float>(_maxLength * batchSize);
+            _view1 = new ArrayView<float>(_buffer, 0, _maxLength * batchSize);
             GPUManager.AddExternalMemoryUsage(4 * _maxLength * batchSize);
         }
 

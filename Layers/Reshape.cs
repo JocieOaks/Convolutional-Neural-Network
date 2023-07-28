@@ -23,11 +23,11 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         public override string Name => "Reshape Layer";
 
-        public override void Backwards(float learningRate, float firstMomentDecay, float secondMomentDecay)
+        public override void Backwards(int batchSize)
         {
         }
 
-        public override void Forward()
+        public override void Forward(int batchSize)
         {
         }
 
@@ -35,15 +35,15 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
         }
 
-        public override Shape Startup(Shape inputShapes, IOBuffers buffers, int batchSize)
+        public override Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize)
         {
+            if (_ready)
+                return _outputShape;
+            _ready = true;
 
-            _inputDimensions = inputShapes.Dimensions;
-            _outputDimensions = _outputShape.Dimensions;
+            int inputLength = inputShape.Volume;
 
-            int inputLength = inputShapes.Area * _inputDimensions;
-
-            int outputLength = _outputShape.Area * _outputDimensions;
+            int outputLength = _outputShape.Volume;
 
             if(inputLength != outputLength)
             {
