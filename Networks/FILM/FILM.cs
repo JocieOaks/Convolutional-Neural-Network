@@ -15,27 +15,27 @@ namespace ConvolutionalNeuralNetwork.Networks
         /// <returns>Returns the deserialized <see cref="FILM"/>.</returns>
         public static FILM LoadFromFile(string file)
         {
-            FeatureExtraction features0 = FeatureExtraction.LoadFromFile(Path.Combine(file, "Features 0"));
+            FeatureExtraction features0 = FeatureExtraction.LoadFromFile(Path.Combine(file, "Features 0.json"));
             if(features0 == null)
             {
                 return null;
             }
-            FeatureExtraction features1 = FeatureExtraction.LoadFromFile(Path.Combine(file, "Features 1"));
+            FeatureExtraction features1 = FeatureExtraction.LoadFromFile(Path.Combine(file, "Features 1.json"));
             if(features1 == null)
             {
                 return null;
             }
-            Flow flow0 = Flow.LoadFromFile(Path.Combine(file, "Flow 0"));
+            Flow flow0 = Flow.LoadFromFile(Path.Combine(file, "Flow 0.json"));
             if (flow0 == null)
             {
                 return null;
             }
-            Flow flow1 = Flow.LoadFromFile(Path.Combine(file, "Flow 1"));
+            Flow flow1 = Flow.LoadFromFile(Path.Combine(file, "Flow 1.json"));
             if (flow1 == null)
             {
                 return null;
             }
-            Fusion fusion = Fusion.LoadFromFile(Path.Combine(file, "Fusion"));
+            Fusion fusion = Fusion.LoadFromFile(Path.Combine(file, "Fusion.json"));
             if (fusion == null)
             {
                 return null;
@@ -76,16 +76,26 @@ namespace ConvolutionalNeuralNetwork.Networks
         public override void SaveToFile(string file)
         {
             Directory.CreateDirectory(file);
-            _features0.SaveToFile(Path.Combine(file, "Features 0"));
-            _features1.SaveToFile(Path.Combine(file, "Features 1"));
-            _flow0.SaveToFile(Path.Combine(file, "Flow 0"));
-            _flow1.SaveToFile(Path.Combine(file, "Flow 1"));
-            _fusion.SaveToFile(Path.Combine(file, "Fusion"));
+            _features0.SaveToFile(Path.Combine(file, "Features 0.json"));
+            _features1.SaveToFile(Path.Combine(file, "Features 1.json"));
+            _flow0.SaveToFile(Path.Combine(file, "Flow 0.json"));
+            _flow1.SaveToFile(Path.Combine(file, "Flow 1.json"));
+            _fusion.SaveToFile(Path.Combine(file, "Fusion.json"));
         }
 
         public override void StartUp(int maxBatchSize, int inputWidth, int inputLength, int boolLabels, int floatLabels, AdamHyperParameters hyperParameters, int inputChannels)
         {
             base.StartUp(maxBatchSize, inputWidth, inputLength, boolLabels, floatLabels, hyperParameters.Copy(), inputChannels);
+            _startBuffers = new();
+            _middleBuffers = new();
+            _endBuffers = _startBuffers;
+
+            _features0.SetStartBuffers(this);
+            _features1.SetStartBuffers(this);
+            _flow0.SetStartBuffers(this);
+            _flow1.SetStartBuffers(this);
+            _fusion.SetStartBuffers(this);
+
             _features0.StartUp(maxBatchSize, inputWidth, inputLength, boolLabels, floatLabels, hyperParameters.Copy(), inputChannels);
             _features1.StartUp(maxBatchSize, inputWidth, inputLength, boolLabels, floatLabels, hyperParameters.Copy(), inputChannels);
             _flow0.StartUp(maxBatchSize, inputWidth, inputLength, boolLabels, floatLabels, hyperParameters.Copy(), inputChannels);
@@ -103,6 +113,10 @@ namespace ConvolutionalNeuralNetwork.Networks
                     _outputs[i][j] = new FeatureMap(inputWidth, inputLength);
                 }
             }
+
+            _startBuffers.Allocate(maxBatchSize);
+            _middleBuffers.Allocate(maxBatchSize);
+            IOBuffers.SetCompliment(_startBuffers, _middleBuffers);
         }
 
         public float Train(FeatureMap[][] i0, FeatureMap[][] i1, FeatureMap[][] iT)

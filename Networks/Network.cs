@@ -16,7 +16,7 @@ namespace ConvolutionalNeuralNetwork
     /// </summary>
     public abstract class Network
     {
-        protected const bool PRINTSTOPWATCH = true;
+        protected const bool PRINTSTOPWATCH = false;
 
         [JsonProperty] protected readonly List<ILayer> _layers = new();
         protected int _boolLabels;
@@ -307,16 +307,16 @@ namespace ConvolutionalNeuralNetwork
                 {
                     weighted.SetUpWeights(_adamHyperParameters);
                 }
+                else if(layer is BatchNormalization bn)
+                {
+                    bn.SetHyperParameters(_adamHyperParameters);
+                }
                 if (layer is not IUnchangedLayer)
                 {
                     (inputBuffers, outputBuffers) = (outputBuffers, inputBuffers);
                 }
             }
             _endBuffers = outputBuffers;
-
-            inputBuffers.Allocate(maxBatchSize);
-            outputBuffers.Allocate(maxBatchSize);
-            IOBuffers.SetCompliment(inputBuffers, outputBuffers);
         }
 
         public void SetStartBuffers(Network network)

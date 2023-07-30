@@ -9,7 +9,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
     /// The <see cref="Vector"/> class stores an array of floats for performing vector mathematics.
     /// </summary>
     [Serializable]
-    public class Vector : Cacheable<float>
+    public class Vector : Cacheable<float>, IEquatable<Vector>
     {
         [JsonProperty] private readonly float[] _values;
 
@@ -117,6 +117,18 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return vector * scaler;
         }
 
+        public bool Equals(Vector vector)
+        {
+            if (Length != vector.Length)
+                return false;
+            for(int i = 0; i < Length; i++)
+            {
+                if (_values[i] != vector[i])
+                    return false;
+            }
+            return true;
+        }
+
         /// <summary>
         /// Sums two <see cref="Vector"/>s.
         /// </summary>
@@ -139,6 +151,27 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 values[i] = v1[i] + v2[i];
             }
             return new Vector(values);
+        }
+
+
+        public static float Distance(Vector v1, Vector v2)
+        {
+            
+            return MathF.Sqrt(DistanceSquared(v1, v2));
+        }
+
+        public static float DistanceSquared(Vector v1, Vector v2)
+        {
+            if (v1.Length != v2.Length)
+                throw new ArgumentException("Vectors are not of equal length.");
+            float squareDistance = 0;
+
+            for(int i = 0; i < v1.Length; i++)
+            {
+                squareDistance += MathF.Pow(v1[i] - v2[i], 2);
+            }
+
+            return squareDistance;
         }
 
         public void CopyToBuffer(ArrayView<float> arrayView)

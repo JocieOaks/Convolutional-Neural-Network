@@ -1,4 +1,7 @@
-﻿namespace ConvolutionalNeuralNetwork.DataTypes
+﻿using ILGPU;
+using ILGPU.IR.Values;
+
+namespace ConvolutionalNeuralNetwork.DataTypes
 {
     /// <summary>
     /// The <see cref="ILayerInfo"/> interface is for structs to store a variety of data about <see cref="Layers.Layer"/>s
@@ -68,7 +71,6 @@
 
         public bool TryGetInputIndex(int outputIndex, int shiftX, int shiftY, out int index)
         {
-
             int strideY = outputIndex / OutputWidth;
             int strideX = outputIndex - (strideY * OutputWidth);
 
@@ -78,9 +80,43 @@
             return shiftX >= 0 && shiftY >= 0 && shiftX < InputWidth && shiftY < InputLength;
         }
 
-        public (int, int) GetOffset(int batchIndex,int dimension)
+        public bool TryGetInputIndex(int strideX, int strideY, int shiftX, int shiftY, out int index)
         {
-            return ((dimension % InputDimensions + batchIndex * InputDimensions) * InputArea, (dimension % OutputDimensions + batchIndex * OutputDimensions) * OutputArea);
+            shiftX += strideX * Stride - Padding;
+            shiftY += strideY * Stride - Padding;
+            index = shiftY * InputWidth + shiftX;
+            return shiftX >= 0 && shiftY >= 0 && shiftX < InputWidth && shiftY < InputLength;
+        }
+
+        public int OutputIndex(int x, int y)
+        {
+            return y * OutputWidth + x;
+        }
+
+        public (int,int) GetOffset(int dimension, int batchIndex)
+        {
+            int offsetCount = batchIndex * InputDimensions + dimension;
+            return (offsetCount * InputArea, offsetCount * OutputArea);
+        }
+
+        public (int, int) GetOffset(int inputDimension, int outputDimension, int batchIndex)
+        {
+            return ((inputDimension + batchIndex * InputDimensions) * InputArea, (outputDimension + batchIndex * OutputDimensions) * OutputArea);
+        }
+
+        public void Deconstruct(int x, int y, int z, out int mapIndex, out int inputOffset, out int outputIndex, out int dimension)
+        {
+            outputIndex = z * OutputArea * OutputDimensions + x;
+            int outputDimension = x / OutputArea;
+            dimension = y * OutputDimensions + outputDimension;
+            mapIndex = x % OutputArea;
+            inputOffset = (y + z * InputDimensions) * InputArea;
+        }
+
+        public void Deconstruct(Index3D grid, Index3D group, out int inputOffset, out int dimension)
+        {
+            dimension = grid.Y * InputDimensions + group.X;
+            inputOffset = (group.X + grid.Z * InputDimensions) * InputArea;
         }
 
         /// <summary>

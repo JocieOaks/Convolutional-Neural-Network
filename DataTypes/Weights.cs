@@ -1,4 +1,5 @@
-﻿using ConvolutionalNeuralNetwork.Layers;
+﻿using ConvolutionalNeuralNetwork.GPU;
+using ConvolutionalNeuralNetwork.Layers;
 using ConvolutionalNeuralNetwork.Layers.Initializers;
 using ConvolutionalNeuralNetwork.Layers.Weighted;
 using ILGPU;
@@ -6,6 +7,7 @@ using ILGPU.Algorithms;
 using ILGPU.IR;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
+using System.ComponentModel;
 using System.Reflection.Emit;
 using System.Runtime.Serialization;
 
@@ -14,8 +16,8 @@ namespace ConvolutionalNeuralNetwork.DataTypes
     [Serializable]
     public class Weights
     {
-        [JsonProperty] private readonly float[] _firstMoment;
-        [JsonProperty] private readonly float[] _secondMoment;
+        [JsonProperty] private readonly Vector _firstMoment;
+        [JsonProperty] private readonly Vector _secondMoment;
         private Vector _gradient;
         [JsonProperty] private Vector _weights;
 
@@ -29,16 +31,16 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             }
 
             _gradient = new Vector(length);
-            _firstMoment = new float[length];
-            _secondMoment = new float[length];
+            _firstMoment = new Vector(length);
+            _secondMoment = new Vector(length);
         }
 
         public Weights(int length)
         {
             _weights = new Vector(length);
             _gradient = new Vector(length);
-            _firstMoment = new float[length];
-            _secondMoment = new float[length];
+            _firstMoment = new Vector(length);
+            _secondMoment = new Vector(length);
         }
 
         [JsonConstructor] private Weights() { }
@@ -91,17 +93,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             }
         }
 
-        public void SetGradient(int index, float value, AdamHyperParameters hyperParameters, float clip = 0.1f)
-        {
-            _gradient[index] = value;
-
-            UpdateWeightsAtIndex(index, hyperParameters, clip);
-        }
-
-        public void SetWeights(int index, float color)
-        {
-            _weights[index] = color;
-        }
         public void TestFilterGradient(ILayer layer, Shape inputShape, Shape outputShapes, IOBuffers buffer, int batchSize)
         {
             int inputDimensions = inputShape.Dimensions;
@@ -172,7 +163,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                         }
                     }
                 }
-
+                Console.WriteLine($"Expected Gradient: {_gradient[i]:f4} \t Test Gradient: {testGradient:f4}");
                 if (MathF.Abs(_gradient[i] - testGradient) > Math.Max(0.01, testGradient * 0.001))
                 {
                     Console.WriteLine($"Expected Gradient: {_gradient[i]:f4} \t Test Gradient: {testGradient:f4}");
@@ -192,32 +183,40 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="clip">The maximum absolute value to clip the gradient to.</param>
         public void UpdateWeights(AdamHyperParameters hyperParameters, float clip = 1000f)
         {
-            _gradient.SyncCPU();
-
-            for (int i = 0; i < Length; i++)
-            {
-                UpdateWeightsAtIndex(i, hyperParameters, clip);
-            }
-            _weights.UpdateIfAllocated();
+            Index1D index = new(Length);
+            s_updateAction(index, _weights.GetArrayView<float>(), _firstMoment.GetArrayView<float>(), _secondMoment.GetArrayView<float>(), _gradient.GetArrayView<float>(), hyperParameters.LearningRate, hyperParameters.FirstMomentDecay, hyperParameters.SecondMomentDecay, clip);
+            GPUManager.Accelerator.Synchronize();
+            _weights.DecrementLiveCount();
+            _firstMoment.DecrementLiveCount();
+            _secondMoment.DecrementLiveCount();
+            _gradient.DecrementLiveCount();
         }
 
         public ArrayView<T> WeightsGPU<T>() where T : unmanaged
         {
             return _weights.GetArrayView<T>();
         }
-        private void UpdateWeightsAtIndex(int index, AdamHyperParameters hyperParameters, float clip)
+
+        private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, float, float, float> s_updateAction =
+            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, float, float, float>(UpdateKernal);
+
+        [OnSerializing]
+        private void OnSerializing(StreamingContext context)
         {
-            float gradient = Math.Clamp(_gradient[index], -clip, clip);
-            if(float.IsNaN(gradient))
-            {
-                throw new Exception();
-            }
-            float first = hyperParameters.FirstMomentDecay * _firstMoment[index] + (1 - hyperParameters.FirstMomentDecay) * gradient;
-            float second = hyperParameters.SecondMomentDecay * _secondMoment[index] + (1 - hyperParameters.SecondMomentDecay) * MathF.Pow(gradient, 2);
-            _firstMoment[index] = first;
-            _secondMoment[index] = second;
-            float result = hyperParameters.LearningRate * first / (MathF.Pow(second, 0.5f) + Utility.ASYMPTOTEERRORCORRECTION);
-            _weights[index] -= result;
+            _weights.SyncCPU();
+            _firstMoment.SyncCPU();
+            _secondMoment.SyncCPU();
+        }
+
+        private static void UpdateKernal(Index1D index, ArrayView<float> weights, ArrayView<float> firstMoment, ArrayView<float> secondMoment, ArrayView<float> gradients, float learningRate, float firstMomentDecay, float secondMomentDecay, float clip)
+        {
+            float gradient = XMath.Clamp(gradients[index], -clip, clip);
+            float first = firstMomentDecay * firstMoment[index] + (1 - firstMomentDecay) * gradient;
+            float second = secondMomentDecay * secondMoment[index] + (1 - secondMomentDecay) * MathF.Pow(gradient, 2);
+            firstMoment[index] = first;
+            secondMoment[index] = second;
+            float result = learningRate * first / (XMath.Sqrt(second) + Utility.ASYMPTOTEERRORCORRECTION);
+            weights[index] -= result;
         }
     }
 }

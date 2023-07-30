@@ -24,8 +24,9 @@ namespace ConvolutionalNeuralNetwork.Networks
                 _layers.Add(flow0[^1].GetConcatenationLayer());
                 _layers.Add(flow1[^1].GetConcatenationLayer());
                 _layers.Add(new TransposeConvolution(4, 2, 16, GlorotUniform.Instance));
+                _layers.Add(new BatchNormalization());
 
-                for(int i = PYRAMIDLAYERS - 2; i >= 0; i--)
+                for (int i = PYRAMIDLAYERS - 2; i >= 0; i--)
                 {
                     _layers.Add(f0[i].GetConcatenationLayer());
                     _layers.Add(f1[i].GetConcatenationLayer());
@@ -33,10 +34,13 @@ namespace ConvolutionalNeuralNetwork.Networks
                     _layers.Add(flow1[i].GetConcatenationLayer());
                     _layers.Add(new Convolution(3, 1, 16, GlorotUniform.Instance));
                     _layers.Add(new ReLUActivation());
+                    _layers.Add(new BatchNormalization());
                     _layers.Add(new Convolution(3, 1, 16, GlorotUniform.Instance));
                     _layers.Add(new ReLUActivation());
+                    _layers.Add(new BatchNormalization());
                     _layers.Add(new TransposeConvolution(4, 2, 16, GlorotUniform.Instance));
                     _layers.Add(new ReLUActivation());
+                    _layers.Add(new BatchNormalization());
                 }
 
                 _layers.Add(new Convolution(1, 1, 4, GlorotUniform.Instance, false));

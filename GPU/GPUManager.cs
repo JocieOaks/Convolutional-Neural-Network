@@ -29,7 +29,7 @@ namespace ConvolutionalNeuralNetwork.GPU
                 Context = Context.Create(builder => builder.Cuda().EnableAlgorithms());
                 Accelerator = Context.CreateCudaAccelerator(0); 
             }
-            _lru = new LRU(Accelerator.MemorySize, 0.7f);
+            _lru = new LRU(Accelerator.MemorySize, 0.8f);
             CopyAction = Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(CopyKernel);
             AddAction = Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, int>(AddKernel);
             BiasAction = Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, int, int>(BiasKernal);

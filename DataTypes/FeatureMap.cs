@@ -48,6 +48,41 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         {
         }
 
+        private static void PixelPallet(FeatureMap[] source, FeatureMap[] target)
+        {
+            List<Vector> pallet = new();
+            Vector color = new(source.Length);
+            for (int y = 0; y < source[0].Length; y++)
+            {
+                for (int x = 0; x < source[0].Width; x++)
+                {
+                    for (int i = 0; i < source.Length; i++)
+                    {
+                        color[i] = source[i][x, y];
+                    }
+
+                    if (!pallet.Contains(color))
+                    {
+                        pallet.Add(color);
+                        color = new Vector(source.Length);
+                    }
+                }
+            }
+
+            for (int y = 0; y < target[0].Length; y++)
+            {
+                for (int x = 0; x < target[0].Width; x++)
+                {
+                    Vector correction = pallet.MinBy(x => Vector.DistanceSquared(x, color));
+
+                    for (int i = 0; i < target.Length; i++)
+                    {
+                        target[i][x, y] = correction[i];
+                    }
+                }
+            }
+        }
+
         /// <summary>
         /// Creates a new <see cref="FeatureMap"/> from a given <see cref="Bitmap"/>.
         /// </summary>
@@ -70,6 +105,13 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 for (int i = 0; i < maps.Length; i++)
                 {
                     maps[i] = new(width, length);
+                    for(int y = 0; y < length; y++)
+                    {
+                        for(int x = 0; x < width; x++)
+                        {
+                            maps[i][x, y] = -1;
+                        }
+                    }
 
                     for (int y = 0; y < bitmap.Height; y++)
                     {
@@ -175,7 +217,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// </summary>
         /// <param name="setNormalized">If true, the <see cref="FeatureMap"/> will be set to the normalized values.</param>
         /// <returns>Returns the <see cref="FeatureMap"/> as a <see cref="Bitmap"/>.</returns>
-        public static Bitmap ConstructBitmap(FeatureMap[] maps)
+        public static Bitmap ConstructNormalizedBitmap(FeatureMap[] maps)
         {
             if (OperatingSystem.IsWindows())
             {
@@ -202,12 +244,101 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                         {
                             bitmap.SetPixel(x, bitmap.Height - y - 1, System.Drawing.Color.FromArgb(Math.Clamp((int)(normalizedMaps[0][y * bitmap.Width + x] * 255), 0, 255), System.Drawing.Color.White));
                         }
-                        else
+                        else if(maps.Length == 3)
                         {
                             bitmap.SetPixel(x, bitmap.Height - y - 1, System.Drawing.Color.FromArgb(
                                 Math.Clamp((int)(normalizedMaps[0][y * bitmap.Width + x] * 255), 0, 255),
                                 Math.Clamp((int)(normalizedMaps[1][y * bitmap.Width + x] * 255), 0, 255),
                                 Math.Clamp((int)(normalizedMaps[2][y * bitmap.Width + x] * 255), 0, 255))
+                                );
+                        }
+                        else
+                        {
+                            bitmap.SetPixel(x, bitmap.Height - y - 1, System.Drawing.Color.FromArgb(
+                                Math.Clamp((int)(normalizedMaps[0][y * bitmap.Width + x] * 255), 0, 255),
+                                Math.Clamp((int)(normalizedMaps[1][y * bitmap.Width + x] * 255), 0, 255),
+                                Math.Clamp((int)(normalizedMaps[2][y * bitmap.Width + x] * 255), 0, 255),
+                                Math.Clamp((int)(normalizedMaps[3][y * bitmap.Width + x] * 255), 0, 255))
+                                );
+                        }
+                    }
+                }
+
+                return bitmap;
+            }
+            return null;
+        }
+
+        public static Bitmap ConstructBitmap(FeatureMap[] maps)
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                Bitmap bitmap = new(maps[0].Width, maps[0].Length);
+
+                for (int y = 0; y < bitmap.Height; y++)
+                {
+                    for (int x = 0; x < bitmap.Width; x++)
+                    {
+                        if (maps.Length == 1)
+                        {
+                            bitmap.SetPixel(x, bitmap.Height - y - 1, System.Drawing.Color.FromArgb(Math.Clamp((int)(maps[0][x,y] * 255), 0, 255), System.Drawing.Color.White));
+                        }
+                        else if (maps.Length == 3)
+                        {
+                            bitmap.SetPixel(x, bitmap.Height - y - 1, System.Drawing.Color.FromArgb(
+                                Math.Clamp((int)(maps[0][x, y] * 127.5 + 127.5), 0, 255),
+                                Math.Clamp((int)(maps[1][x, y] * 127.5 + 127.5), 0, 255),
+                                Math.Clamp((int)(maps[2][x, y] * 127.5 + 127.5), 0, 255))
+                                );
+                        }
+                        else
+                        {
+                            bitmap.SetPixel(x, bitmap.Height - y - 1, System.Drawing.Color.FromArgb(
+                                Math.Clamp((int)(maps[3][x, y] * 127.5 + 127.5), 0, 255),
+                                Math.Clamp((int)(maps[0][x, y] * 127.5 + 127.5), 0, 255),
+                                Math.Clamp((int)(maps[1][x, y] * 127.5 + 127.5), 0, 255),
+                                Math.Clamp((int)(maps[2][x, y] * 127.5 + 127.5), 0, 255))
+                                );
+                        }
+                    }
+                }
+
+                return bitmap;
+            }
+            return null;
+        }
+
+        public static Bitmap ConstructBitmap(FeatureMap[] maps, FeatureMap[] source)
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                PixelPallet(source, maps);
+
+                Bitmap bitmap = new(maps[0].Width, maps[0].Length);
+
+                for (int y = 0; y < bitmap.Height; y++)
+                {
+                    for (int x = 0; x < bitmap.Width; x++)
+                    {
+                        if (maps.Length == 1)
+                        {
+                            bitmap.SetPixel(x, bitmap.Height - y - 1, System.Drawing.Color.FromArgb(Math.Clamp((int)(maps[0][x, y] * 255), 0, 255), System.Drawing.Color.White));
+                        }
+                        else if (maps.Length == 3)
+                        {
+                            bitmap.SetPixel(x, bitmap.Height - y - 1, System.Drawing.Color.FromArgb(
+                                Math.Clamp((int)(maps[0][x, y] * 127.5 + 127.5), 0, 255),
+                                Math.Clamp((int)(maps[1][x, y] * 127.5 + 127.5), 0, 255),
+                                Math.Clamp((int)(maps[2][x, y] * 127.5 + 127.5), 0, 255))
+                                );
+                        }
+                        else
+                        {
+                            bitmap.SetPixel(x, bitmap.Height - y - 1, System.Drawing.Color.FromArgb(
+                                Math.Clamp((int)(maps[3][x, y] * 127.5 + 127.5), 0, 255),
+                                Math.Clamp((int)(maps[0][x, y] * 127.5 + 127.5), 0, 255),
+                                Math.Clamp((int)(maps[1][x, y] * 127.5 + 127.5), 0, 255),
+                                Math.Clamp((int)(maps[2][x, y] * 127.5 + 127.5), 0, 255))
                                 );
                         }
                     }

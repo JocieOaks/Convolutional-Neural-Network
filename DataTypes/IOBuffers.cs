@@ -39,8 +39,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="batchSize">The number of elements in a single batch.</param>
         public void Allocate(int batchSize)
         {
-            if (_buffer != null)
-                _buffer.Dispose();
+            _buffer?.Dispose();
 
             _buffer = GPUManager.Accelerator.Allocate1D<float>(_maxLength * batchSize);
             _view1 = new ArrayView<float>(_buffer, 0, _maxLength * batchSize);

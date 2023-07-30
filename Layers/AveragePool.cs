@@ -38,7 +38,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         public override void Backwards(int batchSize)
         {
 
-            Index3D index = new(batchSize, _inputShape.Dimensions, _outputShape.Area);
+            Index3D index = new(_outputShape.Area, _inputShape.Dimensions, batchSize);
             s_backwardsAction(index, _buffers.InGradient, _buffers.OutGradient, Info);
 
             Synchronize();
@@ -47,8 +47,8 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Forward(int batchSize)
         {
-            
-            Index3D index = new(batchSize, _inputShape.Dimensions, _outputShape.Area);
+
+            Index3D index = new(_outputShape.Area, _inputShape.Dimensions, batchSize);
             s_forwardAction(index, _buffers.Input, _buffers.Output, Info);
 
             Synchronize();
@@ -83,15 +83,17 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
         private static void BackwardsKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, LayerInfo info)
         {
-            (int inputOffset, int outputOffset) = info.GetOffset(index.X, index.Y);
+            (int inputOffset, int outputOffset) = info.GetOffset(index.Y, index.Z);
+
+            float dL = inGradient[index.X + outputOffset] * info.InverseFilterArea;
 
             for (int j = 0; j < info.FilterSize; j++)
             {
                 for (int i = 0; i < info.FilterSize; i++)
                 {
-                    if (info.TryGetInputIndex(index.Z, i, j, out int inputIndex))
+                    if (info.TryGetInputIndex(index.X, i, j, out int inputIndex))
                     {
-                        outGradient[inputIndex + inputOffset] = inGradient[index.Z + outputOffset];
+                        outGradient[inputIndex + inputOffset] = dL;
                     }
                 }
             }
@@ -110,19 +112,19 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
         private static void ForwardKernel(Index3D index, ArrayView<float> input, ArrayView<float> pooled, LayerInfo info)
         {
-            (int inputOffset, int outputOffset) = info.GetOffset(index.X, index.Y);
+            (int inputOffset, int outputOffset) = info.GetOffset(index.Y, index.Z);
 
             float sum = 0;
             for (int j = 0; j < info.FilterSize; j++)
             {
                 for (int i = 0; i < info.FilterSize; i++)
                 {
-                    if (info.TryGetInputIndex(index.Z, i, j, out int inputIndex))
+                    if (info.TryGetInputIndex(index.X, i, j, out int inputIndex))
                         sum += input[inputIndex + inputOffset];
                 }
             }
 
-            pooled[index.Z + outputOffset] = sum * info.InverseFilterArea;
+            pooled[index.X + outputOffset] = sum * info.InverseFilterArea;
         }
 
         /// <summary>

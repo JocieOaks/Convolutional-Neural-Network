@@ -41,8 +41,12 @@ namespace ConvolutionalNeuralNetwork.Networks
                     }
                     for (int j = 0; j < 3; j++)
                     {
-                        _featureLayers[i].Add(new Convolution(4, 2, (int)Math.Pow(2, 5 + i + j), GlorotUniform.Instance));
+                        _featureLayers[i].Add(new Convolution(4, 2, (int)Math.Pow(2, 4 + j), GlorotUniform.Instance));
                         _featureLayers[i].Add(new ReLUActivation());
+                        _featureLayers[i].Add(new BatchNormalization());
+                        _featureLayers[i].Add(new Convolution(3, 1, (int)Math.Pow(2, 5 + j), GlorotUniform.Instance));
+                        _featureLayers[i].Add(new ReLUActivation());
+                        _featureLayers[i].Add(new BatchNormalization());
                         var skip = new SkipSplit();
                         skips[i + j].Add(skip);
                         _featureLayers[i].Add(skip);
@@ -90,6 +94,10 @@ namespace ConvolutionalNeuralNetwork.Networks
                         {
                             weighted.SetUpWeights(_adamHyperParameters);
                         }
+                        else if (layer is BatchNormalization bn)
+                        {
+                            bn.SetHyperParameters(_adamHyperParameters);
+                        }
                         if (layer is not IUnchangedLayer)
                         {
                             (inputBuffers, outputBuffers) = (outputBuffers, inputBuffers);
@@ -108,10 +116,6 @@ namespace ConvolutionalNeuralNetwork.Networks
                         (inputBuffers, outputBuffers) = (outputBuffers, inputBuffers);
                     }
                 }
-
-                _startBuffers.Allocate(maxBatchSize);
-                _middleBuffers.Allocate(maxBatchSize);
-                IOBuffers.SetCompliment(_startBuffers, _middleBuffers);
             }
 
             /// <summary>

@@ -94,6 +94,11 @@ namespace ConvolutionalNeuralNetwork.Layers
             _inputCopy.DecrementLiveCount(2);
         }
 
+        public void SetHyperParameters(AdamHyperParameters hyperParameters)
+        {
+            _adamHyperParameters = hyperParameters;
+        }
+
         /// <inheritdoc/>
         public override void Forward(int batchSize)
         {
