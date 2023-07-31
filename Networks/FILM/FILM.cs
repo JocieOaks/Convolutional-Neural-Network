@@ -195,6 +195,10 @@ namespace ConvolutionalNeuralNetwork.Networks
                         for(int x = 0; x < expected[i][j].Length; x++)
                         {
                             float defect = expected[i][j][x, y] - actual[i][j][x, y];
+                            if(defect < 0)
+                            {
+                                int a = 0;
+                            }
                             gradient[i][j][x, y] = defect;
                             loss += MathF.Abs(defect);
                         }

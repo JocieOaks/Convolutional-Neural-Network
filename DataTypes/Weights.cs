@@ -129,6 +129,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             }
 
             layer.Backwards(batchSize);
+            _gradient.SyncCPU();
 
             FeatureMap[] testOutput = new FeatureMap[outputDimensions * batchSize];
             for (int i = 0; i < outputDimensions * batchSize; i++)
@@ -163,7 +164,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                         }
                     }
                 }
-                Console.WriteLine($"Expected Gradient: {_gradient[i]:f4} \t Test Gradient: {testGradient:f4}");
+
                 if (MathF.Abs(_gradient[i] - testGradient) > Math.Max(0.01, testGradient * 0.001))
                 {
                     Console.WriteLine($"Expected Gradient: {_gradient[i]:f4} \t Test Gradient: {testGradient:f4}");

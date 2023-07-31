@@ -21,12 +21,12 @@ namespace ConvolutionalNeuralNetwork.GPU
         {
             if(DEBUGCPU)
             {
-                Context = Context.Create(builder => builder.CPU().EnableAlgorithms());
+                Context = Context.Create(builder => builder.CPU().EnableAlgorithms().Profiling());
                 Accelerator = Context.CreateCPUAccelerator(0);
             }
             else
             {
-                Context = Context.Create(builder => builder.Cuda().EnableAlgorithms());
+                Context = Context.Create(builder => builder.Cuda().EnableAlgorithms().Profiling());
                 Accelerator = Context.CreateCudaAccelerator(0); 
             }
             _lru = new LRU(Accelerator.MemorySize, 0.8f);

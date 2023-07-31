@@ -80,12 +80,24 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return shiftX >= 0 && shiftY >= 0 && shiftX < InputWidth && shiftY < InputLength;
         }
 
-        public bool TryGetInputIndex(int strideX, int strideY, int shiftX, int shiftY, out int index)
+        public bool TryGetOutputIndex(int inputIndex, int shiftX, int shiftY, out int index)
         {
-            shiftX += strideX * Stride - Padding;
-            shiftY += strideY * Stride - Padding;
-            index = shiftY * InputWidth + shiftX;
-            return shiftX >= 0 && shiftY >= 0 && shiftX < InputWidth && shiftY < InputLength;
+            index = 0;
+            int x = inputIndex % InputWidth;
+            int y = inputIndex / InputWidth;
+
+            x += Padding - shiftX;
+            y += Padding - shiftY;
+
+            if (x % Stride != 0 || y % Stride != 0)
+                return false;
+
+            x /= Stride;
+            y /= Stride;
+
+            index = y * OutputWidth + x;
+
+            return x >= 0 && y >= 0 && x < OutputWidth && y < OutputLength;
         }
 
         public int OutputIndex(int x, int y)
@@ -99,11 +111,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return (offsetCount * InputArea, offsetCount * OutputArea);
         }
 
-        public (int, int) GetOffset(int inputDimension, int outputDimension, int batchIndex)
-        {
-            return ((inputDimension + batchIndex * InputDimensions) * InputArea, (outputDimension + batchIndex * OutputDimensions) * OutputArea);
-        }
-
         public void Deconstruct(int x, int y, int z, out int mapIndex, out int inputOffset, out int outputIndex, out int dimension)
         {
             outputIndex = z * OutputArea * OutputDimensions + x;
@@ -113,10 +120,13 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             inputOffset = (y + z * InputDimensions) * InputArea;
         }
 
-        public void Deconstruct(Index3D grid, Index3D group, out int inputOffset, out int dimension)
+        public void DeconstructInverse(int x, int y, int z, out int mapIndex, out int outputOffset, out int inputIndex, out int dimension)
         {
-            dimension = grid.Y * InputDimensions + group.X;
-            inputOffset = (group.X + grid.Z * InputDimensions) * InputArea;
+            inputIndex = z * InputArea * InputDimensions + x;
+            int inputDimension = x / InputArea;
+            dimension = inputDimension * OutputDimensions + y;
+            mapIndex = x % InputArea;
+            outputOffset = (y + z * OutputDimensions) * OutputArea;
         }
 
         /// <summary>

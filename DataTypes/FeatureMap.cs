@@ -3,6 +3,7 @@ using ILGPU;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
 using System.Drawing;
+using System.Reflection.Metadata.Ecma335;
 
 namespace ConvolutionalNeuralNetwork.DataTypes
 {
@@ -73,6 +74,10 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             {
                 for (int x = 0; x < target[0].Width; x++)
                 {
+                    for (int i = 0; i < source.Length; i++)
+                    {
+                        color[i] = target[i][x, y];
+                    }
                     Vector correction = pallet.MinBy(x => Vector.DistanceSquared(x, color));
 
                     for (int i = 0; i < target.Length; i++)

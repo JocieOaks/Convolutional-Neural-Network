@@ -11,6 +11,8 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         private float _correctedLearningRate;
         [JsonProperty] private int _updates = 0;
 
+        [JsonProperty] private readonly float _learningRateDecay = 0.464f;
+
         public bool UpdateWeights { get; private set; }
 
         /// <summary>
@@ -26,7 +28,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             if (updateWeights)
             {
                 _updates++;
-                _correctedLearningRate = _learningRate * MathF.Sqrt(1 - MathF.Pow(SecondMomentDecay, _updates)) / (1 - MathF.Pow(FirstMomentDecay, _updates));
+                _correctedLearningRate = _learningRate * MathF.Pow(_learningRateDecay, _updates / 75e3f) * MathF.Sqrt(1 - MathF.Pow(SecondMomentDecay, _updates)) / (1 - MathF.Pow(FirstMomentDecay, _updates));
             }
         }
 
