@@ -209,18 +209,33 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         {
             info.DeconstructInverse(index.X, index.Y, index.Z, out int mapIndex, out int inGradientOffset, out int outGradientIndex, out int dimension);
 
+            (int x, int y) = info.GetInputCoordinates(mapIndex);
+
+            int minX = x - info.FilterSize + info.Padding + 1;
+            int minY = y - info.FilterSize + info.Padding + 1;
+            int maxX = x + info.Padding + 1;
+            int maxY = y + info.Padding + 1;
+
+            int shiftX = minX % info.Stride;
+            int shiftY = minY % info.Stride;
+
+            shiftX -= XMath.Clamp(shiftX, 0, 1) * info.Stride;
+            shiftY -= XMath.Clamp(shiftY, 0, 1) * info.Stride;
+
+            int x0 = XMath.Max(0, maxX - info.InputWidth);
+            int x1 = XMath.Min(info.FilterSize + shiftX, info.FilterSize + minX);
+            int y0 = XMath.Max(0, maxY - info.InputLength);
+            int y1 = XMath.Min(info.FilterSize + shiftY, info.FilterSize + minY);
+
             float sum = 0;
             
-            for (int j = 0; j < info.FilterSize; j++)
+            for (int j = y1 - 1; j >= y0; j -= info.Stride)
             {
-                for (int i = 0; i < info.FilterSize; i++)
+                for (int i = x1 - 1; i >= x0; i -= info.Stride)
                 {
-                    if (info.TryGetOutputIndex(mapIndex, i, j, out int inGradientIndex))
-                    {
-                        int filterIndex = info.FilterIndex(i, j, dimension);
-                        sum += inGradient[inGradientIndex + inGradientOffset] * filter[filterIndex];
-                        
-                    }
+                    int inGradientIndex = info.GetOutputIndex(mapIndex, i, j);
+                    int filterIndex = info.FilterIndex(i, j, dimension);
+                    sum += inGradient[inGradientIndex + inGradientOffset] * filter[filterIndex];
                 }
             }
             
@@ -244,12 +259,22 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             
             float sum = 0;
 
-            for (int j = 0; j < info.FilterSize; j++)
+            (int x, int y) = info.GetOutputCoordinates(mapIndex);
+
+            int minX = x * info.Stride - info.Padding;
+            int minY = y * info.Stride - info.Padding;
+
+            int x0 = XMath.Max(0, -minX);
+            int x1 = XMath.Min(info.FilterSize, info.InputWidth - minX);
+            int y0 = XMath.Max(0, -minY);
+            int y1 = XMath.Min(info.FilterSize, info.InputLength - minY);
+
+            for (int j = y0; j < y1; j++)
             {
-                for (int i = 0; i < info.FilterSize; i++)
-        {
-                    if (info.TryGetInputIndex(mapIndex, i, j, out int inputIndex))
-                        sum += filter[info.FilterIndex(i, j, dimension)] * input[inputIndex + inputOffset];
+                for (int i = x0; i < x1; i++)
+                {
+                    int inputIndex = info.GetInputIndex(mapIndex, i, j);
+                    sum += filter[info.FilterIndex(i, j, dimension)] * input[inputIndex + inputOffset];
                 }
             }
 
