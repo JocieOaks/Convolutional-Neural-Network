@@ -280,7 +280,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         }*/
         public override string Name => throw new NotImplementedException();
 
-        public override void Backwards(int batchSize)
+        public override void Backwards(int batchSize, bool update)
         {
             throw new NotImplementedException();
         }

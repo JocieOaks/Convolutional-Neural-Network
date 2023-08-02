@@ -23,7 +23,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         public override string Name => "Reshape Layer";
 
-        public override void Backwards(int batchSize)
+        public override void Backwards(int batchSize, bool update)
         {
         }
 

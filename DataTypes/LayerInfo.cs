@@ -1,4 +1,5 @@
 ﻿using ILGPU;
+using ILGPU.Algorithms;
 using ILGPU.IR.Values;
 
 namespace ConvolutionalNeuralNetwork.DataTypes
@@ -80,24 +81,47 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return shiftX >= 0 && shiftY >= 0 && shiftX < InputWidth && shiftY < InputLength;
         }
 
-        public bool TryGetOutputIndex(int inputIndex, int shiftX, int shiftY, out int index)
+        public int GetInputIndex(int outputIndex, int shiftX, int shiftY)
         {
-            index = 0;
+            int strideY = outputIndex / OutputWidth;
+            int strideX = outputIndex - (strideY * OutputWidth);
+
+            shiftX += strideX * Stride - Padding;
+            shiftY += strideY * Stride - Padding;
+            return shiftY * InputWidth + shiftX;
+        }
+
+        public int GetOutputIndex(int inputIndex, int shiftX, int shiftY)
+        {
             int x = inputIndex % InputWidth;
             int y = inputIndex / InputWidth;
 
             x += Padding - shiftX;
             y += Padding - shiftY;
 
-            if (x % Stride != 0 || y % Stride != 0)
-                return false;
-
             x /= Stride;
             y /= Stride;
 
-            index = y * OutputWidth + x;
 
-            return x >= 0 && y >= 0 && x < OutputWidth && y < OutputLength;
+
+            x = XMath.Clamp(x, 0, OutputWidth);
+            y = XMath.Clamp(y, 0, OutputLength);
+
+            return y * OutputWidth + x;
+        }
+
+        public (int, int) GetInputCoordinates(int inputIndex)
+        {
+            int x = inputIndex % InputWidth;
+            int y = inputIndex / InputWidth;
+            return (x, y);
+        }
+
+        public (int, int) GetOutputCoordinates(int outputIndex)
+        {
+            int x = outputIndex % OutputWidth;
+            int y = outputIndex / OutputWidth;
+            return (x, y);
         }
 
         public int OutputIndex(int x, int y)
@@ -206,6 +230,34 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             index = shiftY * OutputWidth + shiftX;
             return shiftX >= 0 && shiftY >= 0 && shiftX < OutputWidth && shiftY < OutputLength;
         }
+
+        public (int, int) GetInputCoordinates(int outputIndex, out float xFloat, out float yFloat)
+        {
+            int x = outputIndex % OutputWidth;
+            int y = outputIndex / OutputWidth;
+
+            x += Padding;
+            y += Padding;
+
+            xFloat = (float)x / Stride;
+            yFloat = (float)y / Stride;
+
+            x /= Stride;
+            y /= Stride;
+
+            return (x, y);
+        }
+
+        public bool TryGetInputIndex(int x, int y, int shiftX, int shiftY, out int inputIndex)
+        {
+            x += shiftX;
+            y += shiftY;
+
+            inputIndex = y * InputWidth + x;
+
+            return x >= 0 && y >= 0 && x < InputWidth && y < InputLength;
+        }
+
 
         public (int, int) GetOffset(int batchIndex, int dimension)
         {

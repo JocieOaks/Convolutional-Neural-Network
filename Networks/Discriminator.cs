@@ -95,7 +95,7 @@ namespace ConvolutionalNeuralNetwork.Networks
 
             for (int j = Depth - 1; j >= 0; j--)
             {
-                Utility.StopWatch(() => _layers[j].Backwards(batchSize), $"Backwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
+                Utility.StopWatch(() => _layers[j].Backwards(batchSize, true), $"Backwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
             }
         }
 
@@ -161,7 +161,7 @@ namespace ConvolutionalNeuralNetwork.Networks
             if (current.Area != LabelCount)
             {
                 var dense = new Dense(LabelCount, GlorotUniform.Instance);
-                dense.SetUpWeights(_adamHyperParameters);
+                dense.SetUpWeights();
                 _layers.Add(dense);
                 _layers.Add(new HyperTan());
                 InitializeLayers(ref current, maxBatchSize);

@@ -49,14 +49,11 @@ namespace ConvolutionalNeuralNetwork
             complimentBuffer.OutputDimensionArea(inputDimensions * inputSize * inputSize);
 
             Shape outputShape = layer.Startup(inputShapes, buffer, batchSize);
-            if(layer is WeightedLayer weight)
+            if(layer is WeightedLayer weighted)
             {
-                var adam = new AdamHyperParameters()
+                foreach (var weight in weighted.SetUpWeights())
                 {
-                    LearningRate = 0
-                };
-                adam.Update();
-                weight.SetUpWeights(adam);
+                }
             }
             FeatureMap[] outputs = new FeatureMap[outputDimensions * batchSize];
             for(int i = 0; i < outputDimensions * batchSize; i++)
@@ -78,7 +75,7 @@ namespace ConvolutionalNeuralNetwork
                 new FeatureMap(outputs[i].Width, outputs[i].Length, 1).CopyToBuffer(buffer.InGradient.SubView(outputShape.Area * i, outputShape.Area));
             }
 
-            layer.Backwards(batchSize);
+            layer.Backwards(batchSize, true);
             FeatureMap[] outGradients = new FeatureMap[inputDimensions * batchSize];
             for (int i = 0; i < inputDimensions * batchSize; i++)
             {

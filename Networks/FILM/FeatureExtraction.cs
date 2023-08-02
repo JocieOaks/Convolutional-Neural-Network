@@ -21,18 +21,18 @@ namespace ConvolutionalNeuralNetwork.Networks
 
             private int _inputArea;
 
-            public FeatureExtraction(int _)
+            public FeatureExtraction(ConvolutionSharedWeights[] shared)
             {
-                _featureLayers = new List<Layer>[PYRAMIDLAYERS - 2];
+                _featureLayers = new List<Layer>[PYRAMIDLAYERS];
                 _outputLayers = new SkipSplit[PYRAMIDLAYERS];
 
                 List<SkipSplit>[] skips = new List<SkipSplit>[PYRAMIDLAYERS];
-                for(int i = 0; i < PYRAMIDLAYERS; i++)
+                for (int i = 0; i < PYRAMIDLAYERS; i++)
                 {
                     skips[i] = new();
                 }
 
-                for (int i = 0; i < _featureLayers.Length; i++)
+                for (int i = 0; i < PYRAMIDLAYERS; i++)
                 {
                     _featureLayers[i] = new List<Layer>();
                     if (i != 0)
@@ -41,15 +41,19 @@ namespace ConvolutionalNeuralNetwork.Networks
                     }
                     for (int j = 0; j < 3; j++)
                     {
-                        _featureLayers[i].Add(new Convolution(4, 2, (int)Math.Pow(2, 4 + j), GlorotUniform.Instance));
-                        _featureLayers[i].Add(new ReLUActivation());
-                        _featureLayers[i].Add(new BatchNormalization());
-                        _featureLayers[i].Add(new Convolution(3, 1, (int)Math.Pow(2, 5 + j), GlorotUniform.Instance));
-                        _featureLayers[i].Add(new ReLUActivation());
-                        _featureLayers[i].Add(new BatchNormalization());
-                        var skip = new SkipSplit();
-                        skips[i + j].Add(skip);
-                        _featureLayers[i].Add(skip);
+                        if (i + j < PYRAMIDLAYERS)
+                        {
+                            _featureLayers[i].Add(new Convolution(shared[j], null));
+                            _featureLayers[i].Add(new ReLUActivation());
+                            _featureLayers[i].Add(new BatchNormalization());
+                            _featureLayers[i].Add(new Convolution(shared[j + 3], null));
+                            _featureLayers[i].Add(new ReLUActivation());
+                            _featureLayers[i].Add(new BatchNormalization());
+                            var skip = new SkipSplit();
+                            skips[i + j].Add(skip);
+                            _featureLayers[i].Add(skip);
+                            _featureLayers[i].Add(new AveragePool(2));
+                        }
                     }
                 }
 
@@ -82,7 +86,7 @@ namespace ConvolutionalNeuralNetwork.Networks
                 IOBuffers inputBuffers;
                 IOBuffers outputBuffers;
 
-                for (int i = 0; i < _featureLayers.Length; i++)
+                for (int i = 0; i < PYRAMIDLAYERS; i++)
                 {
                     current = new(inputWidth, inputLength, inputChannels);
                     inputBuffers = _startBuffers;
@@ -92,7 +96,8 @@ namespace ConvolutionalNeuralNetwork.Networks
                         current = layer.Startup(current, inputBuffers, maxBatchSize);
                         if (layer is WeightedLayer weighted)
                         {
-                            weighted.SetUpWeights(_adamHyperParameters);
+                            foreach(var weight in weighted.SetUpWeights())
+                            _weights.Add(weight);
                         }
                         else if (layer is BatchNormalization bn)
                         {
@@ -153,7 +158,7 @@ namespace ConvolutionalNeuralNetwork.Networks
             public void Forward(FeatureMap[][] images)
             {
                 int batchSize = images.Length;
-                for (int i = 0; i < _featureLayers.Length; i++)
+                for (int i = 0; i < PYRAMIDLAYERS; i++)
                 {
                     for (int j = 0; j < batchSize; j++)
                     {
@@ -183,18 +188,23 @@ namespace ConvolutionalNeuralNetwork.Networks
             {
                 _adamHyperParameters.Update();
 
-                for (int i = _featureLayers.Length - 1; i >= 0; i--)
+                for (int i = PYRAMIDLAYERS - 1; i >= 0; i--)
                 {
                     _featureLayers[i].Last().InGradient.MemSetToZero();
                     for (int j = _featureLayers[i].Count - 1; j >= 0; j--)
                     {
-                        Utility.StopWatch(() => _featureLayers[i][j].Backwards(batchSize), $"Backwards {i} {j} {_featureLayers[i][j].Name}", PRINTSTOPWATCH);
+                        Utility.StopWatch(() => _featureLayers[i][j].Backwards(batchSize, true), $"Backwards {i} {j} {_featureLayers[i][j].Name}", PRINTSTOPWATCH);
                     }
                 }
 
                 for (int j = Depth - 1; j >= 0; j--)
                 {
-                    Utility.StopWatch(() => _layers[j].Backwards(batchSize), $"Backwards C {j} {_layers[j].Name}", PRINTSTOPWATCH);
+                    Utility.StopWatch(() => _layers[j].Backwards(batchSize, true), $"Backwards C {j} {_layers[j].Name}", PRINTSTOPWATCH);
+                }
+
+                foreach(var weight in _weights)
+                {
+                    weight.UpdateWeights(_adamHyperParameters);
                 }
             }
         }

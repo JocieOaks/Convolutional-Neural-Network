@@ -35,7 +35,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         [JsonIgnore] public override string Name => "Average Pool Layer";
         /// <inheritdoc/>
-        public override void Backwards(int batchSize)
+        public override void Backwards(int batchSize, bool update)
         {
 
             Index3D index = new(_outputShape.Area, _inputShape.Dimensions, batchSize);

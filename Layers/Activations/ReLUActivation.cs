@@ -29,7 +29,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
         /// <inheritdoc/>
         public override string Name => "Activation Layer";
         /// <inheritdoc/>
-        public override void Backwards(int batchSize)
+        public override void Backwards(int batchSize, bool update)
         {
             Index1D index = new(_inputShape.Area * batchSize * _inputShape.Dimensions);
             s_backwardsAction(index, _deviceZeroed, _buffers.Gradient);

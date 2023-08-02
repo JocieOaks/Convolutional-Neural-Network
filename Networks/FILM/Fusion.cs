@@ -23,22 +23,22 @@ namespace ConvolutionalNeuralNetwork.Networks
                 _layers.Add(f1[^1].GetConcatenationLayer());
                 _layers.Add(flow0[^1].GetConcatenationLayer());
                 _layers.Add(flow1[^1].GetConcatenationLayer());
-                _layers.Add(new TransposeConvolution(4, 2, 16, GlorotUniform.Instance));
-                _layers.Add(new BatchNormalization());
+
 
                 for (int i = PYRAMIDLAYERS - 2; i >= 0; i--)
                 {
+                    _layers.Add(new Upsampling(2));
+                    _layers.Add(new Convolution(2, 1, 16, GlorotUniform.Instance, false));
+                    _layers.Add(new ReLUActivation());
+                    _layers.Add(new BatchNormalization());
                     _layers.Add(f0[i].GetConcatenationLayer());
                     _layers.Add(f1[i].GetConcatenationLayer());
                     _layers.Add(flow0[i].GetConcatenationLayer());
                     _layers.Add(flow1[i].GetConcatenationLayer());
-                    _layers.Add(new Convolution(3, 1, 16, GlorotUniform.Instance));
+                    _layers.Add(new Convolution(3, 1, 16, GlorotUniform.Instance, false));
                     _layers.Add(new ReLUActivation());
                     _layers.Add(new BatchNormalization());
-                    _layers.Add(new Convolution(3, 1, 16, GlorotUniform.Instance));
-                    _layers.Add(new ReLUActivation());
-                    _layers.Add(new BatchNormalization());
-                    _layers.Add(new TransposeConvolution(4, 2, 16, GlorotUniform.Instance));
+                    _layers.Add(new Convolution(3, 1, 16, GlorotUniform.Instance, false));
                     _layers.Add(new ReLUActivation());
                     _layers.Add(new BatchNormalization());
                 }
@@ -104,7 +104,12 @@ namespace ConvolutionalNeuralNetwork.Networks
 
                 for (int j = Depth - 1; j >= 0; j--)
                 {
-                    Utility.StopWatch(() => _layers[j].Backwards(batchSize), $"Backwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
+                    Utility.StopWatch(() => _layers[j].Backwards(batchSize, true), $"Backwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
+                }
+
+                foreach (var weight in _weights)
+                {
+                    weight.UpdateWeights(_adamHyperParameters);
                 }
             }
         }

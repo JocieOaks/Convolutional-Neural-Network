@@ -42,7 +42,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Skip
         public override string Name => "Skip Out Layer";
 
         /// <inheritdoc/>
-        public override void Backwards(int batchSize)
+        public override void Backwards(int batchSize, bool update)
         {
             Index1D index = new(batchSize * _skipShape.Volume);
             GPUManager.CopyAction(index, _buffers.InGradient, _skipConnection.GetArrayViewEmpty<float>());

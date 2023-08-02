@@ -14,7 +14,7 @@ using System.Runtime.Serialization;
 namespace ConvolutionalNeuralNetwork.DataTypes
 {
     [Serializable]
-    public class Weights
+    public class Weights : IWeights
     {
         [JsonProperty] private readonly Vector _firstMoment;
         [JsonProperty] private readonly Vector _secondMoment;
@@ -24,6 +24,8 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         public Weights(int length, IWeightInitializer initializer, WeightedLayer layer)
         {
             _weights = new Vector(length);
+
+            initializer ??= GlorotUniform.Instance;
 
             for (int i = 0; i < length; i++)
             {
@@ -65,6 +67,11 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         public ArrayView<T> GradientGPU<T>() where T : unmanaged
         {
             return _gradient.GetArrayViewZeroed<T>();
+        }
+
+        public void SetGradient(Vector gradient)
+        {
+            _gradient = gradient;
         }
 
         [OnDeserialized]
@@ -128,7 +135,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 new FeatureMap(outputs[i].Width, outputs[i].Length, 1).CopyToBuffer(buffer.InGradient.SubView(outputShapes.Area * i, outputShapes.Area));
             }
 
-            layer.Backwards(batchSize);
+            layer.Backwards(batchSize, true);
             _gradient.SyncCPU();
 
             FeatureMap[] testOutput = new FeatureMap[outputDimensions * batchSize];

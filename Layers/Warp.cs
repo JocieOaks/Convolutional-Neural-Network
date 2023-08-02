@@ -20,7 +20,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         public override string Name => "Warp Layer";
 
-        public override void Backwards(int batchSize)
+        public override void Backwards(int batchSize, bool update)
         {
             _buffers.OutGradient.SubView(0, batchSize * _inputShape.Volume).MemSetToZero();
 
@@ -88,7 +88,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                     float width = i == 0 ? x2 - x : x - x1;
                     float length = j == 0 ? y2 - y : y - y1;
 
-                    if(outputShape.TryGetIndex(index.X, x1 + i, y1 + i, out int mapIndex))
+                    if(outputShape.TryGetIndex(index.X, x1 + i, y1 + j, out int mapIndex))
                     {
                         sum += width * length * input[mapIndex + inputOffset];
                     }
@@ -122,7 +122,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                     float width = i == 0 ? x2 - x : x - x1;
                     float length = j == 0 ? y2 - y : y - y1;
 
-                    if (inputShape.TryGetIndex(index.X, x1 + i, y1 + i, out int mapIndex))
+                    if (inputShape.TryGetIndex(index.X, x1 + i, y1 + j, out int mapIndex))
                     {
                         Atomic.Add(ref outGradient[mapIndex + inputOffset], width * length * dL);
                         Atomic.Add(ref outGradient[xOffset + index.X], (i == 0 ? -1 : 1) * length * input[mapIndex + inputOffset] * dL);

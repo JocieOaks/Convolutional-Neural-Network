@@ -58,7 +58,7 @@ namespace ConvolutionalNeuralNetwork.Networks
 
             for (int i = Depth - 1; i >= 0; i--)
             {
-                Utility.StopWatch(() => _layers[i].Backwards(batchSize), $"Backwards {i} {_layers[i].Name}", PRINTSTOPWATCH);
+                Utility.StopWatch(() => _layers[i].Backwards(batchSize, true), $"Backwards {i} {_layers[i].Name}", PRINTSTOPWATCH);
             }
         }
 

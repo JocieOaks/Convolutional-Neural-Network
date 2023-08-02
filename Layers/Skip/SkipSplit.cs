@@ -87,7 +87,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Skip
             = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(BackwardsKernel);
 
         /// <inheritdoc/>
-        public override void Backwards(int batchSize)
+        public override void Backwards(int batchSize, bool update)
         {
 
             Index1D index = new(batchSize * _outputShape.Volume);

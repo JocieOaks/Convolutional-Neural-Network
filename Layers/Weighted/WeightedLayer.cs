@@ -2,6 +2,7 @@
 using ConvolutionalNeuralNetwork.GPU;
 using ConvolutionalNeuralNetwork.Layers.Initializers;
 using ILGPU;
+using ILGPU.Backends.EntryPoints;
 using Newtonsoft.Json;
 using System.Runtime.Serialization;
 
@@ -10,15 +11,25 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 {
     public abstract class WeightedLayer : Layer
     {
-        protected IWeightInitializer _weightInitializer;
-        protected AdamHyperParameters _adamHyperParameters;
+        private IWeightInitializer _weightInitializer;
         private bool _useBias;
-        [JsonProperty] private Weights _bias;
+        private IWeights _bias;
+        protected IWeights _weights;
 
         public WeightedLayer(int filterSize, int stride, IWeightInitializer weightInitializer, bool useBias) : base(filterSize, stride)
         {
             _weightInitializer = weightInitializer;
             _useBias = useBias;
+        }
+
+        public WeightedLayer(int filterSize, int stride, SharedWeights weights, SharedWeights bias) : base (filterSize, stride)
+        {
+            _weights = weights;
+            if(bias != null)
+            {
+                _useBias = true;
+                _bias = bias;
+            }
         }
 
         [JsonConstructor] protected WeightedLayer() { }
@@ -41,13 +52,9 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             }
         }
 
-        public sealed override void Backwards(int batchSize)
+        public sealed override void Backwards(int batchSize, bool update)
         {
-            if (!_adamHyperParameters.UpdateWeights)
-            {
-                BackwardsNoUpdate(batchSize);
-            }
-            else
+            if (update)
             {
                 BackwardsUpdate(batchSize);
                 if (_useBias)
@@ -58,8 +65,11 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
                     Synchronize();
 
                     _bias.DecrementLiveGradient();
-                    _bias.UpdateWeights(_adamHyperParameters);
                 }
+            }
+            else
+            {
+                BackwardsNoUpdate(batchSize);
             }
         }
 
@@ -67,18 +77,61 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         {
             if (_useBias)
             {
-                _bias.TestFilterGradient(this, input, output, _buffers, batchSize);
+                (_bias as Weights).TestFilterGradient(this, input, output, _buffers, batchSize);
             }
         }
 
-        public void SetUpWeights(AdamHyperParameters hyperParameters)
+        public IEnumerable<Weights> SetUpWeights()
         {
-            _adamHyperParameters = hyperParameters;
+            if(_weights is SharedWeights shared)
+            {
+                if (shared.Initialized == false)
+                {
+                    Weights weights = new Weights(WeightLength, shared.WeightInitializer, this);
+                    shared.SetWeights(weights);
+                    yield return weights;
+                }
+                else
+                {
+                    if(_weights.Length != WeightLength)
+                    {
+                        throw new Exception("Shared Weights are incorrect size for this layer.");
+                    }
+                }
+            }
+            else
+            {
+                _weights ??= new Weights(WeightLength, _weightInitializer, this);
+                yield return _weights as Weights;
+            }
+            
             if (_useBias)
             {
-                _bias ??= new Weights(_outputShape.Dimensions);
+                if (_bias is SharedWeights sharedBias)
+                {
+                    if (sharedBias.Initialized == false)
+                    {
+                        Weights bias = new(_outputShape.Dimensions);
+                        sharedBias.SetWeights(bias);
+                        yield return bias;
+                    }
+                    else
+                    {
+                        if (_bias.Length != _outputShape.Dimensions)
+                        {
+                            throw new Exception("Shared Weights are incorrect size for this layer.");
+                        }
+                    }
+                }
+                else
+                {
+                    _bias ??= new Weights(_outputShape.Dimensions);
+                    yield return _bias as Weights;
+                }
             }
         }
+
+        protected abstract int WeightLength { get; }
 
         [OnDeserialized]
         public void OnDeserialized(StreamingContext context)
@@ -105,7 +158,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
                 LearningRate = 0
             };
             adam.Update();
-            SetUpWeights(adam);
+            SetUpWeights();
 
             buffer.Allocate(batchSize);
             complimentBuffer.Allocate(batchSize);

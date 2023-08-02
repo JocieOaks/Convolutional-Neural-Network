@@ -42,7 +42,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Skip
         public override string Name => "Concatenation Layer";
 
         /// <inheritdoc/>
-        public override void Backwards(int batchSize)
+        public override void Backwards(int batchSize, bool update)
         {
             Index3D index = new(batchSize, _outputShape.Dimensions, _outputShape.Area);
             s_backwardsAction(index, _buffers.InGradient, _buffers.OutGradient, _skipConnection.GetArrayView<float>(), _inputShape, _skipShape.Dimensions);

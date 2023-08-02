@@ -18,21 +18,20 @@ namespace ConvolutionalNeuralNetwork.Networks
         private class Flow : Network
         {
 
-            public Flow(SkipSplit[] f1, SkipSplit[] f0)
+            public Flow(SkipSplit[] f1, SkipSplit[] f0, ConvolutionSharedWeights[] shared, SharedWeights[] sharedBias)
             {
                 _layers.Add(f1[^1].GetOutLayer());
                 _layers.Add(f0[^1].GetConcatenationLayer());
-                _layers.Add(new Convolution(3, 1, (int)Math.Pow(2, PYRAMIDLAYERS + 4), GlorotUniform.Instance));
+                _layers.Add(new Convolution(shared[0], sharedBias[0]));
                 _layers.Add(new ReLUActivation());
-                _layers.Add(new Convolution(3, 1, (int)Math.Pow(2, PYRAMIDLAYERS + 3), GlorotUniform.Instance));
+                _layers.Add(new Convolution(shared[1], sharedBias[1]));
                 _layers.Add(new ReLUActivation());
-                _layers.Add(new Convolution(3, 1, 2, GlorotUniform.Instance));
+                _layers.Add(new Convolution(shared[2], sharedBias[2]));
                 _layers.Add(new ReLUActivation());
                 var skip = new SkipSplit();
                 _layers.Add(skip);
                 _flow[^1] = skip;
-                var transposeInit = new Constant(1);
-                _layers.Add(new TransposeConvolution(2, 2, 2, transposeInit, false));
+                _layers.Add(new Upsampling(2));
                 skip = new SkipSplit();
                 _layers.Add(skip);
                 _flowUpsampled[^1] = skip;
@@ -42,12 +41,25 @@ namespace ConvolutionalNeuralNetwork.Networks
                     _layers.Add(f1[i].GetConcatenationLayer());
                     _layers.Add(new Warp());
                     _layers.Add(f0[i].GetConcatenationLayer());
-                    _layers.Add(new Convolution(3, 1, (int)Math.Pow(2, i + 4), GlorotUniform.Instance));
-                    _layers.Add(new ReLUActivation());
-                    _layers.Add(new Convolution(3, 1, (int)Math.Pow(2, i + 3), GlorotUniform.Instance));
-                    _layers.Add(new ReLUActivation());
-                    _layers.Add(new Convolution(3, 1, 2, GlorotUniform.Instance));
-                    _layers.Add(new ReLUActivation());
+
+                    if (i < 2)
+                    {
+                        _layers.Add(new Convolution(3, 1, i == 0 ? 64 : 128, GlorotUniform.Instance));
+                        _layers.Add(new ReLUActivation());
+                        _layers.Add(new Convolution(3, 1, i == 0 ? 32 : 64, GlorotUniform.Instance));
+                        _layers.Add(new ReLUActivation());
+                        _layers.Add(new Convolution(3, 1, 2, GlorotUniform.Instance));
+                        _layers.Add(new ReLUActivation());
+                    }
+                    else
+                    {
+                        _layers.Add(new Convolution(shared[0], sharedBias[0]));
+                        _layers.Add(new ReLUActivation());
+                        _layers.Add(new Convolution(shared[1], sharedBias[1]));
+                        _layers.Add(new ReLUActivation());
+                        _layers.Add(new Convolution(shared[2], sharedBias[2]));
+                        _layers.Add(new ReLUActivation());
+                    }
                     _layers.Add(_flowUpsampled[i].GetConcatenationLayer());
                     var sum = new Summation();
                     sum.SetOutputDimensions(2);
@@ -57,7 +69,7 @@ namespace ConvolutionalNeuralNetwork.Networks
                     _flow[i] = skip;
                     if (i != 0)
                     {
-                        _layers.Add(new TransposeConvolution(2, 2, 2, transposeInit, false));
+                        _layers.Add(new Upsampling(2));
                         skip = new SkipSplit();
                         _layers.Add(skip);
                         _flowUpsampled[i - 1] = skip;
@@ -108,7 +120,12 @@ namespace ConvolutionalNeuralNetwork.Networks
 
                 for (int j = Depth - 1; j >= 0; j--)
                 {
-                    Utility.StopWatch(() => _layers[j].Backwards(batchSize), $"Backwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
+                    Utility.StopWatch(() => _layers[j].Backwards(batchSize, true), $"Backwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
+                }
+
+                foreach(var weight in _weights)
+                {
+                    weight.UpdateWeights(_adamHyperParameters);
                 }
             }
 

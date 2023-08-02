@@ -38,7 +38,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override string Name => "Summation Layer";
         /// <inheritdoc/>
-        public override void Backwards(int batchSize)
+        public override void Backwards(int batchSize, bool update)
         {
             Index3D index = new(batchSize, _inputShape.Dimensions, _inputShape.Area);
             s_backwardsAction(index, _buffers.Input, _buffers.Output, _inputShape, _outputShape.Dimensions);

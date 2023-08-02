@@ -20,7 +20,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
 
         [JsonConstructor] public HyperTan() : base(1, 1) { }
 
-        public override void Backwards(int batchSize)
+        public override void Backwards(int batchSize, bool update)
         {
             Index1D index = new(batchSize * _inputShape.Volume);
             BackwardsAction(index, _outputCopy.GetArrayView<float>(), _buffers.Gradient);

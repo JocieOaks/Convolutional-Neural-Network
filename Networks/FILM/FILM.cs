@@ -57,10 +57,21 @@ namespace ConvolutionalNeuralNetwork.Networks
 
         public FILM(int pyramidLayers)
         {
-            _features0 = new FeatureExtraction(0);
-            _features1 = new FeatureExtraction(1);
-            _flow0 = new Flow(_features0.OutputLayers, _features1.OutputLayers);
-            _flow1 = new Flow(_features1.OutputLayers, _features0.OutputLayers);
+            ConvolutionSharedWeights[] featuresShared = new ConvolutionSharedWeights[6];
+            ConvolutionSharedWeights[] flowShared = new ConvolutionSharedWeights[] { new ConvolutionSharedWeights(3, 1, 256), new ConvolutionSharedWeights(3, 1, 128), new ConvolutionSharedWeights(3, 1, 2) };
+            SharedWeights[] flowBias = new SharedWeights[3];
+
+            for(int i = 0; i < 3; i++)
+            {
+                featuresShared[i] = new ConvolutionSharedWeights(3, 1, (int)Math.Pow(2, 4 + i));
+                featuresShared[i + 3] = new ConvolutionSharedWeights(3, 1, (int)Math.Pow(2, 5 + i));
+                flowBias[i] = new SharedWeights();
+            }
+
+            _features0 = new FeatureExtraction(featuresShared);
+            _features1 = new FeatureExtraction(featuresShared);
+            _flow0 = new Flow(_features0.OutputLayers, _features1.OutputLayers, flowShared, flowBias);
+            _flow1 = new Flow(_features1.OutputLayers, _features0.OutputLayers, flowShared, flowBias);
             _fusion = new Fusion(_flow0.F, _flow1.F, _flow0.Flows, _flow1.Flows);
         }
 

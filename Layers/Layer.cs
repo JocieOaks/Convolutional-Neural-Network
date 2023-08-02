@@ -50,7 +50,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         [JsonIgnore] public ArrayView<float> OutGradient => _buffers.OutGradient;
         [JsonIgnore] public ArrayView<float> Output => this is IUnchangedLayer ? _buffers.Input : _buffers.Output;
         /// <inheritdoc/>
-        public abstract void Backwards(int batchSize);
+        public abstract void Backwards(int batchSize, bool update);
 
         /// <inheritdoc/>
         public abstract void Forward(int batchSize);

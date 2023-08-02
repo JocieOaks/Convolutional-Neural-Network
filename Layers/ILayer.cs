@@ -25,7 +25,8 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// 
         /// 
         /// 
-        void Backwards(int batchSize);
+        /// <param name="update"></param>
+        void Backwards(int batchSize, bool update);
 
         /// <summary>
         /// Forward propagates through the <see cref="Layer"/> calculating the output <see cref="FeatureMap"/> that is shared with

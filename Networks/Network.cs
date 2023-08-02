@@ -24,6 +24,7 @@ namespace ConvolutionalNeuralNetwork
         protected int _floatLabels;
         protected bool _ready = false;
         private readonly List<IPrimaryLayer> _primaryLayers = new();
+        [JsonProperty] protected readonly List<Weights> _weights = new();
 
         private ActivationPattern _activationPattern;
 
@@ -305,7 +306,8 @@ namespace ConvolutionalNeuralNetwork
                 current = layer.Startup(current, inputBuffers, maxBatchSize);
                 if(layer is WeightedLayer weighted)
                 {
-                    weighted.SetUpWeights(_adamHyperParameters);
+                    foreach(var weight in weighted.SetUpWeights())
+                        _weights.Add(weight);
                 }
                 else if(layer is BatchNormalization bn)
                 {
