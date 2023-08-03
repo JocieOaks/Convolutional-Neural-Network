@@ -114,18 +114,16 @@ namespace ConvolutionalNeuralNetwork.Networks
                 }
             }
 
+            public List<Weights> GetWeights()
+            {
+                return _weights;
+            }
+
             public void Backwards(int batchSize)
             {
-                _adamHyperParameters.Update();
-
                 for (int j = Depth - 1; j >= 0; j--)
                 {
                     Utility.StopWatch(() => _layers[j].Backwards(batchSize, true), $"Backwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
-                }
-
-                foreach(var weight in _weights)
-                {
-                    weight.UpdateWeights(_adamHyperParameters);
                 }
             }
 

@@ -128,6 +128,12 @@ namespace ConvolutionalNeuralNetwork.Networks
             _startBuffers.Allocate(maxBatchSize);
             _middleBuffers.Allocate(maxBatchSize);
             IOBuffers.SetCompliment(_startBuffers, _middleBuffers);
+
+            _weights.AddRange(_features0.GetWeights());
+            _weights.AddRange(_features1.GetWeights());
+            _weights.AddRange(_flow0.GetWeights());
+            _weights.AddRange(_flow1.GetWeights());
+            _weights.AddRange(_fusion.GetWeights());
         }
 
         public float Train(FeatureMap[][] i0, FeatureMap[][] i1, FeatureMap[][] iT)
@@ -163,6 +169,13 @@ namespace ConvolutionalNeuralNetwork.Networks
             _flow0.Backwards(batchSize);
             _features1.Backwards(batchSize);
             _features0.Backwards(batchSize);
+
+            _adamHyperParameters.Update();
+
+            foreach (var weight in _weights)
+            {
+                weight.UpdateWeights(_adamHyperParameters);
+            }
 
             return loss;
         }

@@ -155,6 +155,11 @@ namespace ConvolutionalNeuralNetwork.Networks
                 return feature;
             }
 
+            public List<Weights> GetWeights()
+            {
+                return _weights;
+            }
+
             public void Forward(FeatureMap[][] images)
             {
                 int batchSize = images.Length;
@@ -186,8 +191,6 @@ namespace ConvolutionalNeuralNetwork.Networks
 
             public void Backwards(int batchSize)
             {
-                _adamHyperParameters.Update();
-
                 for (int i = PYRAMIDLAYERS - 1; i >= 0; i--)
                 {
                     _featureLayers[i].Last().InGradient.MemSetToZero();
@@ -200,11 +203,6 @@ namespace ConvolutionalNeuralNetwork.Networks
                 for (int j = Depth - 1; j >= 0; j--)
                 {
                     Utility.StopWatch(() => _layers[j].Backwards(batchSize, true), $"Backwards C {j} {_layers[j].Name}", PRINTSTOPWATCH);
-                }
-
-                foreach(var weight in _weights)
-                {
-                    weight.UpdateWeights(_adamHyperParameters);
                 }
             }
         }
