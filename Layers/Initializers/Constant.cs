@@ -1,4 +1,4 @@
-﻿using ConvolutionalNeuralNetwork.Layers.Weighted;
+﻿using ConvolutionalNeuralNetwork.Layers.Serial;
 
 namespace ConvolutionalNeuralNetwork.Layers.Initializers
 {
@@ -11,7 +11,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Initializers
             _constant = constant;
         }
 
-        public float GetWeight(WeightedLayer layer)
+        public float GetWeight(SerialWeighted layer)
         {
             return _constant;
         }

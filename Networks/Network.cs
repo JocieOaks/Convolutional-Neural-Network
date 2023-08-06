@@ -2,14 +2,13 @@
 using ConvolutionalNeuralNetwork.Design;
 using ConvolutionalNeuralNetwork.Layers;
 using Newtonsoft.Json;
-using System.Runtime.Serialization;
 using ILGPU;
-using ILGPU.Runtime;
-using ILGPU.Runtime.Cuda;
-using ConvolutionalNeuralNetwork.Layers.Skip;
 using ConvolutionalNeuralNetwork.Layers.Weighted;
+using ConvolutionalNeuralNetwork.Layers.Serial;
+using ConvolutionalNeuralNetwork.Layers.Initializers;
+using ILGPU.Algorithms.ScanReduceOperations;
 
-namespace ConvolutionalNeuralNetwork
+namespace ConvolutionalNeuralNetwork.Networks
 {
     /// <summary>
     /// The <see cref="Network"/> class is the base class for all Convolutional Neural Networks.
@@ -18,192 +17,144 @@ namespace ConvolutionalNeuralNetwork
     {
         protected const bool PRINTSTOPWATCH = false;
 
-        [JsonProperty] protected readonly List<ILayer> _layers = new();
-        protected int _boolLabels;
-        [JsonProperty] protected bool _configured = false;
-        protected int _floatLabels;
-        protected bool _ready = false;
-        private readonly List<IPrimaryLayer> _primaryLayers = new();
-        [JsonProperty] protected readonly List<Weights> _weights = new();
-
-        private ActivationPattern _activationPattern;
-
-        protected IOBuffers _startBuffers;
-        protected IOBuffers _middleBuffers;
-        protected IOBuffers _endBuffers;
         [JsonProperty] protected AdamHyperParameters _adamHyperParameters;
-        protected int _inputChannels;
-
-        [JsonIgnore] public ArrayView<float> Input => _layers.First().Input;
-
-        [JsonIgnore] public ArrayView<float> Output => _layers.Last().Output;
+        protected IOBuffers _endBuffers;
+        [JsonProperty] protected bool _initialized = false;
+        protected List<InputLayer> _inputLayers = new();
+        [JsonProperty] protected Shape _inputShape;
+        [JsonProperty] protected List<int> _layerIndeces = new();
+        protected IOBuffers _middleBuffers;
+        protected bool _ready = false;
+        [JsonProperty] protected List<ISerial> _serializedLayers = new();
+        protected IOBuffers _startBuffers;
+        protected List<Weights> _weights;
+        private readonly List<ILayer> _layers = new();
+        protected delegate float LossFunction(Vector[] expected);
 
         [JsonIgnore] public ArrayView<float> InGradient => _layers.Last().InGradient;
+        [JsonIgnore] public ArrayView<float> Input => _layers.First().Input;
 
         [JsonIgnore] public ArrayView<float> OutGradient => _layers.First().OutGradient;
-
-        [JsonIgnore] protected int LabelCount => _floatLabels + _boolLabels;
-
-        /// <value>Enumerates over the <see cref="IPrimaryLayer"/>'s of the <see cref="Network"/> that define its structure.</value>
-        [JsonIgnore]
-        public IEnumerable<IPrimaryLayer> PrimaryLayers
-        {
-            get
-            {
-                if (_primaryLayers == null)
-                {
-                    foreach (var layer in _layers)
-                    {
-                        if (layer is IPrimaryLayer primary)
-                            _primaryLayers.Add(primary);
-                    }
-                }
-                foreach (var layer in _primaryLayers)
-                    yield return layer;
-            }
-        }
-
+        [JsonIgnore] public ArrayView<float> Output => _layers.Last().Output;
         /// <value>The number of <see cref="Layer"/>s in the <see cref="Network"/>.</value>
         protected int Depth => _layers.Count;
 
-        /// <summary>
-        /// Appends a new <see cref="IPrimaryLayer"/> to the end of the <see cref="Network"/>.
-        /// </summary>
-        /// <param name="layer">The <see cref="IPrimaryLayer"/> being added.</param>
-        /// <exception cref="InvalidOperationException">Thrown if the <see cref="Network"/> is not being configured.</exception>
-        public void AddLayer(IPrimaryLayer layer)
+        [JsonIgnore] protected virtual LossFunction Loss { get; }
+
+        public SerialActivation AddActivation(Activation activationType)
         {
-            if (_configured)
-                throw new InvalidOperationException("Network is already configured.");
-            _primaryLayers.Add(layer);
-        }
-
-        /// <summary>
-        /// Adds a <see cref="SkipSplit"/> and <see cref="SkipConcatenate"/> to connect two layers in the <see cref="Network"/>.
-        /// </summary>
-        /// <param name="index1">The index of the <see cref="SkipSplit"/>.</param>
-        /// <param name="index2">The index of the <see cref="SkipConcatenate"/>.</param>
-        /// <exception cref="InvalidOperationException">Thrown if the <see cref="Network"/> is not being configured.</exception>
-        public void AddSkipConnection(int index1, int index2)
-        {
-            /*if (_configured)
-                throw new InvalidOperationException("Network is already configured.");
-
-            SkipConnectionSplit skipLayer = new();
-            SkipConnectionConcatenate concatenationLayer = skipLayer.GetConcatenationLayer();
-            _primaryLayers.Insert(index2, concatenationLayer);
-            _primaryLayers.Insert(index1, skipLayer);*/
-        }
-
-        /// <summary>
-        /// Removes all the <see cref="Layer"/>s from the <see cref="Network"/>.
-        /// </summary>
-        public void ClearLayers()
-        {
-            _primaryLayers.Clear();
-            _layers.Clear();
-        }
-
-        /// <summary>
-        /// Removes the specified <see cref="IPrimaryLayer"/> from the <see cref="Network"/>.
-        /// </summary>
-        /// <param name="layer">The <see cref="IPrimaryLayer"/> being removed.</param>
-        /// <exception cref="InvalidOperationException">Thrown if the <see cref="Network"/> is not being configured.</exception>
-        public void DeleteLayer(IPrimaryLayer layer)
-        {
-            if (_configured)
-                throw new InvalidOperationException("Network is already configured.");
-
-            _primaryLayers.Remove(layer);
-        }
-
-        /// <summary>
-        /// Remove's the <see cref="IPrimaryLayer"/> at the specified index from the <see cref="Network"/>.
-        /// </summary>
-        /// <param name="index">The index of the <see cref="IPrimaryLayer"/> to be removed.</param>
-        /// <exception cref="InvalidOperationException">Thrown if the <see cref="Network"/> is not being configured.</exception>
-        public void DeleteLayer(int index)
-        {
-            if (_configured)
-                throw new InvalidOperationException("Network is already configured.");
-
-            _primaryLayers.RemoveAt(index);
-        }
-
-        /// <summary>
-        /// Remove's all <see cref="IPrimaryLayer"/>s that match the conditions defined by the specified predicate
-        /// from the <see cref="Network"/>.
-        /// </summary>
-        /// <param name="predicate">A predicate that dictate's which <see cref="IPrimaryLayer"/>s are removed.</param>
-        /// <exception cref="InvalidOperationException">Thrown if the <see cref="Network"/> is not being configured.</exception>
-        public void DeleteLayers(Predicate<IPrimaryLayer> predicate)
-        {
-            if (_configured)
-                throw new InvalidOperationException("Network is already configured.");
-
-            _primaryLayers.RemoveAll(predicate);
-        }
-
-        /// <summary>
-        /// Adds a new <see cref="IPrimaryLayer"/> to the <see cref="Network"/> at the specified index.
-        /// </summary>
-        /// <param name="layer">The <see cref="IPrimaryLayer"/> to be added.</param>
-        /// <param name="index">The index to insert the layer at.</param>
-        /// <exception cref="InvalidOperationException">Thrown if the <see cref="Network"/> is not being configured.</exception>
-        public void InsertLayer(IPrimaryLayer layer, int index)
-        {
-            if (_configured)
-                throw new InvalidOperationException("Network is already configured.");
-
-            _primaryLayers.Insert(index, layer);
-        }
-
-        /// <summary>
-        /// Set's the <see cref="Network"/> into the state so that it's structure can be altered.
-        /// </summary>
-        public void ReconfigureNetwork()
-        {
-            _configured = false;
-            foreach (var layer in _layers)
+            SerialActivation activation = _serializedLayers.FirstOrDefault(x => x is SerialActivation act && act.Activation == activationType) as SerialActivation;
+            activation ??= new SerialActivation()
             {
-                if (layer is IPrimaryLayer primary)
-                    _primaryLayers.Add(primary);
-            }
-            _layers.Clear();
+                Activation = activationType
+            };
+
+            AddSerialLayer(activation);
+            return activation;
         }
 
-        /// <summary>
-        /// Reset's all the <see cref="ILayer"/>s that match the conditions defined by the specified
-        /// predicate to it's untrained state.
-        /// </summary>
-        /// <param name="predicate">A predicate that dictate's which <see cref="ILayer"/>s are reset.</param>
-        public void ResetAll(Predicate<ILayer> predicate)
+        public SerialAveragePool AddAveragePool(int scale)
         {
-            foreach (var layer in _layers)
+            SerialAveragePool avgPool = _serializedLayers.FirstOrDefault(x => x is SerialAveragePool pool && pool.Scale == scale) as SerialAveragePool;
+            avgPool ??= new SerialAveragePool(scale);
+            AddSerialLayer(avgPool);
+            return avgPool;
+        }
+
+        public SerialConcatenate AddConcatenation(SerialFork fork)
+        {
+            SerialConcatenate concatenation = new(fork);
+            AddSerialLayer(concatenation);
+            return concatenation;
+        }
+
+        public SerialConvolution AddConvolution(int outputDimensions, int filterSize, int stride = 1, IWeightInitializer initializer = null, bool useBias = true, IWeightInitializer biasInitializer = null, Activation activation = Activation.None)
+        {
+            Weights weights = new (initializer);
+            Weights bias = null;
+            if(useBias)
             {
-                if (predicate(layer))
-                    layer.Reset();
+                bias = new Weights(biasInitializer ?? new Constant(0));
             }
-        }
 
-        /// <summary>
-        /// Reset's the <see cref="ILayer"/> at the specified index to it's untrained state.
-        /// </summary>
-        /// <param name="index">The index of the <see cref="ILayer"/> to be reset.</param>
-        public void ResetLayer(int index)
-        {
-            _layers[index].Reset();
-        }
+            SerialConvolution convolution = new(outputDimensions, filterSize, stride, weights, bias);
+            AddSerialLayer(convolution);
 
-        /// <summary>
-        /// Reset's every <see cref="ILayer"/> in the network to their untrained states.
-        /// </summary>
-        public virtual void ResetNetwork()
-        {
-            foreach (var layer in _layers)
+            if(activation != Activation.None)
             {
-                layer.Reset();
+                AddActivation(activation);
             }
+
+            return convolution;
+        }
+
+        public SerialFork AddFork()
+        {
+            SerialFork fork = new();
+            AddSerialLayer(fork);
+            return fork;
+        }
+
+        public SerialInput AddInput(Shape input)
+        {
+            SerialInput layer = new(input);
+            AddSerialLayer(layer);
+            return layer;
+        }
+
+        public void AddSerialLayer(ISerial layer)
+        {
+            if (!_serializedLayers.Contains(layer))
+            {
+                _serializedLayers.Add(layer);
+            }
+
+            _layerIndeces.Add(_serializedLayers.IndexOf(layer));
+        }
+
+        public SerialOut AddSkipOut(SerialFork fork)
+        {
+            SerialOut skipOut = new(fork);
+            AddSerialLayer(skipOut);
+            return skipOut;
+        }
+
+        public SerialSummation AddSummation(int outputDimensions)
+        {
+            SerialSummation summation = _serializedLayers.FirstOrDefault(x => x is SerialSummation sum && sum.OutputDimensions == outputDimensions) as SerialSummation;
+            summation ??= new SerialSummation(outputDimensions);
+            AddSerialLayer(summation);
+            return summation;
+        }
+
+        public SerialUpsampling AddUpsampling(int scale)
+        {
+            SerialUpsampling upsampling = _serializedLayers.FirstOrDefault(x => x is SerialUpsampling up && up.Scale == scale) as SerialUpsampling;
+            upsampling ??= new SerialUpsampling(scale);
+            AddSerialLayer(upsampling);
+            return upsampling;
+        }
+
+        public SerialWarp AddWarp()
+        {
+            SerialWarp warp = _serializedLayers.FirstOrDefault(x => x is SerialWarp) as SerialWarp;
+            warp ??= new SerialWarp();
+            AddSerialLayer(warp); 
+            return warp;
+        }
+        public void Initialize()
+        {
+            if(_initialized)
+                return;
+
+            Shape shape = new();
+
+            foreach(var index in _layerIndeces)
+            {
+                shape = _serializedLayers[index].Initialize(shape);
+            }
+
+            _initialized = true;
         }
 
         /// <summary>
@@ -219,7 +170,7 @@ namespace ConvolutionalNeuralNetwork
 
                 using (StreamWriter writer = new(file))
                 {
-                    using(JsonWriter writer2 = new JsonTextWriter(writer))
+                    using (JsonWriter writer2 = new JsonTextWriter(writer))
                     {
                         var serializer = new JsonSerializer();
                         serializer.TypeNameHandling = TypeNameHandling.Auto;
@@ -227,26 +178,18 @@ namespace ConvolutionalNeuralNetwork
                         serializer.Serialize(writer2, this);
                     }
                 }
-                
+
             }
-            catch (System.Exception e)
+            catch (Exception e)
             {
                 Console.WriteLine("Error occured when trying to save data to file: " + file + "\n" + e.ToString());
             }
         }
 
-        /// <summary>
-        /// Set's the <see cref="ActivationPattern"/> for the <see cref="Network"/>.
-        /// </summary>
-        /// <param name="pattern">The <see cref="ActivationPattern"/> defining what <see cref="ISecondaryLayer"/>s to insert after
-        /// every <see cref="IPrimaryLayer"/> that is not a <see cref="IStructuralLayer"/>.</param>
-        /// <exception cref="InvalidOperationException">Thrown if the <see cref="Network"/> is not being configured.</exception>
-        public void SetActivationPattern(ActivationPattern pattern)
+        public void SetStartBuffers(Network network)
         {
-            if (_configured)
-                throw new InvalidOperationException("Network is already configured.");
-
-            _activationPattern = pattern;
+            _startBuffers = network._endBuffers == network._middleBuffers ? network._startBuffers : network._middleBuffers;
+            _middleBuffers = network._endBuffers;
         }
 
         /// <summary>
@@ -259,37 +202,73 @@ namespace ConvolutionalNeuralNetwork
         /// <param name="floatLabels">The number of floats used to label each image.</param>
         /// While <see cref="Network"/> is designed as a Conditional GAN, but it can function as a non-Conditional GAN
         /// by only useing one bool or float label whose value is always true/1.
-        public virtual void StartUp(int maxBatchSize, int inputWidth, int inputLength, int boolLabels, int floatLabels, AdamHyperParameters hyperParameters, int inputChannels)
+        public virtual void StartUp(int maxBatchSize, AdamHyperParameters hyperParameters)
         {
-            if (!_configured)
+            Construct();
+
+            _weights = new();
+            foreach (var layer in _serializedLayers)
             {
-                if (_activationPattern.Equals(default(ActivationPattern)))
+                if (layer is SerialWeighted weightedLayer)
                 {
-                    _activationPattern = new ActivationPattern(new NormalizationLayers[] {
-                    NormalizationLayers.Activation,
-                    NormalizationLayers.BatchNormalization
-                }, 0);
+                    weightedLayer.GetWeights(_weights);
                 }
-
-                foreach (var primaryLayer in _primaryLayers)
-                {
-                    _layers.Add(primaryLayer);
-                    if (primaryLayer is not IStructuralLayer)
-                    {
-                        foreach (var secondaryLayer in _activationPattern.GetLayers())
-                        {
-                            _layers.Add(secondaryLayer);
-                        }
-                    }
-                }
-
-                _configured = true;
             }
 
-            _boolLabels = boolLabels;
-            _floatLabels = floatLabels;
+            Shape shape = new();
+            InitializeLayers(ref shape, maxBatchSize);
+
+            _startBuffers.Allocate(maxBatchSize);
+            _middleBuffers.Allocate(maxBatchSize);
+            IOBuffers.SetCompliment(_startBuffers, _middleBuffers);
+
             _adamHyperParameters ??= hyperParameters;
-            _inputChannels = inputChannels;
+            _ready = true;
+        }
+
+        public float Test(List<FeatureMap[][]> inputs, Vector[] expected)
+        {
+            int batchSize = inputs[0].Length;
+            for (int i = 0; i < inputs.Count; i++)
+            {
+                _inputLayers[i].SetInput(inputs[i]);
+            }
+
+            for (int i = 0; i < Depth; i++)
+            {
+                Utility.StopWatch(() => _layers[i].Forward(batchSize), $"Forwards {i} {_layers[i].Name}", PRINTSTOPWATCH);
+            }
+
+            return Loss(expected);
+        }
+
+        public float Train(List<FeatureMap[][]> inputs, Vector[] expected)
+        {
+            int batchSize = inputs[0].Length;
+            for (int i = 0; i < inputs.Count; i++)
+            {
+                _inputLayers[i].SetInput(inputs[i]);
+            }
+
+            for (int i = 0; i < Depth; i++)
+            {
+                Utility.StopWatch(() => _layers[i].Forward(batchSize), $"Forwards {i} {_layers[i].Name}", PRINTSTOPWATCH);
+            }
+
+            float loss = Loss(expected);
+
+            for (int j = Depth - 1; j >= 0; j--)
+            {
+                Utility.StopWatch(() => _layers[j].Backwards(batchSize, true), $"Backwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
+            }
+
+            _adamHyperParameters.Update();
+            foreach (var weight in _weights)
+            {
+                weight.UpdateWeights(_adamHyperParameters);
+            }
+
+            return loss;
         }
 
         protected void InitializeLayers(ref Shape current, int maxBatchSize)
@@ -304,12 +283,7 @@ namespace ConvolutionalNeuralNetwork
             foreach (var layer in _layers)
             {
                 current = layer.Startup(current, inputBuffers, maxBatchSize);
-                if(layer is WeightedLayer weighted)
-                {
-                    foreach(var weight in weighted.SetUpWeights())
-                        _weights.Add(weight);
-                }
-                else if(layer is BatchNormalization bn)
+                if (layer is BatchNormalization bn)
                 {
                     bn.SetHyperParameters(_adamHyperParameters);
                 }
@@ -321,10 +295,22 @@ namespace ConvolutionalNeuralNetwork
             _endBuffers = outputBuffers;
         }
 
-        public void SetStartBuffers(Network network)
+        private void Construct()
         {
-            _startBuffers = network._endBuffers == network._middleBuffers ? network._startBuffers : network._middleBuffers; 
-            _middleBuffers = network._endBuffers;
+            if(!_initialized)
+            {
+                throw new InvalidOperationException("Network has not been initialized.");
+            }
+
+            foreach(var index in _layerIndeces)
+            {
+                var layer = _serializedLayers[index].Construct();
+                if(layer is InputLayer input)
+                {
+                    _inputLayers.Add(input);
+                }
+                _layers.Add(layer);
+            }
         }
     }
 }

@@ -21,7 +21,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         /// <param name="stride">The amount of movement over the image for each filter pass.</param>
         /// <param name="outputDimensions">A factor relating the number of input layers to the number of output layers.
         /// Must be positive. To reduce the number of output dimensions, use a <see cref="Summation"/> layer afterwards.</param>
-        public TransposeConvolution(int filterSize, int stride, int outputDimensions, IWeightInitializer initializer, bool useBias = true) : base(filterSize, stride, initializer, useBias)
+        public TransposeConvolution(int filterSize, int stride, int outputDimensions, Weights weights, Weights bias) : base(filterSize, stride, weights, bias)
         {
             if (outputDimensions < 1)
             {
@@ -38,11 +38,11 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         {
         }
 
-        public static Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, InverseLayerInfo> BackwardsFilterAction { get; } = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, InverseLayerInfo>(BackwardsFilterKernel);
+        public static Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, InverseLayerInfo> BackwardsFilterAction { get; } = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, InverseLayerInfo>(TransposeConvolutionFilterKernel);
 
-        public static Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, InverseLayerInfo> BackwardsOutGradientAction { get; } = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, InverseLayerInfo>(BackwardsGradientKernel);
+        public static Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, InverseLayerInfo> BackwardsOutGradientAction { get; } = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, InverseLayerInfo>(TransposeConvolutionGradientKernel);
 
-        public static Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, InverseLayerInfo> ForwardAction { get; } = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, InverseLayerInfo>(ForwardKernel);
+        public static Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, InverseLayerInfo> ForwardAction { get; } = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, InverseLayerInfo>(TransposeConvolutionKernel);
 
         /// <inheritdoc/>
         public override string Name => "Transpose Convolutional Layer";
@@ -148,7 +148,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         /// Because <see cref="Color"/> cannot be summed atomically, every three floats represents a single
         /// <see cref="Color"/> in the gradient.</param>
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void BackwardsFilterKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> input, ArrayView<float> filterGradient, InverseLayerInfo info)
+        private static void TransposeConvolutionFilterKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> input, ArrayView<float> filterGradient, InverseLayerInfo info)
         {
             (int inputOffset, int inGradientOffset) = info.GetOffset(index.X, index.Y);
 
@@ -179,7 +179,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         /// <param name="filter">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing one of the
         /// <see cref="Convolution"/>'s filters.</param>
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void BackwardsGradientKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, ArrayView<float> filter, InverseLayerInfo info)
+        private static void TransposeConvolutionGradientKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, ArrayView<float> filter, InverseLayerInfo info)
         {
             (int outGradientOffset, int inGradientOffset) = info.GetOffset(index.X, index.Y);
             float sum = 0;
@@ -208,7 +208,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         /// Because <see cref="Color"/> cannot be summed atomically, every three floats represents a single
         /// <see cref="Color"/> in the gradient.</param>
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void ForwardKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, ArrayView<float> filter, InverseLayerInfo info)
+        private static void TransposeConvolutionKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, ArrayView<float> filter, InverseLayerInfo info)
         {
             (int inputOffset, int outputOffset) = info.GetOffset(index.X, index.Y);
             float dL = input[index.Z + inputOffset];

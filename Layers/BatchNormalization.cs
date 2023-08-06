@@ -18,9 +18,9 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public class BatchNormalization : Layer, ISecondaryLayer, IUnchangedLayer
     {
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Views, Shape> s_backwardsAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Views, Shape>(BackwardsKernel);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Views, Shape> s_backwardsAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Views, Shape>(WeightsAndGradientKernel);
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Views, Shape> s_gradientAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Views, Shape>(GradientsKernel);
-        private static readonly Action<Index3D, ArrayView<float>, Views, Shape> s_normalizeAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, Views, Shape>(ForwardKernel);
+        private static readonly Action<Index3D, ArrayView<float>, Views, Shape> s_normalizeAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, Views, Shape>(NormalizeKernel);
         private static readonly Action<Index3D, ArrayView<float>, Views, Shape> s_sumAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, Views, Shape>(SumKernel);
         private static readonly Action<Index3D, ArrayView<float>, Views, Shape> s_varianceAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, Views, Shape>(VarianceKernel);
         private static readonly Action<Index1D, Views, float> s_meanAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, Views, float>(MeanKernel);
@@ -175,8 +175,8 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             if (_weights == null)
             {
-                _weights = new Weights(_inputShape.Dimensions, new Initializers.Constant(1), null);
-                _bias = new Weights(_inputShape.Dimensions);
+                //_weights = new Weights(_inputShape.Dimensions, new Initializers.Constant(1), null);
+                //_bias = new Weights(_inputShape.Dimensions);
             }
 
             _mean = new Vector(_inputShape.Dimensions);
@@ -202,7 +202,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="values">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s used in the equation
         /// to calculate the outGradient.</param>
         /// <param name="info">The <see cref="StaticLayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void BackwardsKernel(Index3D index, ArrayView<float> input, ArrayView<float> gradient, Views values, Shape shape)
+        private static void WeightsAndGradientKernel(Index3D index, ArrayView<float> input, ArrayView<float> gradient, Views values, Shape shape)
         {
             int ind = index.Z * shape.Volume + index.Y * shape.Area + index.X;
             gradient[ind] = XMath.Clamp(gradient[ind] * values.Weight[index.Y] / values.Sigma[index.Y] + values.SigmaGradient[index.Y] * (input[ind] - values.Mean[index.Y]) + values.MeanGradient[index.Y], -1, 1);
@@ -235,7 +235,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="values">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s used in the equation to
         /// calculate the normalized <see cref="Color"/>.</param>
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void ForwardKernel(Index3D index, ArrayView<float> input, Views values, Shape shape)
+        private static void NormalizeKernel(Index3D index, ArrayView<float> input, Views values, Shape shape)
         {
             int ind = index.Z * shape.Volume + index.Y * shape.Area + index.X;
             input[ind] = (input[ind] - values.Mean[index.Y]) * values.Weight[index.Y] / values.Sigma[index.Y] + values.Bias[index.Y];

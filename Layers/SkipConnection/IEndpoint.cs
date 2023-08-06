@@ -1,8 +1,8 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 
-namespace ConvolutionalNeuralNetwork.Layers.Skip
+namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
 {
-    public interface ISkipEndpoint
+    public interface IEndpoint
     {
         int ID { get; }
 

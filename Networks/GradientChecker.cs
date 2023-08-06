@@ -12,11 +12,9 @@ namespace ConvolutionalNeuralNetwork.Networks
         FeatureMap[,] _input;
         FeatureMap[,] _output;
 
-        public override void StartUp(int maxBatchSize, int width, int length, int boolLabels, int floatLabels, AdamHyperParameters hyperParameters, int inputChannels)
+        public override void StartUp(int maxBatchSize, AdamHyperParameters hyperParameters)
         {
-            base.StartUp(maxBatchSize, width, length, boolLabels, floatLabels, hyperParameters, 3);
-
-            int inputArea = width * length;
+            base.StartUp(maxBatchSize, hyperParameters);
 
             /*Shape[] current = new Shape[1];
             current[0] = new Shape(width, length);

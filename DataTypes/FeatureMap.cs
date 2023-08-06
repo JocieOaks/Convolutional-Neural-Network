@@ -107,6 +107,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 int paddingY = (length - bitmap.Height) / 2;
 
                 FeatureMap[] maps = new FeatureMap[channels];
+                System.Drawing.Color background = bitmap.GetPixel(0, 0);
                 for (int i = 0; i < maps.Length; i++)
                 {
                     maps[i] = new(width, length);
@@ -114,7 +115,12 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                     {
                         for(int x = 0; x < width; x++)
                         {
-                            maps[i][x, y] = -1;
+                            maps[i][x, y] = i switch {
+                                0 => (background.R - 127.5f) / 127.5f,
+                                1 => (background.G - 127.5f) / 127.5f,
+                                2 => (background.B - 127.5f) / 127.5f,
+                                _ => (background.A - 127.5f) / 127.5f,
+                            };
                         }
                     }
 

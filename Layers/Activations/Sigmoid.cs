@@ -41,15 +41,15 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             _inputCopy.DecrementLiveCount();
         }
 
-        private static readonly Action<Index1D, ArrayView<float>> ForwardAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>>(ForwardKernel);
-        private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>> BackwardsAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(BackwardsKernel);
+        private static readonly Action<Index1D, ArrayView<float>> ForwardAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>>(SigmoidKernel);
+        private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>> BackwardsAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(SigmoidGradientKernel);
 
-        private static void ForwardKernel(Index1D index, ArrayView<float> input)
+        private static void SigmoidKernel(Index1D index, ArrayView<float> input)
         {
             input[index.X] = 1 / (1 + XMath.Exp(-input[index.X]));
         }
 
-        private static void BackwardsKernel(Index1D index, ArrayView<float> input, ArrayView<float> gradient)
+        private static void SigmoidGradientKernel(Index1D index, ArrayView<float> input, ArrayView<float> gradient)
         {
             float exp = XMath.Exp(-input[index.X]);
             float sig = 1 / (1 + exp);

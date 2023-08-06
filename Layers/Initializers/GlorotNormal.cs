@@ -1,4 +1,4 @@
-﻿using ConvolutionalNeuralNetwork.Layers.Weighted;
+﻿using ConvolutionalNeuralNetwork.Layers.Serial;
 
 namespace ConvolutionalNeuralNetwork.Layers.Initializers
 {
@@ -6,7 +6,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Initializers
     {
         public static GlorotNormal Instance { get; } = new GlorotNormal();
 
-        public float GetWeight(WeightedLayer layer)
+        public float GetWeight(SerialWeighted layer)
         {
             float std = MathF.Sqrt(2f / (layer.FanIn + layer.FanOut));
 

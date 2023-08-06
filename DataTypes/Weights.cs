@@ -4,45 +4,25 @@ using ConvolutionalNeuralNetwork.Layers.Initializers;
 using ConvolutionalNeuralNetwork.Layers.Weighted;
 using ILGPU;
 using ILGPU.Algorithms;
-using ILGPU.IR;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
-using System.ComponentModel;
-using System.Reflection.Emit;
 using System.Runtime.Serialization;
+using ConvolutionalNeuralNetwork.Layers.Serial;
 
 namespace ConvolutionalNeuralNetwork.DataTypes
 {
     [Serializable]
-    public class Weights : IWeights
+    public class Weights
     {
-        [JsonProperty] private readonly Vector _firstMoment;
-        [JsonProperty] private readonly Vector _secondMoment;
+        [JsonProperty] private Vector _firstMoment;
+        [JsonProperty] private Vector _secondMoment;
         private Vector _gradient;
         [JsonProperty] private Vector _weights;
+        private IWeightInitializer _initializer;
 
-        public Weights(int length, IWeightInitializer initializer, WeightedLayer layer)
+        public Weights(IWeightInitializer initializer)
         {
-            _weights = new Vector(length);
-
-            initializer ??= GlorotUniform.Instance;
-
-            for (int i = 0; i < length; i++)
-            {
-                _weights[i] = initializer.GetWeight(layer);
-            }
-
-            _gradient = new Vector(length);
-            _firstMoment = new Vector(length);
-            _secondMoment = new Vector(length);
-        }
-
-        public Weights(int length)
-        {
-            _weights = new Vector(length);
-            _gradient = new Vector(length);
-            _firstMoment = new Vector(length);
-            _secondMoment = new Vector(length);
+            _initializer = initializer;
         }
 
         [JsonConstructor] private Weights() { }
@@ -206,7 +186,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         }
 
         private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, float, float, float> s_updateAction =
-            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, float, float, float>(UpdateKernal);
+            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, float, float, float>(UpdateKernel);
 
         [OnSerializing]
         private void OnSerializing(StreamingContext context)
@@ -216,7 +196,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             _secondMoment.SyncCPU();
         }
 
-        private static void UpdateKernal(Index1D index, ArrayView<float> weights, ArrayView<float> firstMoment, ArrayView<float> secondMoment, ArrayView<float> gradients, float learningRate, float firstMomentDecay, float secondMomentDecay, float clip)
+        private static void UpdateKernel(Index1D index, ArrayView<float> weights, ArrayView<float> firstMoment, ArrayView<float> secondMoment, ArrayView<float> gradients, float learningRate, float firstMomentDecay, float secondMomentDecay, float clip)
         {
             float gradient = XMath.Clamp(gradients[index], -clip, clip);
             float first = firstMomentDecay * firstMoment[index] + (1 - firstMomentDecay) * gradient;
@@ -225,6 +205,32 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             secondMoment[index] = second;
             float result = learningRate * first / (XMath.Sqrt(second) + Utility.ASYMPTOTEERRORCORRECTION);
             weights[index] -= result;
+        }
+
+        public void Initialize(int length, SerialWeighted layer)
+        {
+            if(_weights != null)
+            {
+                if(length != _weights.Length)
+                {
+                    throw new ArgumentException("Weights are incompatible with layer.");
+                }
+            }
+            else
+            {
+                _weights = new Vector(length);
+
+                _initializer ??= GlorotUniform.Instance;
+
+                for (int i = 0; i < length; i++)
+                {
+                    _weights[i] = _initializer.GetWeight(layer);
+                }
+
+                _gradient = new Vector(length);
+                _firstMoment = new Vector(length);
+                _secondMoment = new Vector(length);
+            }
         }
     }
 }

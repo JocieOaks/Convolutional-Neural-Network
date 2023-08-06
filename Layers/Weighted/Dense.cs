@@ -11,13 +11,13 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
     public class Dense : WeightedLayer, IPrimaryLayer
     {
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo> s_backwardsFilterAction =
-            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo>(BackwardsFilterKernel);
+            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo>(DenseFilterKernel);
 
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo> s_backwardsOutAction =
-            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo>(BackwardsOutKernel);
+            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo>(DenseGradientKernel);
 
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo> s_forwardAction =
-            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo>(ForwardKernel);
+            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo>(DenseKernel);
 
         private Vector _inputCopy;
         [JsonProperty] private int _outputUnits;
@@ -26,7 +26,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         /// Initializes a new instance of the <see cref="Dense"/> class.
         /// </summary>
         /// <param name="outputUnits">The number of units to output when performing a forward pass with <see cref="Dense"/>.</param>
-        public Dense(int outputUnits, IWeightInitializer initializer, bool useBias = true) : base(0, 0, initializer, useBias)
+        public Dense(int outputUnits, Weights weight, Weights bias) : base(0, 0, weight, bias)
         {
             _outputUnits = outputUnits;
         }
@@ -102,21 +102,21 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             return _outputShape;
         }
 
-        private static void BackwardsFilterKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> input, ArrayView<float> filterGradient, LayerInfo info)
+        private static void DenseFilterKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> input, ArrayView<float> filterGradient, LayerInfo info)
         {
             int inputArea = info.InputArea * info.InputDimensions;
 
             Atomic.Add(ref filterGradient[index.X + inputArea * index.Z], inGradient[index.Z + info.OutputArea * index.Y] * input[index.X + inputArea * index.Y]);
         }
 
-        private static void BackwardsOutKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, ArrayView<float> filter, LayerInfo info)
+        private static void DenseGradientKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, ArrayView<float> filter, LayerInfo info)
         {
             int inputArea = info.InputArea * info.InputDimensions;
 
             Atomic.Add(ref outGradient[index.X + inputArea * index.Y], inGradient[index.Z + info.OutputArea * index.Y] * filter[index.X + inputArea * index.Z]);
         }
 
-        private static void ForwardKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, ArrayView<float> filter, LayerInfo info)
+        private static void DenseKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, ArrayView<float> filter, LayerInfo info)
         {
             int inputArea = info.InputArea * info.InputDimensions;
 

@@ -3,6 +3,7 @@ using ConvolutionalNeuralNetwork.GPU;
 using ConvolutionalNeuralNetwork.Layers.Initializers;
 using ILGPU;
 using ILGPU.Backends.EntryPoints;
+using ILGPU.Runtime;
 using Newtonsoft.Json;
 using System.Runtime.Serialization;
 
@@ -11,27 +12,37 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 {
     public abstract class WeightedLayer : Layer
     {
-        private IWeightInitializer _weightInitializer;
-        private bool _useBias;
-        private IWeights _bias;
-        protected IWeights _weights;
+        private bool UseBias => _bias != null;
+        private Weights _bias;
+        protected Weights _weights;
 
-        public WeightedLayer(int filterSize, int stride, IWeightInitializer weightInitializer, bool useBias) : base(filterSize, stride)
-        {
-            _weightInitializer = weightInitializer;
-            _useBias = useBias;
-        }
-
-        public WeightedLayer(int filterSize, int stride, SharedWeights weights, SharedWeights bias) : base (filterSize, stride)
+        public WeightedLayer(int filterSize, int stride, Weights weights, Weights bias) : base (filterSize, stride)
         {
             _weights = weights;
-            if(bias != null)
-            {
-                _useBias = true;
-                _bias = bias;
-            }
+            _bias = bias;
         }
 
+
+        private static void BiasKernal(Index3D index, ArrayView<float> value, ArrayView<float> bias, int dimensions, int length)
+        {
+            Atomic.Add(ref value[(index.Z * dimensions + index.Y) * length + index.X], bias[index.Y]);
+        }
+
+        private static void BiasGradientKernal(Index2D index, ArrayView<float> biasGradient, ArrayView<float> inGradient, int dimensions, int length)
+        {
+            float sum = 0;
+            for (int i = 0; i < length; i++)
+            {
+                 sum += inGradient[(index.Y * dimensions + index.X) * length + i];
+            }
+            Atomic.Add(ref biasGradient[index.X], sum);
+        }
+
+
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, int, int> s_biasAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, int, int>(BiasKernal);
+
+        private static readonly Action<Index2D, ArrayView<float>, ArrayView<float>, int, int> s_biasGradientAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<float>, ArrayView<float>, int, int>(BiasGradientKernal);
+        
         [JsonConstructor] protected WeightedLayer() { }
 
         protected abstract void ForwardChild(int batchSize);
@@ -43,8 +54,8 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             ForwardChild(batchSize);
             if (_bias != null)
             {
-                Index3D biasIndex = new(batchSize, _outputShape.Dimensions, _outputShape.Area);
-                GPUManager.BiasAction(biasIndex, _buffers.Output, _bias.WeightsGPU<float>(), _outputShape.Dimensions, _outputShape.Area);
+                Index3D biasIndex = new(_outputShape.Area, _outputShape.Dimensions, batchSize);
+                s_biasAction(biasIndex, _buffers.Output, _bias.WeightsGPU<float>(), _outputShape.Dimensions, _outputShape.Area);
 
                 Synchronize();
 
@@ -57,10 +68,10 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             if (update)
             {
                 BackwardsUpdate(batchSize);
-                if (_useBias)
+                if (UseBias)
                 {
-                    Index3D biasIndex = new(batchSize, _outputShape.Dimensions, _outputShape.Area);
-                    GPUManager.BiasGradientAction(biasIndex, _bias.GradientGPU<float>(), _buffers.InGradient, _outputShape.Dimensions, _outputShape.Area);
+                    Index2D biasIndex = new(_outputShape.Dimensions, batchSize);
+                    s_biasGradientAction(biasIndex, _bias.GradientGPU<float>(), _buffers.InGradient, _outputShape.Dimensions, _outputShape.Area);
 
                     Synchronize();
 
@@ -75,69 +86,13 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
         protected void BiasTest(Shape input, Shape output, int batchSize)
         {
-            if (_useBias)
+            if (UseBias)
             {
                 (_bias as Weights).TestFilterGradient(this, input, output, _buffers, batchSize);
             }
         }
 
-        public IEnumerable<Weights> SetUpWeights()
-        {
-            if(_weights is SharedWeights shared)
-            {
-                if (shared.Initialized == false)
-                {
-                    Weights weights = new Weights(WeightLength, shared.WeightInitializer, this);
-                    shared.SetWeights(weights);
-                    yield return weights;
-                }
-                else
-                {
-                    if(_weights.Length != WeightLength)
-                    {
-                        throw new Exception("Shared Weights are incorrect size for this layer.");
-                    }
-                }
-            }
-            else
-            {
-                _weights ??= new Weights(WeightLength, _weightInitializer, this);
-                yield return _weights as Weights;
-            }
-            
-            if (_useBias)
-            {
-                if (_bias is SharedWeights sharedBias)
-                {
-                    if (sharedBias.Initialized == false)
-                    {
-                        Weights bias = new(_outputShape.Dimensions);
-                        sharedBias.SetWeights(bias);
-                        yield return bias;
-                    }
-                    else
-                    {
-                        if (_bias.Length != _outputShape.Dimensions)
-                        {
-                            throw new Exception("Shared Weights are incorrect size for this layer.");
-                        }
-                    }
-                }
-                else
-                {
-                    _bias ??= new Weights(_outputShape.Dimensions);
-                    yield return _bias as Weights;
-                }
-            }
-        }
-
         protected abstract int WeightLength { get; }
-
-        [OnDeserialized]
-        public void OnDeserialized(StreamingContext context)
-        {
-            _useBias = _bias != null;
-        }
 
         public int FanIn => _inputShape.Volume;
 
@@ -158,7 +113,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
                 LearningRate = 0
             };
             adam.Update();
-            SetUpWeights();
 
             buffer.Allocate(batchSize);
             complimentBuffer.Allocate(batchSize);

@@ -50,9 +50,9 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Shape, Shape> s_forwardAction
-            = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Shape, Shape>(ForwardKernel);
+            = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Shape, Shape>(WarpKernel);
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, Shape, Shape> s_backwardsAction
-            = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, Shape, Shape>(BackwardsKernel);
+            = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, Shape, Shape>(WarpGradientKernel);
 
         /// <summary>
         /// 
@@ -62,7 +62,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// Y - Dimension
         /// Z - Position Index</param>
         /// <param name=""></param>
-        private static void ForwardKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, Shape inputShape, Shape outputShape)
+        private static void WarpKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, Shape inputShape, Shape outputShape)
         {
             int outputOffset = outputShape.GetOffset(index.Z, index.Y);
             int inputOffset = inputShape.GetOffset(index.Z, index.Y + 2);      //The first two dimensions are the x and y warp components.
@@ -98,7 +98,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             output[outputOffset + index.X] = sum;
         }
 
-        private static void BackwardsKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> input, ArrayView<float> outGradient, Shape inputShape, Shape outputShape)
+        private static void WarpGradientKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> input, ArrayView<float> outGradient, Shape inputShape, Shape outputShape)
         {
             int outputOffset = outputShape.GetOffset(index.Z, index.Y);
             int inputOffset = inputShape.GetOffset(index.Z, index.Y + 2);   //The first two dimensions are the x and y warp components.

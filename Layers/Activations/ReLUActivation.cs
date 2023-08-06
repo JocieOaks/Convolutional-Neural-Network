@@ -1,4 +1,5 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
+using ConvolutionalNeuralNetwork.Networks;
 using ILGPU;
 using ILGPU.Runtime;
 using ILGPU.Runtime.OpenCL;
@@ -13,7 +14,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
     public class ReLUActivation : Layer, ISecondaryLayer, IUnchangedLayer
     {
         private static readonly Action<Index1D, ArrayView<int>, ArrayView<float>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<int>, ArrayView<float>>(BackwardsKernel);
-        private static readonly Action<Index1D, ArrayView<float>, ArrayView<int>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<int>>(ForwardKernel);
+        private static readonly Action<Index1D, ArrayView<float>, ArrayView<int>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<int>>(ForwardReLUKernel);
         private ArrayView<int> _deviceZeroed;
 
         private const float NEGATIVESCALING = 0.2f;
@@ -77,7 +78,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             }
         }
 
-        private static void ForwardKernel(Index1D index, ArrayView<float> input, ArrayView<int> zeroed)
+        private static void ForwardReLUKernel(Index1D index, ArrayView<float> input, ArrayView<int> zeroed)
         {
             int byteIndex = index.X / 32;
             int bit = index.X - 32 * byteIndex;

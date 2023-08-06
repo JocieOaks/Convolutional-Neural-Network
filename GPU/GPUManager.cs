@@ -32,8 +32,6 @@ namespace ConvolutionalNeuralNetwork.GPU
             _lru = new LRU(Accelerator.MemorySize, 0.8f);
             CopyAction = Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(CopyKernel);
             AddAction = Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, int>(AddKernel);
-            BiasAction = Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, int, int>(BiasKernal);
-            BiasGradientAction = Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, int, int>(BiasGradientKernal);
         }
 
         /// <value>A Cuda <see cref="global::ILGPU.Runtime.Accelerator"/> for running <see cref="global::ILGPU"/> kernels.</value>
@@ -45,9 +43,7 @@ namespace ConvolutionalNeuralNetwork.GPU
 
         public static Action<Index3D, ArrayView<float>, ArrayView<float>, int> AddAction { get; }
 
-        public static Action<Index3D, ArrayView<float>, ArrayView<float>, int, int> BiasAction { get; }
 
-        public static Action<Index3D, ArrayView<float>, ArrayView<float>, int, int> BiasGradientAction { get; }
 
         public static (uint, MemoryBuffer) Allocate<T>(Cacheable<T> cacheable) where T : unmanaged => _lru.Allocate(cacheable, Accelerator);
 
@@ -94,15 +90,7 @@ namespace ConvolutionalNeuralNetwork.GPU
         /// </param>
         /// <param name="value"></param>
         /// <param name="bias"></param>
-        private static void BiasKernal(Index3D index, ArrayView<float> value, ArrayView<float> bias, int dimensions, int length)
-        {
-            Atomic.Add(ref value[(index.X * dimensions + index.Y) * length + index.Z], bias[index.Y]);
-        }
 
-        private static void BiasGradientKernal(Index3D index, ArrayView<float> biasGradient, ArrayView<float> inGradient, int dimensions, int length)
-        {
-            Atomic.Add(ref biasGradient[index.Y], inGradient[(index.X * dimensions + index.Y) * length + index.Z]);
-        }
 
         public static uint GCItem(uint Id) => _lru.GCItem(Id);
 

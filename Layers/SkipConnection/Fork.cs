@@ -1,5 +1,6 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using ConvolutionalNeuralNetwork.GPU;
+using ConvolutionalNeuralNetwork.Networks;
 using ILGPU;
 using ILGPU.IR.Types;
 using ILGPU.Runtime;
@@ -7,48 +8,48 @@ using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
 using System.Runtime.Serialization;
 
-namespace ConvolutionalNeuralNetwork.Layers.Skip
+namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
 {
     /// <summary>
-    /// The <see cref="SkipSplit"/> class is a <see cref="Layer"/> that creates two sets of the same <see cref="FeatureMap"/>s, sending
-    /// one as input to the next <see cref="Layer"/> and sending one to a <see cref="SkipConcatenate"/> later in the <see cref="Network"/>.
+    /// The <see cref="Fork"/> class is a <see cref="Layer"/> that creates two sets of the same <see cref="FeatureMap"/>s, sending
+    /// one as input to the next <see cref="Layer"/> and sending one to a <see cref="Concatenate"/> later in the <see cref="Network"/>.
     /// </summary>
-    public class SkipSplit : Layer, IStructuralLayer, IUnchangedLayer
+    public class Fork : Layer, IStructuralLayer, IUnchangedLayer
     {
         private static int s_nextID = 1;
-        public static Dictionary<int, SkipSplit> Splits { get; } = new Dictionary<int, SkipSplit>();
+        public static Dictionary<int, Fork> Splits { get; } = new Dictionary<int, Fork>();
 
         /// <inheritdoc/>
-        public override string Name => "Skip Connection Layer";
+        public override string Name => "Skip Fork Layer";
 
-        private List<ISkipEndpoint> _outputLayers = new();
+        private List<IEndpoint> _outputLayers = new();
         private List<Vector> _skipConnections = new();
         private int _maxBatchSize;
         [JsonProperty] public int ID { get; }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="SkipSplit"/> class.
+        /// Initializes a new instance of the <see cref="Fork"/> class.
         /// </summary>
-        public SkipSplit() : base(1, 1)
+        public Fork() : base(1, 1)
         {
             ID = s_nextID++;
             Splits[ID] = this;
         }
 
-        [JsonConstructor] private SkipSplit(int id)
+        [JsonConstructor] private Fork(int id)
         {
             ID = id;
             Splits[id] = this;
         }
 
         /// <summary>
-        /// Gives the corresponding <see cref="SkipConcatenate"/> layer that connects to this <see cref="SkipSplit"/>, creating
+        /// Gives the corresponding <see cref="Concatenate"/> layer that connects to this <see cref="Fork"/>, creating
         /// it if it does not already exist.
         /// </summary>
-        /// <returns>Returns the <see cref="SkipConcatenate"/>.</returns>
-        public SkipConcatenate GetConcatenationLayer()
+        /// <returns>Returns the <see cref="Concatenate"/>.</returns>
+        public Concatenate GetConcatenationLayer()
         {
-            var concat = new SkipConcatenate();
+            var concat = new Concatenate();
             _outputLayers.Add(concat);
             if (_ready)
             {
@@ -59,7 +60,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Skip
             return concat;
         }
 
-        public void Connect(ISkipEndpoint endpoint)
+        public void Connect(IEndpoint endpoint)
         {
             _outputLayers.Add(endpoint);
             if (_ready)
@@ -69,9 +70,9 @@ namespace ConvolutionalNeuralNetwork.Layers.Skip
             }
         }
 
-        public SkipOut GetOutLayer()
+        public Out GetOutLayer()
         {
-            var skipOut = new SkipOut();
+            var skipOut = new Out();
             _outputLayers.Add(skipOut);
             if (_ready)
             {

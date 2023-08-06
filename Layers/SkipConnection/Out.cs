@@ -5,13 +5,13 @@ using ILGPU.Runtime;
 using Newtonsoft.Json;
 using System.Runtime.Serialization;
 
-namespace ConvolutionalNeuralNetwork.Layers.Skip
+namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
 {
     /// <summary>
-    /// The <see cref="SkipConcatenate"/> class is a <see cref="Layer"/> for combining a set of <see cref="FeatureMap"/>s from the previous
-    /// <see cref="Layer"/> with the <see cref="FeatureMap"/>s from its corresponding <see cref="SkipSplit"/>.
+    /// The <see cref="Concatenate"/> class is a <see cref="Layer"/> for combining a set of <see cref="FeatureMap"/>s from the previous
+    /// <see cref="Layer"/> with the <see cref="FeatureMap"/>s from its corresponding <see cref="Fork"/>.
     /// </summary>
-    public class SkipOut : Layer, IStructuralLayer, ISkipEndpoint
+    public class Out : Layer, IStructuralLayer, IEndpoint
     {
         private Vector _skipConnection;
         private Shape _skipShape;
@@ -19,16 +19,16 @@ namespace ConvolutionalNeuralNetwork.Layers.Skip
         [JsonProperty] public int ID { get; private set; }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="SkipConcatenate"/> class.
+        /// Initializes a new instance of the <see cref="Concatenate"/> class.
         /// </summary>
-        public SkipOut() : base(1, 1)
+        public Out() : base(1, 1)
         {
         }
 
         [OnDeserialized]
         private void OnDeserialized(StreamingContext context)
         {
-            if(SkipSplit.Splits.TryGetValue(ID, out var split))
+            if(Fork.Splits.TryGetValue(ID, out var split))
             {
                 split.Connect(this);
             }
@@ -52,11 +52,11 @@ namespace ConvolutionalNeuralNetwork.Layers.Skip
         }
 
         /// <summary>
-        /// Connects the <see cref="SkipConcatenate"/> with its <see cref="SkipSplit"/> sharing the <see cref="FeatureMap"/>s
+        /// Connects the <see cref="Concatenate"/> with its <see cref="Fork"/> sharing the <see cref="FeatureMap"/>s
         /// between them.
         /// </summary>
-        /// <param name="inputs">The split outputs of the <see cref="SkipSplit"/>.</param>
-        /// <param name="outGradients">The split inGradients of the <see cref="SkipSplit"/>.</param>
+        /// <param name="inputs">The split outputs of the <see cref="Fork"/>.</param>
+        /// <param name="outGradients">The split inGradients of the <see cref="Fork"/>.</param>
         public void Connect(Vector skipConnection, Shape skipInputShape, int id)
         {
             _skipConnection = skipConnection;

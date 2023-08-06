@@ -1,4 +1,5 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
+using ConvolutionalNeuralNetwork.Networks;
 using ILGPU;
 using System;
 

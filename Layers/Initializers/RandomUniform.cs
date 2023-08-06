@@ -1,4 +1,4 @@
-﻿using ConvolutionalNeuralNetwork.Layers.Weighted;
+﻿using ConvolutionalNeuralNetwork.Layers.Serial;
 
 namespace ConvolutionalNeuralNetwork.Layers.Initializers
 {
@@ -26,7 +26,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Initializers
             _delta = _max - _min;
         }
 
-        public float GetWeight(WeightedLayer layer)
+        public float GetWeight(SerialWeighted layer)
         {
             return Utility.Random.NextSingle() * _delta + _min;
         }

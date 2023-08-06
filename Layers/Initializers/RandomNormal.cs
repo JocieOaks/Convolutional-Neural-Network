@@ -1,4 +1,4 @@
-﻿using ConvolutionalNeuralNetwork.Layers.Weighted;
+﻿using ConvolutionalNeuralNetwork.Layers.Serial;
 
 namespace ConvolutionalNeuralNetwork.Layers.Initializers
 {
@@ -13,7 +13,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Initializers
             _std = std;
         }
 
-        public float GetWeight(WeightedLayer layer)
+        public float GetWeight(SerialWeighted layer)
         {
             return Utility.RandomGauss(_mean, _std);
         }

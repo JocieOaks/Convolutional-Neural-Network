@@ -31,6 +31,32 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             _values = new float[length];
         }
 
+        public Vector(FeatureMap[] maps)
+        {
+            int area = maps[0].Area;
+            int width = maps[0].Width;
+            for(int i = 1; i < maps.Length; i++)
+            {
+                if (maps[i].Area != area)
+                {
+                    throw new ArgumentException("Maps do not have same dimensions.");
+                }
+            }
+
+            _values = new float[maps.Length * maps[0].Area];
+
+            for(int i = 0; i < maps.Length; i++)
+            {
+                for(int y = 0; y < maps[i].Length; y++)
+                {
+                    for(int x = 0;  x < maps[i].Width; x++)
+                    {
+                        _values[i * area + y * width + x] = maps[i][x, y];
+                    }
+                }
+            }
+        }
+
         private Vector() { }
 
         /// <value>The number of dimensions of the <see cref="Vector"/>.</value>

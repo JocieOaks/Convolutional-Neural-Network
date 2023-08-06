@@ -41,16 +41,16 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             _outputCopy.DecrementLiveCount();
         }
 
-        private static readonly Action<Index1D, ArrayView<float>> ForwardAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>>(ForwardKernel);
+        private static readonly Action<Index1D, ArrayView<float>> ForwardAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>>(HyperTanKernel);
 
-        private static void ForwardKernel(Index1D index, ArrayView<float> input)
+        private static void HyperTanKernel(Index1D index, ArrayView<float> input)
         {
             input[index.X] = XMath.Tanh(input[index.X]);
         }
 
-        private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>> BackwardsAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(BackwardsKernel);
+        private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>> BackwardsAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(HyperTanGradientKernel);
 
-        private static void BackwardsKernel(Index1D index, ArrayView<float> output, ArrayView<float> gradient)
+        private static void HyperTanGradientKernel(Index1D index, ArrayView<float> output, ArrayView<float> gradient)
         {
             gradient[index.X] = gradient[index.X] * (1 - XMath.Pow(output[index.X], 2));
         }

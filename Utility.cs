@@ -49,12 +49,6 @@ namespace ConvolutionalNeuralNetwork
             complimentBuffer.OutputDimensionArea(inputDimensions * inputSize * inputSize);
 
             Shape outputShape = layer.Startup(inputShapes, buffer, batchSize);
-            if(layer is WeightedLayer weighted)
-            {
-                foreach (var weight in weighted.SetUpWeights())
-                {
-                }
-            }
             FeatureMap[] outputs = new FeatureMap[outputDimensions * batchSize];
             for(int i = 0; i < outputDimensions * batchSize; i++)
             {

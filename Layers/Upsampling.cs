@@ -34,11 +34,11 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, InverseLayerInfo> s_forwardAction
-            = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, InverseLayerInfo>(ForwardKernel);
+            = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, InverseLayerInfo>(ForwardUpKernel);
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, InverseLayerInfo> s_backwardsAction
             = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, InverseLayerInfo>(BackwardsKernel);
 
-        private static void ForwardKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, InverseLayerInfo info)
+        private static void ForwardUpKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, InverseLayerInfo info)
         {
             (int inputOffset, int outputOffset) = info.GetOffset(index.Z, index.Y);
 

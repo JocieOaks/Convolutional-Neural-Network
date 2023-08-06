@@ -1,5 +1,6 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using ConvolutionalNeuralNetwork.GPU;
+using ConvolutionalNeuralNetwork.Networks;
 using ILGPU;
 using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
@@ -23,18 +24,15 @@ namespace ConvolutionalNeuralNetwork.Layers
     public class Summation : Layer, IStructuralLayer
     {
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Shape, int> s_backwardsAction =
-            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Shape, int>(BackwardsKernel);
+            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Shape, int>(SummationGradientKernel);
 
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Shape, int> s_forwardAction =
-            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Shape, int>(ForwardKernel);
+            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Shape, int>(SummationKernel);
 
-        [JsonProperty]
-        private Shape Output
+        public Summation(int outputDimensions) : base(1, 1)
         {
-            get => _outputShape;
-            set => _outputShape = value;
+            _outputShape = new Shape(0, 0, outputDimensions);
         }
-        [JsonConstructor] public Summation() : base(1, 1) { }
         /// <inheritdoc/>
         public override string Name => "Summation Layer";
         /// <inheritdoc/>
@@ -61,16 +59,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
         }
 
-        /// <summary>
-        /// Sets the number of dimensions for the output. The input dimensions will need to be a multiple of the output dimensions
-        /// or vice versa. Overwrites <see cref="SetOutputDivisor(int)"/>.
-        /// </summary>
-        /// <param name="dimensions">The number of output dimensions.</param>
-        public void SetOutputDimensions(int dimensions)
-        {
-            _outputShape = new Shape(0, 0, dimensions);
-        }
-
         /// <inheritdoc/>
         public override Shape Startup(Shape inputShapes, IOBuffers buffers, int maxBatchSize)
         {
@@ -83,7 +71,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             return _outputShape;
         }
 
-        private static void BackwardsKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, Shape shape, int outputDimensions)
+        private static void SummationGradientKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, Shape shape, int outputDimensions)
         {
             int outGradientIndex = (index.X * shape.Dimensions + index.Y) * shape.Area + index.Z;
             int inGradientIndex = (index.X * outputDimensions + index.Y % outputDimensions) * shape.Area + index.Z;
@@ -91,7 +79,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             outGradient[outGradientIndex] = inGradient[inGradientIndex];
         }
 
-        private static void ForwardKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, Shape shape, int outputDimensions)
+        private static void SummationKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, Shape shape, int outputDimensions)
         {
             int inputIndex = (index.X * shape.Dimensions + index.Y) * shape.Area + index.Z;
             int outputIndex = (index.X * outputDimensions + index.Y % outputDimensions) * shape.Area + index.Z;

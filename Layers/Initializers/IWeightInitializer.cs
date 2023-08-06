@@ -1,9 +1,9 @@
-﻿using ConvolutionalNeuralNetwork.Layers.Weighted;
+﻿using ConvolutionalNeuralNetwork.Layers.Serial;
 
 namespace ConvolutionalNeuralNetwork.Layers.Initializers
 {
     public interface IWeightInitializer
     {
-        float GetWeight(WeightedLayer layer);
+        float GetWeight(SerialWeighted layer);
     }
 }

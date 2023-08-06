@@ -14,7 +14,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     public class AveragePool : Layer, IStructuralLayer
     {
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo>(BackwardsKernel);
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo>(ForwardKernel);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo>(ForwardPoolKernel);
 
         /// <summary>
         /// Initializes a new instance of the <see cref="AveragePool"/> class.
@@ -110,7 +110,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="filter">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing one of the
         /// <see cref="Convolution"/>'s filters.</param>
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
-        private static void ForwardKernel(Index3D index, ArrayView<float> input, ArrayView<float> pooled, LayerInfo info)
+        private static void ForwardPoolKernel(Index3D index, ArrayView<float> input, ArrayView<float> pooled, LayerInfo info)
         {
             (int inputOffset, int outputOffset) = info.GetOffset(index.Y, index.Z);
 
