@@ -3,13 +3,6 @@ using ConvolutionalNeuralNetwork.GPU;
 using ConvolutionalNeuralNetwork.Networks;
 using ILGPU;
 using ILGPU.Runtime;
-using ILGPU.Runtime.Cuda;
-using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
@@ -53,10 +46,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             s_forwardAction(index, _buffers.Input, _buffers.Output, _inputShape, _outputShape.Dimensions);
 
             Synchronize();
-        }
-        /// <inheritdoc/>
-        public override void Reset()
-        {
         }
 
         /// <inheritdoc/>

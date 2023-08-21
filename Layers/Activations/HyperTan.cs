@@ -55,10 +55,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             gradient[index.X] = gradient[index.X] * (1 - XMath.Pow(output[index.X], 2));
         }
 
-        public override void Reset()
-        {
-        }
-
         public override Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize)
         {
             if (_ready)

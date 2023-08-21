@@ -63,12 +63,22 @@ namespace ConvolutionalNeuralNetwork
             }
 
             layer.Forward(batchSize);
-            for (int i = 0; i < outputDimensions * batchSize; i++)
+            if (layer is IUnchangedLayer)
             {
-                outputs[i].SyncCPU(buffer.Output.SubView(outputShape.Area * i, outputShape.Area));
-                new FeatureMap(outputs[i].Width, outputs[i].Length, 1).CopyToBuffer(buffer.InGradient.SubView(outputShape.Area * i, outputShape.Area));
+                for (int i = 0; i < outputDimensions * batchSize; i++)
+                {
+                    outputs[i].SyncCPU(buffer.Input.SubView(outputShape.Area * i, outputShape.Area));
+                    new FeatureMap(outputs[i].Width, outputs[i].Length, 1).CopyToBuffer(buffer.Gradient.SubView(outputShape.Area * i, outputShape.Area));
+                }
             }
-
+            else
+            {
+                for (int i = 0; i < outputDimensions * batchSize; i++)
+                {
+                    outputs[i].SyncCPU(buffer.Output.SubView(outputShape.Area * i, outputShape.Area));
+                    new FeatureMap(outputs[i].Width, outputs[i].Length, 1).CopyToBuffer(buffer.InGradient.SubView(outputShape.Area * i, outputShape.Area));
+                }
+            }
             layer.Backwards(batchSize, true);
             FeatureMap[] outGradients = new FeatureMap[inputDimensions * batchSize];
             for (int i = 0; i < inputDimensions * batchSize; i++)
@@ -100,7 +110,10 @@ namespace ConvolutionalNeuralNetwork
                     {
 
                         inputs[i][j, k] += h;
-                        inputs[i].CopyToBuffer(buffer.Input.SubView(inputShapes.Area * i, inputShapes.Area));
+                        for (int i2 = 0; i2 < inputDimensions * batchSize; i2++)
+                        {
+                            inputs[i2].CopyToBuffer(buffer.Input.SubView(inputShapes.Area * i2, inputShapes.Area));
+                        }
 
 
                         layer.Forward(batchSize);
@@ -108,7 +121,14 @@ namespace ConvolutionalNeuralNetwork
                         float testGradient = 0;
                         for (int i2 = 0; i2 < outputDimensions * batchSize; i2++)
                         {
-                            testOutput[i2].SyncCPU(buffer.Output.SubView(outputShape.Area * i2, outputShape.Area));
+                            if (layer is IUnchangedLayer)
+                            {
+                                testOutput[i2].SyncCPU(buffer.Input.SubView(outputShape.Area * i2, outputShape.Area));
+                            }
+                            else
+                            {
+                                testOutput[i2].SyncCPU(buffer.Output.SubView(outputShape.Area * i2, outputShape.Area));
+                            }
                             for (int k2 = 0; k2 < testOutput[i2].Length; k2++)
                             {
                                 for (int j2 = 0; j2 < testOutput[i2].Width; j2++)

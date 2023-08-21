@@ -3,16 +3,16 @@ using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers.Serial
 {
-    public class SerialAveragePool : ISerial
+    public class SerialAvgPool : ISerial
     {
         public int Scale { get; init; }
 
-        public SerialAveragePool(int scale)
+        public SerialAvgPool(int scale)
         {
             Scale = scale;
         }
 
-        [JsonConstructor] private SerialAveragePool() { }
+        [JsonConstructor] private SerialAvgPool() { }
 
         public Layer Construct()
         {

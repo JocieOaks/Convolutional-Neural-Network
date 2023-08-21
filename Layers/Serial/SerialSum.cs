@@ -8,16 +8,16 @@ using System.Threading.Tasks;
 
 namespace ConvolutionalNeuralNetwork.Layers.Serial
 {
-    public class SerialSummation : ISerial
+    public class SerialSum : ISerial
     {
         public int OutputDimensions { get; init; }
 
-        public SerialSummation(int outputDimensions)
+        public SerialSum(int outputDimensions)
         {
             OutputDimensions = outputDimensions;
         }
 
-        [JsonConstructor] private SerialSummation() { }
+        [JsonConstructor] private SerialSum() { }
 
         public Layer Construct()
         {

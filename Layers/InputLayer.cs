@@ -44,10 +44,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             _input = input;
         }
 
-        public override void Reset()
-        {
-        }
-
         public override Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize)
         {
             _outputShape = _inputShape;

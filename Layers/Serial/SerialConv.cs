@@ -4,7 +4,7 @@ using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers.Serial
 {
-    public class SerialConvolution : SerialWeighted
+    public class SerialConv : SerialWeighted
     {
         [JsonProperty] private readonly int _filterSize;
         [JsonProperty] private readonly int _stride;
@@ -12,14 +12,14 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
         [JsonProperty] private int _inputDimensions;
 
 
-        public SerialConvolution(int dimensions, int filterSize, int stride,Weights weights, Weights bias) : base(weights, bias)
+        public SerialConv(int dimensions, int filterSize, int stride, Weights weights, Weights bias) : base(weights, bias)
         {
             _outputDimensions = dimensions;
             _filterSize = filterSize;
             _stride = stride;
         }
 
-        [JsonConstructor] private SerialConvolution() { }
+        [JsonConstructor] private SerialConv() { }
 
         public override Layer Construct()
         {

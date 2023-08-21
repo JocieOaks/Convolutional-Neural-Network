@@ -9,18 +9,18 @@ using System.Threading.Tasks;
 
 namespace ConvolutionalNeuralNetwork.Layers.Serial
 {
-    public class SerialConcatenate : ISerial
+    public class SerialConcat : ISerial
     {
         [JsonProperty] private readonly int _id;
         private readonly SerialFork _source;
 
-        public SerialConcatenate(SerialFork source)
+        public SerialConcat(SerialFork source)
         {
             _source = source;
             _id = source.ID;
         }
 
-        [JsonConstructor] SerialConcatenate() { }
+        [JsonConstructor] SerialConcat() { }
 
         public Layer Construct()
         {

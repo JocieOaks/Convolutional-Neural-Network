@@ -29,10 +29,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             Synchronize();
         }
 
-        public override void Reset()
-        {
-        }
-
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, InverseLayerInfo> s_forwardAction
             = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, InverseLayerInfo>(ForwardUpKernel);
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, InverseLayerInfo> s_backwardsAction

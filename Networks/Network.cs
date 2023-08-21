@@ -1,12 +1,10 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
-using ConvolutionalNeuralNetwork.Design;
 using ConvolutionalNeuralNetwork.Layers;
 using Newtonsoft.Json;
 using ILGPU;
-using ConvolutionalNeuralNetwork.Layers.Weighted;
 using ConvolutionalNeuralNetwork.Layers.Serial;
 using ConvolutionalNeuralNetwork.Layers.Initializers;
-using ILGPU.Algorithms.ScanReduceOperations;
+using ConvolutionalNeuralNetwork.Layers.Loss;
 
 namespace ConvolutionalNeuralNetwork.Networks
 {
@@ -39,7 +37,7 @@ namespace ConvolutionalNeuralNetwork.Networks
         /// <value>The number of <see cref="Layer"/>s in the <see cref="Network"/>.</value>
         protected int Depth => _layers.Count;
 
-        [JsonIgnore] protected virtual LossFunction Loss { get; }
+        [JsonIgnore] protected virtual Loss Loss { get; }
 
         public SerialActivation AddActivation(Activation activationType)
         {
@@ -53,22 +51,22 @@ namespace ConvolutionalNeuralNetwork.Networks
             return activation;
         }
 
-        public SerialAveragePool AddAveragePool(int scale)
+        public SerialAvgPool AddAveragePool(int scale)
         {
-            SerialAveragePool avgPool = _serializedLayers.FirstOrDefault(x => x is SerialAveragePool pool && pool.Scale == scale) as SerialAveragePool;
-            avgPool ??= new SerialAveragePool(scale);
+            SerialAvgPool avgPool = _serializedLayers.FirstOrDefault(x => x is SerialAvgPool pool && pool.Scale == scale) as SerialAvgPool;
+            avgPool ??= new SerialAvgPool(scale);
             AddSerialLayer(avgPool);
             return avgPool;
         }
 
-        public SerialConcatenate AddConcatenation(SerialFork fork)
+        public SerialConcat AddConcatenation(SerialFork fork)
         {
-            SerialConcatenate concatenation = new(fork);
+            SerialConcat concatenation = new(fork);
             AddSerialLayer(concatenation);
             return concatenation;
         }
 
-        public SerialConvolution AddConvolution(int outputDimensions, int filterSize, int stride = 1, IWeightInitializer initializer = null, bool useBias = true, IWeightInitializer biasInitializer = null, Activation activation = Activation.None)
+        public SerialConv AddConvolution(int outputDimensions, int filterSize, int stride = 1, IWeightInitializer initializer = null, bool useBias = true, IWeightInitializer biasInitializer = null, Activation activation = Activation.None)
         {
             Weights weights = new (initializer);
             Weights bias = null;
@@ -77,7 +75,7 @@ namespace ConvolutionalNeuralNetwork.Networks
                 bias = new Weights(biasInitializer ?? new Constant(0));
             }
 
-            SerialConvolution convolution = new(outputDimensions, filterSize, stride, weights, bias);
+            SerialConv convolution = new(outputDimensions, filterSize, stride, weights, bias);
             AddSerialLayer(convolution);
 
             if(activation != Activation.None)
@@ -119,20 +117,27 @@ namespace ConvolutionalNeuralNetwork.Networks
             return skipOut;
         }
 
-        public SerialSummation AddSummation(int outputDimensions)
+        public SerialSum AddSummation(int outputDimensions)
         {
-            SerialSummation summation = _serializedLayers.FirstOrDefault(x => x is SerialSummation sum && sum.OutputDimensions == outputDimensions) as SerialSummation;
-            summation ??= new SerialSummation(outputDimensions);
+            SerialSum summation = _serializedLayers.FirstOrDefault(x => x is SerialSum sum && sum.OutputDimensions == outputDimensions) as SerialSum;
+            summation ??= new SerialSum(outputDimensions);
             AddSerialLayer(summation);
             return summation;
         }
 
-        public SerialUpsampling AddUpsampling(int scale)
+        public SerialUp AddUpsampling(int scale)
         {
-            SerialUpsampling upsampling = _serializedLayers.FirstOrDefault(x => x is SerialUpsampling up && up.Scale == scale) as SerialUpsampling;
-            upsampling ??= new SerialUpsampling(scale);
+            SerialUp upsampling = _serializedLayers.FirstOrDefault(x => x is SerialUp up && up.Scale == scale) as SerialUp;
+            upsampling ??= new SerialUp(scale);
             AddSerialLayer(upsampling);
             return upsampling;
+        }
+
+        public SerialBatchNorm AddBatchNormalization()
+        {
+            SerialBatchNorm norm = new();
+            AddSerialLayer(norm); 
+            return norm;
         }
 
         public SerialWarp AddWarp()
@@ -226,7 +231,7 @@ namespace ConvolutionalNeuralNetwork.Networks
             _ready = true;
         }
 
-        public float Test(List<FeatureMap[][]> inputs, Vector[] expected)
+        public float Test(List<FeatureMap[][]> inputs, Vector[] expected, bool saveOutput)
         {
             int batchSize = inputs[0].Length;
             for (int i = 0; i < inputs.Count; i++)
@@ -239,8 +244,24 @@ namespace ConvolutionalNeuralNetwork.Networks
                 Utility.StopWatch(() => _layers[i].Forward(batchSize), $"Forwards {i} {_layers[i].Name}", PRINTSTOPWATCH);
             }
 
-            return Loss(expected);
+            if (saveOutput)
+            {
+                for (int i = 0; i < _outputs.GetLength(0); i++)
+                {
+                    for (int j = 0; j < _inputShape.Dimensions; j++)
+                    {
+                        _outputs[i][j].SyncCPU(Output.SubView((i * _inputShape.Dimensions + j) * _inputShape.Area, _inputShape.Area));
+                    }
+                }
+            }
+
+            return Loss.GetLoss(expected);
         }
+
+        protected FeatureMap[][] _outputs;
+
+        [JsonIgnore]
+        public FeatureMap[][] GetOutputs => _outputs;
 
         public float Train(List<FeatureMap[][]> inputs, Vector[] expected)
         {
@@ -255,7 +276,7 @@ namespace ConvolutionalNeuralNetwork.Networks
                 Utility.StopWatch(() => _layers[i].Forward(batchSize), $"Forwards {i} {_layers[i].Name}", PRINTSTOPWATCH);
             }
 
-            float loss = Loss(expected);
+            float loss = Loss.GetLoss(expected);
 
             for (int j = Depth - 1; j >= 0; j--)
             {
@@ -283,15 +304,12 @@ namespace ConvolutionalNeuralNetwork.Networks
             foreach (var layer in _layers)
             {
                 current = layer.Startup(current, inputBuffers, maxBatchSize);
-                if (layer is BatchNormalization bn)
-                {
-                    bn.SetHyperParameters(_adamHyperParameters);
-                }
                 if (layer is not IUnchangedLayer)
                 {
                     (inputBuffers, outputBuffers) = (outputBuffers, inputBuffers);
                 }
             }
+            Loss?.Startup(outputBuffers, current, maxBatchSize);
             _endBuffers = outputBuffers;
         }
 

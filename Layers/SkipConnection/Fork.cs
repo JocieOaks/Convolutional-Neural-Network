@@ -123,11 +123,6 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         }
 
         /// <inheritdoc/>
-        public override void Reset()
-        {
-        }
-
-        /// <inheritdoc/>
         public override Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize)
         {
             if (_ready)

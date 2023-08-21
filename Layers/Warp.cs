@@ -4,11 +4,6 @@ using ILGPU;
 using ILGPU.Algorithms;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
@@ -43,10 +38,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             Synchronize();
 
             _inputCopy.DecrementLiveCount();
-        }
-
-        public override void Reset()
-        {
         }
 
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Shape, Shape> s_forwardAction

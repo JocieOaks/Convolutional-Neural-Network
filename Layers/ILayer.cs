@@ -42,11 +42,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="outGradients">The previous <see cref="Layer"/>'s inGradient.</param>
         /// <returns>Returns the output and inGradient to share with the next <see cref="Layer"/>.</returns>
         Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize);
-
-        /// <summary>
-        /// Reset's the current <see cref="Layer"/> to it's initial weights or initial random weights.
-        /// </summary>
-        void Reset();
     }
 
     /// <summary>

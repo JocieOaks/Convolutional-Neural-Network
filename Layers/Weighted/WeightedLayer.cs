@@ -15,6 +15,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         private bool UseBias => _bias != null;
         private Weights _bias;
         protected Weights _weights;
+        protected Vector _inputCopy;
 
         public WeightedLayer(int filterSize, int stride, Weights weights, Weights bias) : base (filterSize, stride)
         {
@@ -49,16 +50,39 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         protected abstract void BackwardsUpdate(int batchSize);
         protected abstract void BackwardsNoUpdate(int batchSize);
 
+        protected virtual void ForwardFinish()
+        {
+            _inputCopy.DecrementLiveCount();
+            _weights.DecrementLiveWeights();
+        }
+
+        protected virtual void BackwardsUpdateFinish()
+        {
+            _inputCopy.DecrementLiveCount();
+            _weights.DecrementLiveGradient();
+            _weights.DecrementLiveWeights();
+        }
+
+        protected virtual void BackwardsNoUpdateFinish()
+        {
+            _weights.DecrementLiveWeights();
+        }
+
         public sealed override void Forward(int batchSize)
         {
             ForwardChild(batchSize);
-            if (_bias != null)
+            if (UseBias)
             {
                 Index3D biasIndex = new(_outputShape.Area, _outputShape.Dimensions, batchSize);
                 s_biasAction(biasIndex, _buffers.Output, _bias.WeightsGPU<float>(), _outputShape.Dimensions, _outputShape.Area);
+            }
 
-                Synchronize();
+            Synchronize();
 
+            ForwardFinish();
+
+            if(UseBias)
+            {
                 _bias.DecrementLiveWeights();
             }
         }
@@ -68,27 +92,41 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             if (update)
             {
                 BackwardsUpdate(batchSize);
+
                 if (UseBias)
                 {
                     Index2D biasIndex = new(_outputShape.Dimensions, batchSize);
                     s_biasGradientAction(biasIndex, _bias.GradientGPU<float>(), _buffers.InGradient, _outputShape.Dimensions, _outputShape.Area);
+                }
 
-                    Synchronize();
-
+                Synchronize();
+                BackwardsUpdateFinish();
+                if (UseBias)
+                {
                     _bias.DecrementLiveGradient();
                 }
             }
             else
             {
                 BackwardsNoUpdate(batchSize);
+                Synchronize();
+                BackwardsNoUpdateFinish();
             }
         }
 
-        protected void BiasTest(Shape input, Shape output, int batchSize)
+        public void FilterTest(int inputDimensions, int batchSize, int inputSize)
+        {
+            (Shape input, Shape output) = FilterTestSetup(inputDimensions, batchSize, inputSize);
+
+            _weights.TestFilterGradient(this, input, output, _buffers, batchSize);
+            BiasTest(input, output, batchSize);
+        }
+
+        protected virtual void BiasTest(Shape input, Shape output, int batchSize)
         {
             if (UseBias)
             {
-                (_bias as Weights).TestFilterGradient(this, input, output, _buffers, batchSize);
+                _bias.TestFilterGradient(this, input, output, _buffers, batchSize);
             }
         }
 

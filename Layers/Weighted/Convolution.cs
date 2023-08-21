@@ -17,7 +17,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
     public class Convolution : WeightedLayer, IPrimaryLayer
     {
         private readonly int _outputDimensions;
-        private Vector _inputCopy;
 
         public Convolution(int filterSize, int stride, int outputDimensions, Weights weights, Weights bias) : base (filterSize, stride, weights, bias)
         {
@@ -44,26 +43,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         private LayerInfo Info => (LayerInfo)_layerInfo;
 
         protected override int WeightLength => _filterSize * _filterSize * _outputShape.Dimensions * _inputShape.Dimensions;
-
-        public void FilterTest(int inputDimensions, int batchSize, int inputSize)
-        {
-            (Shape input, Shape output) = FilterTestSetup(inputDimensions, batchSize, inputSize);
-
-            (_weights as Weights).TestFilterGradient(this, input, output, _buffers, batchSize);
-            BiasTest(input, output, batchSize);
-        }
-
-        /// <inheritdoc/>
-        public override void Reset()
-        {
-            float variance = 2f / (_filterSize * _filterSize);
-            float stdDev = MathF.Sqrt(variance);
-
-            for (int i = 0; i < _outputShape.Dimensions; i++)
-            {
-                _weights.Reset(0, stdDev);
-            }
-        }
 
         /// <inheritdoc/>
         public override Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize)
@@ -94,10 +73,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
             Index3D gradientIndex = new(_inputShape.Volume, _outputShape.Dimensions, batchSize);
             BackwardsOutGradientAction(gradientIndex, _buffers.InGradient, _weights.WeightsGPU<float>(), _buffers.OutGradient, Info);
-
-            Synchronize();
-
-            _weights.DecrementLiveWeights();
         }
 
         /// <summary>
@@ -117,13 +92,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             BackwardsOutGradientAction(gradientIndex, _buffers.InGradient, _weights.WeightsGPU<float>(), _buffers.OutGradient, Info);
             KernelConfig config = new(new Index3D(Info.FilterArea, _inputShape.Dimensions, batchSize), new Index3D(_outputShape.Dimensions, 1, 1));
             BackwardsFilterAction(config, _buffers.InGradient, _inputCopy.GetArrayView<float>(), _weights.GradientGPU<float>(), Info);
-
-            Synchronize();
-
-            _inputCopy.DecrementLiveCount();
-
-            _weights.DecrementLiveGradient();
-            _weights.DecrementLiveWeights();
         }
 
         /// <inheritdoc/>
@@ -135,12 +103,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             _buffers.Output.SubView(0, batchSize * _outputShape.Volume).MemSetToZero();
             Index3D index = new(_outputShape.Volume, _inputShape.Dimensions, batchSize);
             ForwardAction(index, _buffers.Input, _buffers.Output, _weights.WeightsGPU<float>(), Info);
-
-            Synchronize();
-
-            _inputCopy.DecrementLiveCount();
-
-            _weights.DecrementLiveWeights();
         }
 
         /// <summary>

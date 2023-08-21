@@ -109,12 +109,23 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             }
 
             layer.Forward(batchSize);
-            for (int i = 0; i < outputDimensions * batchSize; i++)
-            {
-                outputs[i].SyncCPU(buffer.Output.SubView(outputShapes.Area * i, outputShapes.Area));
-                new FeatureMap(outputs[i].Width, outputs[i].Length, 1).CopyToBuffer(buffer.InGradient.SubView(outputShapes.Area * i, outputShapes.Area));
-            }
 
+            if (layer is IUnchangedLayer)
+            {
+                for (int i = 0; i < outputDimensions * batchSize; i++)
+                {
+                    outputs[i].SyncCPU(buffer.Input.SubView(outputShapes.Area * i, outputShapes.Area));
+                    new FeatureMap(outputs[i].Width, outputs[i].Length, 1).CopyToBuffer(buffer.Gradient.SubView(outputShapes.Area * i, outputShapes.Area));
+                }
+            }
+            else
+            {
+                for (int i = 0; i < outputDimensions * batchSize; i++)
+                {
+                    outputs[i].SyncCPU(buffer.Output.SubView(outputShapes.Area * i, outputShapes.Area));
+                    new FeatureMap(outputs[i].Width, outputs[i].Length, 1).CopyToBuffer(buffer.InGradient.SubView(outputShapes.Area * i, outputShapes.Area));
+                }
+            }
             layer.Backwards(batchSize, true);
             _gradient.SyncCPU();
 
@@ -135,12 +146,28 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             {
                 _weights[i] += h;
                 _weights.UpdateIfAllocated();
+
+                if(layer is IUnchangedLayer)
+                {
+                    for (int j = 0; j < inputDimensions * batchSize; j++)
+                    {
+                        inputs[j].CopyToBuffer(buffer.Input.SubView(inputShape.Area * j, inputShape.Area));
+                    }
+                }
+
                 layer.Forward(batchSize);
 
                 float testGradient = 0;
                 for (int i2 = 0; i2 < outputDimensions * batchSize; i2++)
                 {
-                    testOutput[i2].SyncCPU(buffer.Output.SubView(outputShapes.Area * i2, outputShapes.Area));
+                    if (layer is IUnchangedLayer)
+                    {
+                        testOutput[i2].SyncCPU(buffer.Input.SubView(outputShapes.Area * i2, outputShapes.Area));
+                    }
+                    else
+                    {
+                        testOutput[i2].SyncCPU(buffer.Output.SubView(outputShapes.Area * i2, outputShapes.Area));
+                    }
                     for (int j2 = 0; j2 < testOutput[i2].Width; j2++)
                     {
                         for (int k2 = 0; k2 < testOutput[i2].Length; k2++)

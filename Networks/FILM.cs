@@ -3,80 +3,80 @@ using ConvolutionalNeuralNetwork.Layers;
 using ConvolutionalNeuralNetwork.Layers.Serial;
 using ConvolutionalNeuralNetwork.Layers.Initializers;
 using Newtonsoft.Json;
+using ConvolutionalNeuralNetwork.Layers.Loss;
 
 namespace ConvolutionalNeuralNetwork.Networks
 {
     [Serializable]
     public partial class FILM : Network
     {
-        private const int PYRAMIDLAYERS = 6;
-
-        private FeatureMap[][] _outputs;
-
-        public FILM(Shape inputShape)
+        private readonly int _pyramidLayers;
+        public FILM(Shape inputShape, int pyramidLayers)
         {
-            SerialConvolution[] featuresShared = new SerialConvolution[6];
-            SerialConvolution[] flowShared = new SerialConvolution[3];
+            _pyramidLayers = pyramidLayers;
+            SerialConv[] featuresConvs = new SerialConv[6];
+            SerialConv[] flowConvs = new SerialConv[3];
 
-            var biasInit = new Constant(0);
-
-            for(int i = 0; i < 3; i++)
+            for (int i = 0; i < 3; i++)
             {
-                featuresShared[i] = new SerialConvolution((int)Math.Pow(2, 4 + i), 3, 1, new Weights(GlorotUniform.Instance), new Weights(biasInit));
-                featuresShared[i + 3] = new SerialConvolution((int)Math.Pow(2, 5 + i), 3, 1, new Weights(GlorotUniform.Instance), new Weights(biasInit));
-                flowShared[i] = new SerialConvolution(i == 0 ? 256 : i == 1 ? 128 : 2, 3, 1, new Weights(GlorotUniform.Instance), new Weights(biasInit));
+                featuresConvs[i] = new SerialConv((int)Math.Pow(2, 4 + i), 3, 1, new Weights(GlorotUniform.Instance), null);
+                featuresConvs[i + 3] = new SerialConv((int)Math.Pow(2, 5 + i), 3, 1, new Weights(GlorotUniform.Instance), null);
+                flowConvs[i] = new SerialConv(i == 0 ? 256 : i == 1 ? 128 : 2, 3, 1, new Weights(GlorotUniform.Instance), null);
             }
 
             _inputShape = inputShape;
 
-            CreateFeatureExtraction(featuresShared, out SerialFork[] outputs0, inputShape);
-            CreateFeatureExtraction(featuresShared, out SerialFork[] outputs1, inputShape);
+            CreateFeatureExtraction(featuresConvs, out SerialFork[] outputs0, out SerialFork[] i0, inputShape);
+            CreateFeatureExtraction(featuresConvs, out SerialFork[] outputs1, out SerialFork[] i1, inputShape);
 
-            CreateFlow(outputs0, outputs1, flowShared, out SerialFork[] flow0, out SerialFork[] f0);
-            CreateFlow(outputs1, outputs0, flowShared, out SerialFork[] flow1, out SerialFork[] f1);
+            CreateFlow(outputs0, outputs1, i0, flowConvs, out SerialFork[] flow0, out SerialFork[] f0);
+            CreateFlow(outputs1, outputs0, i1, flowConvs, out SerialFork[] flow1, out SerialFork[] f1);
 
             CreateFusion(f0, f1, flow0, flow1);
         }
 
         [JsonConstructor] private FILM() { }
 
-        [JsonIgnore] public FeatureMap[][] GetOutputs => _outputs;
-
-        private void CreateFeatureExtraction(SerialConvolution[] shared, out SerialFork[] outputs, Shape inputShape)
+        private void CreateFeatureExtraction(SerialConv[] shared, out SerialFork[] outputs, out SerialFork[] originals, Shape inputShape)
         {
-            outputs = new SerialFork[PYRAMIDLAYERS];
+            outputs = new SerialFork[_pyramidLayers];
+            originals = new SerialFork[_pyramidLayers];
 
-            List<SerialFork>[] skips = new List<SerialFork>[PYRAMIDLAYERS];
-            for (int i = 0; i < PYRAMIDLAYERS; i++)
+            List<SerialFork>[] skips = new List<SerialFork>[_pyramidLayers];
+            for (int i = 0; i < _pyramidLayers; i++)
             {
                 skips[i] = new();
             }
 
             AddInput(inputShape);
             SerialFork inputFork = AddFork();
+            originals[0] = inputFork;
 
-            for (int i = 0; i < PYRAMIDLAYERS; i++)
+            for (int i = 0; i < _pyramidLayers; i++)
             {
                 if (i != 0)
                 {
                     AddSkipOut(inputFork);
                     AddAveragePool((int)Math.Pow(2, i));
+                    originals[i] = AddFork();
                 }
                 for (int j = 0; j < 3; j++)
                 {
-                    if (i + j < PYRAMIDLAYERS)
+                    if (i + j < _pyramidLayers)
                     {
                         AddSerialLayer(shared[j]);
                         AddActivation(Activation.ReLU);
+                        AddBatchNormalization();
                         AddSerialLayer(shared[j + 3]);
                         AddActivation(Activation.ReLU);
+                        AddBatchNormalization();
                         skips[i + j].Add(AddFork());
                         AddAveragePool(2);
                     }
                 }
             }
 
-            for (int i = 0; i < PYRAMIDLAYERS; i++)
+            for (int i = 0; i < _pyramidLayers; i++)
             {
                 AddSkipOut(skips[i].First());
                 foreach (var skip in skips[i].Skip(1))
@@ -87,11 +87,11 @@ namespace ConvolutionalNeuralNetwork.Networks
             }
         }
 
-        private void CreateFlow(SerialFork[] f1, SerialFork[] f0, SerialConvolution[] shared, out SerialFork[] flow, out SerialFork[] f)
+        private void CreateFlow(SerialFork[] f1, SerialFork[] f0, SerialFork[] i1, SerialConv[] shared, out SerialFork[] flow, out SerialFork[] f)
         {
-            SerialFork[] upsampled = new SerialFork[PYRAMIDLAYERS - 1];
-            flow = new SerialFork[PYRAMIDLAYERS];
-            f = new SerialFork[PYRAMIDLAYERS];
+            SerialFork[] upsampled = new SerialFork[_pyramidLayers - 1];
+            flow = new SerialFork[_pyramidLayers];
+            f = new SerialFork[_pyramidLayers];
 
             AddSkipOut(f1[^1]);
             AddConcatenation(f0[^1]);
@@ -109,7 +109,7 @@ namespace ConvolutionalNeuralNetwork.Networks
             AddUpsampling(2);
             upsampled[^1] = AddFork();
 
-            for (int i = PYRAMIDLAYERS - 2; i >= 0; i--)
+            for (int i = _pyramidLayers - 2; i >= 0; i--)
             {
                 AddConcatenation(f1[i]);
                 AddWarp();
@@ -118,19 +118,25 @@ namespace ConvolutionalNeuralNetwork.Networks
                 if (i < 2)
                 {
                     AddConvolution(i == 0 ? 64 : 128, 3, 1, activation: Activation.ReLU);
+                    AddBatchNormalization();
                     AddConvolution(i == 0 ? 32 : 64, 3, 1, activation: Activation.ReLU);
+                    AddBatchNormalization();
                     AddConvolution(2, 3, 1, activation: Activation.ReLU);
+                    AddBatchNormalization();
                 }
                 else
                 {
                     AddSerialLayer(shared[0]);
                     AddActivation(Activation.ReLU);
+                    AddBatchNormalization();
 
                     AddSerialLayer(shared[1]);
                     AddActivation(Activation.ReLU);
+                    AddBatchNormalization();
 
                     AddSerialLayer(shared[2]);
                     AddActivation(Activation.ReLU);
+                    AddBatchNormalization();
                 }
                 AddConcatenation(upsampled[i]);
 
@@ -145,10 +151,11 @@ namespace ConvolutionalNeuralNetwork.Networks
                 }
             }
 
-            for (int i = 0; i < PYRAMIDLAYERS; i++)
+            for (int i = 0; i < _pyramidLayers; i++)
             {
                 AddSkipOut(flow[i]);
                 AddConcatenation(f1[i]);
+                AddConcatenation(i1[i]);
                 AddWarp();
                 f[i] = AddFork();
             }
@@ -162,10 +169,11 @@ namespace ConvolutionalNeuralNetwork.Networks
             AddConcatenation(flow1[^1]);
 
 
-            for (int i = PYRAMIDLAYERS - 2; i >= 0; i--)
+            for (int i = _pyramidLayers - 2; i >= 0; i--)
             {
                 AddUpsampling(2);
                 AddConvolution(16, 2, 1, activation: Activation.ReLU);
+                AddBatchNormalization();
 
                 AddConcatenation(f0[i]);
                 AddConcatenation(f1[i]);
@@ -173,7 +181,9 @@ namespace ConvolutionalNeuralNetwork.Networks
                 AddConcatenation(flow1[i]);
 
                 AddConvolution(16, 3, 1, activation: Activation.ReLU);
+                AddBatchNormalization();
                 AddConvolution(16, 3, 1, activation: Activation.ReLU);
+                AddBatchNormalization();
             }
 
             AddConvolution(_inputShape.Dimensions, 1, 1, useBias: false);
@@ -245,7 +255,7 @@ namespace ConvolutionalNeuralNetwork.Networks
             return loss;
         }
 
-        protected override LossFunction Loss => CalculateLoss;
+        protected override Loss Loss { get; } = new FILMLoss();
 
         private (float, FeatureMap[][]) GetLoss(FeatureMap[][] expected, Vector[] actual)
         {

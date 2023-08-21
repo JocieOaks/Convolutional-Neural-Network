@@ -3,13 +3,7 @@ using ConvolutionalNeuralNetwork.GPU;
 using ILGPU;
 using ILGPU.Algorithms;
 using ILGPU.Runtime;
-using ILGPU.Runtime.Cuda;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Text.Json.Serialization;
-using System.Threading.Tasks;
 
 namespace ConvolutionalNeuralNetwork.Layers.Activations
 {
@@ -54,10 +48,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             float exp = XMath.Exp(-input[index.X]);
             float sig = 1 / (1 + exp);
             gradient[index.X] = exp * sig * sig * gradient[index.X];
-        }
-
-        public override void Reset()
-        {
         }
 
         public override Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize)

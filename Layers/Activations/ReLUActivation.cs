@@ -46,11 +46,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
         }
 
         /// <inheritdoc/>
-        public override void Reset()
-        {
-        }
-
-        /// <inheritdoc/>
         public override Shape Startup(Shape inputShapes, IOBuffers buffers, int maxBatchSize)
         {
             if (_ready)

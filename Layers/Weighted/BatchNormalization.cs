@@ -1,22 +1,19 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using ConvolutionalNeuralNetwork.GPU;
+using ConvolutionalNeuralNetwork.Layers.Initializers;
 using ILGPU;
 using ILGPU.Algorithms;
 using ILGPU.Runtime;
-using ILGPU.Runtime.OpenCL;
 using Newtonsoft.Json;
-using System.Reflection.Metadata;
-using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 
-namespace ConvolutionalNeuralNetwork.Layers
+namespace ConvolutionalNeuralNetwork.Layers.Weighted
 {
     /// <summary>
     /// The <see cref="BatchNormalization"/> class is a <see cref="Layer"/> for normalizing batches of <see cref="FeatureMap"/>s
     /// so that their mean is 0 and standard deviation 1.
     /// </summary>
-    [Serializable]
-    public class BatchNormalization : Layer, ISecondaryLayer, IUnchangedLayer
+    public class BatchNormalization : WeightedLayer, ISecondaryLayer, IUnchangedLayer
     {
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Views, Shape> s_backwardsAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Views, Shape>(WeightsAndGradientKernel);
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Views, Shape> s_gradientAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Views, Shape>(GradientsKernel);
@@ -27,28 +24,27 @@ namespace ConvolutionalNeuralNetwork.Layers
         private static readonly Action<Index1D, Views, float> s_sigmaAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, Views, float>(SigmaKernel);
         private static readonly Action<Index1D, Views, float> s_meanSigmaGradientAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, Views, float>(MeanSigmaGradientKernel);
 
-        [JsonProperty] private Weights _bias;
-        private Vector _inputCopy;
+        private Weights _bias;
         private Vector _mean;
         private Vector _meanGradient;
         private Vector _sigma;
         private Vector _sigmaGradient;
-        [JsonProperty] private Weights _weights;
 
-        private AdamHyperParameters _adamHyperParameters;
         /// <summary>
         /// Initializes a new instance of the <see cref="BatchNormalization"/> class.
         /// </summary>
-        [JsonConstructor]
-        public BatchNormalization() : base(1, 1)
+        public BatchNormalization(Weights weights, Weights bias) : base(1, 1, weights, null)
         {
+            _bias = bias;
         }
 
         /// <inheritdoc/>
         [JsonIgnore] public override string Name => "Batch Normalization Layer";
 
+        protected override int WeightLength => _outputShape.Dimensions;
+
         /// <inheritdoc/>
-        public override void Backwards(int batchSize, bool update)
+        protected override void BackwardsUpdate(int batchSize)
         {
             Views views = new()
             {
@@ -75,11 +71,10 @@ namespace ConvolutionalNeuralNetwork.Layers
 
 
             s_backwardsAction(index, _inputCopy.GetArrayView<float>(), _buffers.Gradient, views, _inputShape);
+        }
 
-            Synchronize();
-
-            _weights.UpdateWeights(_adamHyperParameters);
-            _bias.UpdateWeights(_adamHyperParameters);
+        protected override void BackwardsUpdateFinish()
+        {
             _mean.DecrementLiveCount();
             _sigma.DecrementLiveCount();
             _weights.DecrementLiveWeights();
@@ -91,13 +86,13 @@ namespace ConvolutionalNeuralNetwork.Layers
             _inputCopy.DecrementLiveCount(2);
         }
 
-        public void SetHyperParameters(AdamHyperParameters hyperParameters)
+        protected override void BackwardsNoUpdateFinish()
         {
-            _adamHyperParameters = hyperParameters;
+            BackwardsUpdateFinish();
         }
 
         /// <inheritdoc/>
-        public override void Forward(int batchSize)
+        protected override void ForwardChild(int batchSize)
         {
             Index1D copyIndex = new(batchSize * _inputShape.Volume);
             GPUManager.CopyAction(copyIndex, _buffers.Input, _inputCopy.GetArrayViewEmpty<float>());
@@ -126,42 +121,25 @@ namespace ConvolutionalNeuralNetwork.Layers
 
 
             s_varianceAction(index, _buffers.Input, views, _inputShape);
-            
+
             Synchronize();
 
 
             s_sigmaAction(dimensionIndex, views, inverseArea);
-            
+
             Synchronize();
 
 
             s_normalizeAction(index, _buffers.Input, views, _inputShape);
-            
-            Synchronize();
+        }
 
+        protected override void ForwardFinish()
+        {
             _inputCopy.DecrementLiveCount();
-
             _mean.DecrementLiveCount();
             _sigma.DecrementLiveCount();
             _weights.DecrementLiveWeights();
             _bias.DecrementLiveWeights();
-        }
-
-        /// <summary>
-        /// Called when the layer is deserialized.
-        /// Temporary function to allow for loading models that were created before Adam optimization was used implemented.
-        /// </summary>
-        /// <param name="context">The streaming context for deserialization.</param>
-        [OnDeserialized]
-        public void OnDeserialized(StreamingContext context)
-        {
-        }
-
-        /// <inheritdoc/>
-        public override void Reset()
-        {
-            _weights.Reset(1);
-            _bias.Reset(0);
         }
 
         /// <inheritdoc/>
@@ -172,12 +150,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             _ready = true;
 
             BaseStartup(inputShape, buffers);
-
-            if (_weights == null)
-            {
-                //_weights = new Weights(_inputShape.Dimensions, new Initializers.Constant(1), null);
-                //_bias = new Weights(_inputShape.Dimensions);
-            }
 
             _mean = new Vector(_inputShape.Dimensions);
             _meanGradient = new Vector(_inputShape.Dimensions);
@@ -247,7 +219,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             float meanOffset = input[ind] - values.Mean[index.Y];
             float gradient = inGradient[ind];
-            
+
             float normalized = meanOffset * values.Weight[index.Y] / values.Sigma[index.Y] + values.Bias[index.Y];
 
             Atomic.Add(ref values.SigmaGradient[index.Y], gradient * meanOffset);
@@ -266,8 +238,18 @@ namespace ConvolutionalNeuralNetwork.Layers
             Atomic.Add(ref values.Sigma[index.Y], difference * difference);
         }
 
+        protected override void BackwardsNoUpdate(int batchSize)
+        {
+            BackwardsUpdate(batchSize);
+        }
+
+        protected override void BiasTest(Shape input, Shape output, int batchSize)
+        {
+            _bias.TestFilterGradient(this, input, output, _buffers, batchSize);
+        }
+
         private readonly struct Views
-        { 
+        {
             public ArrayView<float> Mean { get; init; }
             public ArrayView<float> Sigma { get; init; }
             public ArrayView<float> Weight { get; init; }

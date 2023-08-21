@@ -290,11 +290,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             throw new NotImplementedException();
         }
 
-        public override void Reset()
-        {
-            throw new NotImplementedException();
-        }
-
         public override Shape Startup(Shape inputShapes, IOBuffers buffers, int maxBatchSize)
         {
             throw new NotImplementedException();

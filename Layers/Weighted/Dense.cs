@@ -19,7 +19,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo> s_forwardAction =
             GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo>(DenseKernel);
 
-        private Vector _inputCopy;
         [JsonProperty] private int _outputUnits;
 
         /// <summary>
@@ -66,23 +65,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
             Index3D index = new(_inputShape.Volume, batchSize, _outputUnits);
             s_forwardAction(index, _buffers.Input, _buffers.Output, _weights.WeightsGPU<float>(), Info);
-
-            Synchronize();
-
-            _inputCopy.DecrementLiveCount();
-
-            _weights.DecrementLiveWeights();
-
-
-        }
-
-        /// <inheritdoc/>
-        public override void Reset()
-        {
-
-            float variance = 2f / (_outputUnits + _inputShape.Volume);
-            float stdDev = MathF.Sqrt(variance);
-            _weights.Reset(0, 0.02f);
         }
 
         /// <inheritdoc/>
@@ -129,10 +111,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
             Index3D index = new(_inputShape.Volume, batchSize, _outputUnits);
             s_backwardsOutAction(index, _buffers.InGradient, _buffers.OutGradient, _weights.WeightsGPU<float>(), Info);
-
-            Synchronize();
-
-            _weights.DecrementLiveWeights();
         }
 
         protected override void BackwardsUpdate(int batchSize)
@@ -143,13 +121,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
             s_backwardsOutAction(index, _buffers.InGradient, _buffers.OutGradient, _weights.WeightsGPU<float>(), Info);
             s_backwardsFilterAction(index, _buffers.InGradient, _inputCopy.GetArrayView<float>(), _weights.GradientGPU<float>(), Info);
-
-            Synchronize();
-
-            _inputCopy.DecrementLiveCount();
-
-            _weights.DecrementLiveWeights();
-            _weights.DecrementLiveGradient();
         }
 
         private void BaseStartup(Shape inputShapes, IOBuffers buffers)

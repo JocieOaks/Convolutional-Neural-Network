@@ -8,16 +8,16 @@ using System.Threading.Tasks;
 
 namespace ConvolutionalNeuralNetwork.Layers.Serial
 {
-    public class SerialUpsampling : ISerial
+    public class SerialUp : ISerial
     {
         public int Scale { get; init; }
 
-        public SerialUpsampling(int scale)
+        public SerialUp(int scale)
         {
             Scale = scale;
         }
 
-        [JsonConstructor] private SerialUpsampling() { }
+        [JsonConstructor] private SerialUp() { }
 
         public Layer Construct()
         {

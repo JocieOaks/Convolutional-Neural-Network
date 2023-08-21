@@ -13,7 +13,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
     public class TransposeConvolution : WeightedLayer, IPrimaryLayer
     {
         private readonly int _outputDimensions;
-        private Vector _inputCopy;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="Convolution"/> layer.
         /// </summary>
@@ -70,12 +70,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
             Index3D index = new(batchSize, _outputShape.Dimensions * _inputShape.Dimensions, _inputShape.Area);
             ForwardAction(index, _buffers.Input, _buffers.Output, _weights.WeightsGPU<float>(), Info);
-
-            Synchronize();
-
-            _inputCopy.DecrementLiveCount();
-
-            _weights.DecrementLiveWeights();
         }
 
         /// <summary>
@@ -88,14 +82,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         {
         }
 
-        /// <inheritdoc/>
-        public override void Reset()
-        {
-            float variance = 0.6666f / (_outputShape.Dimensions * _filterSize * _filterSize + _inputShape.Dimensions * _filterSize * _filterSize);
-            float stdDev = MathF.Sqrt(variance);
-
-            _weights.Reset(0, 0.02f);
-        }
         /// <inheritdoc/>
         public override Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize)
         {
@@ -234,10 +220,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
             Index3D index = new(batchSize, _outputShape.Dimensions * _inputShape.Dimensions, _inputShape.Area);
             BackwardsOutGradientAction(index, _buffers.InGradient, _buffers.OutGradient, _weights.WeightsGPU<float>(), Info);
-
-            Synchronize();
-
-            _weights.DecrementLiveWeights();
         }
 
 
@@ -255,14 +237,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             Index3D index = new(batchSize, _outputShape.Dimensions * _inputShape.Dimensions, _inputShape.Area);
             BackwardsOutGradientAction(index, _buffers.InGradient, _buffers.OutGradient, _weights.WeightsGPU<float>(), Info);
             BackwardsFilterAction(index, _buffers.InGradient, _inputCopy.GetArrayView<float>(), _weights.GradientGPU<float>(), Info);
-
-            Synchronize();
-
-            _inputCopy.DecrementLiveCount();
-
-            _weights.DecrementLiveGradient();
-            _weights.DecrementLiveWeights();
-
         }
     }
 }

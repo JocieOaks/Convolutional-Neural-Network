@@ -57,9 +57,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         public abstract void Forward(int batchSize);
 
         /// <inheritdoc/>
-        public abstract void Reset();
-
-        /// <inheritdoc/>
         public abstract Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize);
 
         protected static void Synchronize()
