@@ -56,7 +56,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
                 return _outputShape;
             _ready = true;
 
-            BaseStartup(inputShape, buffers, maxBatchSize);
+            BaseStartup(inputShape, buffers);
             _inputCopy = new Vector(maxBatchSize * inputShape.Volume);
             return _outputShape;
         }

@@ -23,6 +23,10 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         public ArrayView<float> Output => _view1;
         public ArrayView<float> Gradient => _view2;
 
+        private bool _allocated = false;
+
+        public IOBuffers Compliment { get; private set; }
+
         /// <summary>
         /// Sets to <see cref="IOBuffers"/> to be reflections of eachother. Aka, the input of one is the output of the other.
         /// </summary>
@@ -31,6 +35,8 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         public static void SetCompliment(IOBuffers buffers1, IOBuffers buffers2)
         {
             (buffers1._view2, buffers2._view2) = (buffers2._view1, buffers1._view1);
+            buffers1.Compliment = buffers2;
+            buffers2.Compliment = buffers1;
         }
 
         /// <summary>
@@ -39,11 +45,15 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="batchSize">The number of elements in a single batch.</param>
         public void Allocate(int batchSize)
         {
+            if (_allocated)
+                return;
+
             _buffer?.Dispose();
 
             _buffer = GPUManager.Accelerator.Allocate1D<float>(_maxLength * batchSize);
             _view1 = new ArrayView<float>(_buffer, 0, _maxLength * batchSize);
             GPUManager.AddExternalMemoryUsage(4 * _maxLength * batchSize);
+            _allocated = true;
         }
 
         /// <summary>
@@ -53,8 +63,11 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="area"></param>
         public void OutputDimensionArea(int length)
         {
-            if(length > _maxLength)
+            if (length > _maxLength)
+            {
                 _maxLength = length;
+                _allocated = false;
+            }
         }
     }
 }

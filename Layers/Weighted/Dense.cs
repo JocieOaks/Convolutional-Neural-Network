@@ -47,14 +47,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
         protected override int WeightLength => _inputShape.Dimensions * _inputShape.Area * _outputUnits;
 
-        public void FilterTest(int inputDimensions, int batchSize, int inputSize)
-        {
-            (Shape input, Shape output) = FilterTestSetup(inputDimensions, batchSize, inputSize);
-
-            (_weights as Weights).TestFilterGradient(this, input, output, _buffers, batchSize);
-            BiasTest(input, output, batchSize);
-        }
-
         /// <inheritdoc/>
         protected override void ForwardChild(int batchSize)
         {
@@ -76,10 +68,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
             BaseStartup(inputShape, buffers);
 
-            float variance = 2f / (_outputUnits + _inputShape.Volume);
-            float stdDev = MathF.Sqrt(variance);
-
-            _inputCopy = new Vector(_inputShape.Dimensions * maxBatchSize * inputShape.Area);
+            _inputCopy = new Vector(_inputShape.Volume * maxBatchSize);
 
             return _outputShape;
         }

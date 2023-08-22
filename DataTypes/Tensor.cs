@@ -9,19 +9,19 @@ using System.Diagnostics;
 namespace ConvolutionalNeuralNetwork.DataTypes
 {
     /// <summary>
-    /// The <see cref="ColorTensor"/> class represents a 2D array of <see cref="Color"/>s.
+    /// The <see cref="Tensor"/> class represents a 2D array of <see cref="Color"/>s.
     /// </summary>
     [Serializable]
-    public class ColorTensor : Cacheable<float>
+    public class Tensor : Cacheable<float>
     {
         [JsonProperty] protected float[] _tensor;
 
         /// <summary>
-        /// Initializes a new <see cref="ColorTensor"/> with the given dimensions.
+        /// Initializes a new <see cref="Tensor"/> with the given dimensions.
         /// </summary>
-        /// <param name="width">The width of the <see cref="ColorTensor"/>.</param>
-        /// <param name="length">The length of the <see cref="ColorTensor"/>.</param>
-        public ColorTensor(int width, int length)
+        /// <param name="width">The width of the <see cref="Tensor"/>.</param>
+        /// <param name="length">The length of the <see cref="Tensor"/>.</param>
+        public Tensor(int width, int length)
         {
             Width = width;
             Length = length;
@@ -29,7 +29,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             _tensor = new float[width * length];
         }
 
-        public ColorTensor(Shape shape)
+        public Tensor(Shape shape)
         {
             Width = shape.Width;
             Length = shape.Length;
@@ -40,24 +40,24 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <summary>
         /// A default constructor to be used when deserializing.
         /// </summary>
-        [JsonConstructor] protected ColorTensor() { }
+        [JsonConstructor] protected Tensor() { }
 
-        /// <value>The full area of the <see cref="ColorTensor"/>.</value>
+        /// <value>The full area of the <see cref="Tensor"/>.</value>
         [JsonIgnore] public int Area => _tensor.Length;
 
-        /// <value>The length of the <see cref="ColorTensor"/> when converted into an array of floats.</value>
+        /// <value>The length of the <see cref="Tensor"/> when converted into an array of floats.</value>
         [JsonIgnore] public int FloatLength => _tensor.Length * 3;
 
-        /// <value>The y length of the <see cref="ColorTensor"/>.</value>
+        /// <value>The y length of the <see cref="Tensor"/>.</value>
         [JsonProperty] public int Length { get; private set; }
 
-        /// <value>The x width of the <see cref="ColorTensor"/>.</value>
+        /// <value>The x width of the <see cref="Tensor"/>.</value>
         [JsonProperty] public int Width { get; private set; }
 
         public override long MemorySize => Area * 12;
 
         /// <summary>
-        /// Indexes the <see cref="ColorTensor"/> to retrieve the <see cref="Color"/> at the given coordinates.
+        /// Indexes the <see cref="Tensor"/> to retrieve the <see cref="Color"/> at the given coordinates.
         /// </summary>
         /// <param name="x">The x coordinate of the desired <see cref="Color"/>.</param>
         /// <param name="y">The y coordinate of the desired <see cref="Color"/>.</param>
@@ -75,14 +75,14 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         }
 
         /// <summary>
-        /// Multiplies a <see cref="Vector"/> and a <see cref="ColorTensor"/> by performing tensor contraction using the <see cref="Vector"/> as 
-        /// n x 3 tensor and the <see cref="ColorTensor"/> is an n x m x 3 tensor, resulting in a m x 3 tensor.
+        /// Multiplies a <see cref="Vector"/> and a <see cref="Tensor"/> by performing tensor contraction using the <see cref="Vector"/> as 
+        /// n x 3 tensor and the <see cref="Tensor"/> is an n x m x 3 tensor, resulting in a m x 3 tensor.
         /// </summary>
         /// <param name="vector">The <see cref="Vector"/> of length n.</param>
-        /// <param name="tensor">The <see cref="ColorTensor"/> of dimensions n x m.</param>
-        /// <returns>Returns a <see cref="ColorVector"/> of length m, where m is the <see cref="ColorTensor.Length"/> of <paramref name="tensor"/>.</returns>
+        /// <param name="tensor">The <see cref="Tensor"/> of dimensions n x m.</param>
+        /// <returns>Returns a <see cref="ColorVector"/> of length m, where m is the <see cref="Tensor.Length"/> of <paramref name="tensor"/>.</returns>
         /// <exception cref="ArgumentException">Thrown if <paramref name="vector"/> length is not equal to <paramref name="tensor"/> width.</exception>
-        public static Vector operator *(Vector vector, ColorTensor tensor)
+        public static Vector operator *(Vector vector, Tensor tensor)
         {
             if (tensor.Width != vector.Length)
                 throw new ArgumentException("Matrix and vector are not compatible.");
@@ -99,13 +99,13 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         }
 
         /// <summary>
-        /// Multiplies a <see cref="ColorTensor"/> of dimensions n x m x 3, by a <see cref="ColorVector"/> of dimensions m x 3,
+        /// Multiplies a <see cref="Tensor"/> of dimensions n x m x 3, by a <see cref="ColorVector"/> of dimensions m x 3,
         /// performing double tensor contraction to get a vector of length n.
         /// </summary>
         /// <param name="matrix">The first tensor of dimensions n x m x 3.</param>
         /// <param name="vector">The <see cref="ColorVector"/>, a  tensor of dimensions m x 3.</param>
         /// <returns>Returns a new <see cref="Vector"/> of length equal to <paramref name="matrix"/> width.</returns>
-        /// <exception cref="ArgumentException">Thrown if <paramref name="matrix"/> <see cref="ColorTensor.Length"/> is not equal to
+        /// <exception cref="ArgumentException">Thrown if <paramref name="matrix"/> <see cref="Tensor.Length"/> is not equal to
         /// <paramref name="vector"/>'s length.</exception>
         /*public static Vector operator *(ColorTensor matrix, ColorVector vector)
         {
@@ -131,9 +131,9 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="width"></param>
         /// <param name="length"></param>
         /// <returns></returns>
-        public static ColorTensor Random(int width, int length, float mean, float stdDev)
+        public static Tensor Random(int width, int length, float mean, float stdDev)
         {
-            ColorTensor tensor = new(width, length);
+            Tensor tensor = new(width, length);
             for (int y = 0; y < length; y++)
             {
                 for (int x = 0; x < width; x++)

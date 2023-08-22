@@ -12,7 +12,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     {
         public override string Name => "Input Layer";
 
-        private FeatureMap[][] _input;
+        private Tensor[][] _input;
 
         public InputLayer(Shape inputShape)
         {
@@ -39,7 +39,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
-        public void SetInput(FeatureMap[][] input)
+        public void SetInput(Tensor[][] input)
         {
             _input = input;
         }

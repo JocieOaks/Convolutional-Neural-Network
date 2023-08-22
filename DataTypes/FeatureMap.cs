@@ -13,7 +13,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
     /// can be confusing, so it may be better to create a Tensor class of which <see cref="FeatureMap"/> is a child.)
     /// </summary>
     [Serializable]
-    public class FeatureMap : ColorTensor
+    public class FeatureMap : Tensor
     {
         private readonly static float s_colorMean = 0;
         private readonly static float s_colorDeviation = 0.5f;

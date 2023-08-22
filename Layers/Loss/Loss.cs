@@ -13,6 +13,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Loss
         protected Shape _outputShape;
         protected Vector _truth;
         protected Vector _loss = new(1);
+        protected Vector _accuracy = new(1);
 
         public virtual void Startup(IOBuffers buffers, Shape outputShape, int maxBatchSize)
         {
@@ -21,6 +22,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Loss
             _truth = new Vector(maxBatchSize * outputShape.Volume);
         }
 
-        public abstract float GetLoss(Vector[] groundTruth);
+        public abstract (float, float) GetLoss(Vector[] groundTruth);
     }
 }

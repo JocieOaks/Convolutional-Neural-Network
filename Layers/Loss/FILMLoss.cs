@@ -15,7 +15,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Loss
     {
         private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>, VariableView<float>, int> s_lossAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, VariableView<float>, int>(LossKernel);
 
-        public override float GetLoss(Vector[] groundTruth)
+        public override (float, float)  GetLoss(Vector[] groundTruth)
         {
             var truth = _truth.GetArrayViewEmpty<float>();
             for(int i = 0; i < groundTruth.Length; i++)
@@ -32,7 +32,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Loss
             _loss.DecrementLiveCount();
 
             _loss.SyncCPU();
-            return _loss[0];
+            return (_loss[0], 1);
         }
 
         private static void LossKernel(Index1D index, ArrayView<float> output, ArrayView<float> truth, VariableView<float> totalLoss, int length)

@@ -11,7 +11,7 @@ namespace ConvolutionalNeuralNetwork.Networks
     public partial class FILM : Network
     {
         private readonly int _pyramidLayers;
-        public FILM(Shape inputShape, int pyramidLayers)
+        public FILM(Shape inputShape, int pyramidLayers) : base(new FILMLoss())
         {
             _pyramidLayers = pyramidLayers;
             SerialConv[] featuresConvs = new SerialConv[6];
@@ -35,7 +35,7 @@ namespace ConvolutionalNeuralNetwork.Networks
             CreateFusion(f0, f1, flow0, flow1);
         }
 
-        [JsonConstructor] private FILM() { }
+        [JsonConstructor] private FILM() : base(new FILMLoss()){ }
 
         private void CreateFeatureExtraction(SerialConv[] shared, out SerialFork[] outputs, out SerialFork[] originals, Shape inputShape)
         {
@@ -254,8 +254,6 @@ namespace ConvolutionalNeuralNetwork.Networks
 
             return loss;
         }
-
-        protected override Loss Loss { get; } = new FILMLoss();
 
         private (float, FeatureMap[][]) GetLoss(FeatureMap[][] expected, Vector[] actual)
         {
