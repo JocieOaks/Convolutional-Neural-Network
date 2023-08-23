@@ -16,12 +16,13 @@ namespace ConvolutionalNeuralNetwork.Networks
             _pyramidLayers = pyramidLayers;
             SerialConv[] featuresConvs = new SerialConv[6];
             SerialConv[] flowConvs = new SerialConv[3];
+            var zero = new Constant(0);
 
             for (int i = 0; i < 3; i++)
             {
-                featuresConvs[i] = new SerialConv((int)Math.Pow(2, 4 + i), 3, 1, new Weights(GlorotUniform.Instance), null);
-                featuresConvs[i + 3] = new SerialConv((int)Math.Pow(2, 5 + i), 3, 1, new Weights(GlorotUniform.Instance), null);
-                flowConvs[i] = new SerialConv(i == 0 ? 256 : i == 1 ? 128 : 2, 3, 1, new Weights(GlorotUniform.Instance), null);
+                featuresConvs[i] = new SerialConv((int)Math.Pow(2, 4 + i), 3, 1, new Weights(GlorotUniform.Instance), new Weights(zero));
+                featuresConvs[i + 3] = new SerialConv((int)Math.Pow(2, 5 + i), 3, 1, new Weights(GlorotUniform.Instance), new Weights(zero));
+                flowConvs[i] = new SerialConv(i == 0 ? 256 : i == 1 ? 128 : 2, 3, 1, new Weights(GlorotUniform.Instance), new Weights(zero));
             }
 
             _inputShape = inputShape;
@@ -66,10 +67,8 @@ namespace ConvolutionalNeuralNetwork.Networks
                     {
                         AddSerialLayer(shared[j]);
                         AddActivation(Activation.ReLU);
-                        AddBatchNormalization();
                         AddSerialLayer(shared[j + 3]);
                         AddActivation(Activation.ReLU);
-                        AddBatchNormalization();
                         skips[i + j].Add(AddFork());
                         AddAveragePool(2);
                     }
@@ -117,10 +116,8 @@ namespace ConvolutionalNeuralNetwork.Networks
 
                 if (i < 2)
                 {
-                    AddConvolution(i == 0 ? 64 : 128, 3, 1, activation: Activation.ReLU);
-                    AddBatchNormalization();
-                    AddConvolution(i == 0 ? 32 : 64, 3, 1, activation: Activation.ReLU);
-                    AddBatchNormalization();
+                    AddConvolution(i == 0 ? 64 : 128, 3, activation: Activation.ReLU);
+                    AddConvolution(i == 0 ? 32 : 64, 3, activation: Activation.ReLU);
                     AddConvolution(2, 3, 1, activation: Activation.ReLU);
                     AddBatchNormalization();
                 }
@@ -128,15 +125,12 @@ namespace ConvolutionalNeuralNetwork.Networks
                 {
                     AddSerialLayer(shared[0]);
                     AddActivation(Activation.ReLU);
-                    AddBatchNormalization();
 
                     AddSerialLayer(shared[1]);
                     AddActivation(Activation.ReLU);
-                    AddBatchNormalization();
 
                     AddSerialLayer(shared[2]);
                     AddActivation(Activation.ReLU);
-                    AddBatchNormalization();
                 }
                 AddConcatenation(upsampled[i]);
 
@@ -173,7 +167,6 @@ namespace ConvolutionalNeuralNetwork.Networks
             {
                 AddUpsampling(2);
                 AddConvolution(16, 2, 1, activation: Activation.ReLU);
-                AddBatchNormalization();
 
                 AddConcatenation(f0[i]);
                 AddConcatenation(f1[i]);
@@ -181,9 +174,7 @@ namespace ConvolutionalNeuralNetwork.Networks
                 AddConcatenation(flow1[i]);
 
                 AddConvolution(16, 3, 1, activation: Activation.ReLU);
-                AddBatchNormalization();
                 AddConvolution(16, 3, 1, activation: Activation.ReLU);
-                AddBatchNormalization();
             }
 
             AddConvolution(_inputShape.Dimensions, 1, 1, useBias: false);
@@ -230,57 +221,5 @@ namespace ConvolutionalNeuralNetwork.Networks
 
             return film;
         }
-
-
-        private float CalculateLoss(Vector[] actual)
-        {
-            for (int i = 0; i < actual.Length; i++)
-            {
-                for (int j = 0; j < _inputShape.Dimensions; j++)
-                {
-                    _outputs[i][j].SyncCPU(Output.SubView((i * _inputShape.Dimensions + j) * _inputShape.Area, _inputShape.Area));
-                }
-            }
-
-            (float loss, FeatureMap[][] gradients) = GetLoss(_outputs, actual);
-
-            for (int i = 0; i < actual.Length; i++)
-            {
-                for (int j = 0; j < _inputShape.Dimensions; j++)
-                {
-                    gradients[i][j].CopyToBuffer(InGradient.SubView((i * _inputShape.Dimensions + j) * _inputShape.Area, _inputShape.Area));
-                }
-            }
-
-            return loss;
-        }
-
-        private (float, FeatureMap[][]) GetLoss(FeatureMap[][] expected, Vector[] actual)
-        {
-            int area = expected[0][0].Area;
-            int width = expected[0][0].Width;
-
-            FeatureMap[][] gradient = new FeatureMap[expected.Length][];
-            float loss = 0;
-            for(int i = 0; i < expected.Length; i++)
-            {
-                gradient[i] = new FeatureMap[expected[i].Length];
-                for(int j =0; j < expected[i].Length; j++)
-                {
-                    gradient[i][j] = new FeatureMap(_inputShape);
-                    for(int y = 0; y < expected[i][j].Length; y++)
-                    {
-                        for(int x = 0; x < expected[i][j].Length; x++)
-                        {
-                            float defect = expected[i][j][x, y] - actual[i][j * area + y * width + x];
-                            gradient[i][j][x, y] = defect;
-                            loss += MathF.Abs(defect);
-                        }
-                    }
-                }
-            }
-            return (loss / expected.Length, gradient);
-        }
-
     }
 }

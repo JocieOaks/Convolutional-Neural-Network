@@ -18,16 +18,16 @@ namespace ConvolutionalNeuralNetwork.DataTypes
     /// </summary>
     public readonly struct LayerInfo : ILayerInfo
     {
-        public LayerInfo(Shape inputShape,  Shape outputShape, int filterSize, int stride)
+        public LayerInfo(Shape expansionShape,  Shape contractionShape, int filterSize, int stride)
         {
-            InputWidth = inputShape.Width;
-            InputLength = inputShape.Length;
-            InputArea = inputShape.Area;
-            InputDimensions = inputShape.Dimensions;
-            OutputWidth = outputShape.Width;
-            OutputLength = outputShape.Length;
-            OutputArea = outputShape.Area;
-            OutputDimensions = outputShape.Dimensions;
+            ExpansionWidth = expansionShape.Width;
+            ExpansionLength = expansionShape.Length;
+            ExpansionArea = expansionShape.Area;
+            ExpansionDimensions = expansionShape.Dimensions;
+            ContractionWidth = contractionShape.Width;
+            ContractionLength = contractionShape.Length;
+            ContractionArea = contractionShape.Area;
+            ContractionDimensions = contractionShape.Dimensions;
             FilterSize = filterSize;
             FilterArea = filterSize * filterSize;
             InverseFilterArea = 1f / FilterArea;
@@ -36,13 +36,13 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         }
 
         /// <inheritdoc/>
-        public int InputWidth { get; }
+        public int ExpansionWidth { get; }
 
         /// <inheritdoc/>
-        public int InputLength { get; }
+        public int ExpansionLength { get; }
 
         /// <inheritdoc/>
-        public int InputArea { get; }
+        public int ExpansionArea { get; }
 
         /// <inheritdoc/>
         public float InverseFilterArea { get; }
@@ -53,48 +53,38 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         public int FilterArea { get; }
 
         /// <inheritdoc/>
-        public int OutputWidth { get; }
+        public int ContractionWidth { get; }
 
         /// <inheritdoc/>
-        public int OutputLength { get; }
+        public int ContractionLength { get; }
 
         /// <inheritdoc/>
-        public int OutputArea { get; }
+        public int ContractionArea { get; }
 
-        public int InputDimensions { get; }
+        public int ExpansionDimensions { get; }
 
-        public int OutputDimensions { get; }
+        public int ContractionDimensions { get; }
 
         /// <inheritdoc/>
         public int Stride { get; }
 
         public int Padding { get; }
 
-        public bool TryGetInputIndex(int outputIndex, int shiftX, int shiftY, out int index)
+        public bool TryGetExpansionIndex(int contractionIndex, int shiftX, int shiftY, out int index)
         {
-            int strideY = outputIndex / OutputWidth;
-            int strideX = outputIndex - (strideY * OutputWidth);
+            int strideY = contractionIndex / ContractionWidth;
+            int strideX = contractionIndex - (strideY * ContractionWidth);
 
             shiftX += strideX * Stride - Padding;
             shiftY += strideY * Stride - Padding;
-            index = shiftY * InputWidth + shiftX;
-            return shiftX >= 0 && shiftY >= 0 && shiftX < InputWidth && shiftY < InputLength;
+            index = shiftY * ExpansionWidth + shiftX;
+            return shiftX >= 0 && shiftY >= 0 && shiftX < ExpansionWidth && shiftY < ExpansionLength;
         }
 
-        public int GetInputIndex(int outputIndex, int shiftX, int shiftY)
+        public bool TryGetContractionIndex(int expansionIndex, int shiftX, int shiftY, out int index)
         {
-            int strideY = outputIndex / OutputWidth;
-            int strideX = outputIndex - (strideY * OutputWidth);
-
-            shiftX += strideX * Stride - Padding;
-            shiftY += strideY * Stride - Padding;
-            return shiftY * InputWidth + shiftX;
-        }
-
-        public int GetOutputIndex(int inputIndex, int shiftX, int shiftY)
-        {
-            int x = inputIndex % InputWidth;
-            int y = inputIndex / InputWidth;
+            int x = expansionIndex % ExpansionWidth;
+            int y = expansionIndex / ExpansionWidth;
 
             x += Padding - shiftX;
             y += Padding - shiftY;
@@ -104,53 +94,78 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
 
 
-            x = XMath.Clamp(x, 0, OutputWidth);
-            y = XMath.Clamp(y, 0, OutputLength);
+            x = XMath.Clamp(x, 0, ContractionWidth);
+            y = XMath.Clamp(y, 0, ContractionLength);
 
-            return y * OutputWidth + x;
+            index = y * ContractionWidth + x;
+            return shiftX >= 0 && shiftY >= 0 && shiftX < ContractionWidth && shiftY < ContractionLength;
         }
 
-        public (int, int) GetInputCoordinates(int inputIndex)
+        public int GetExpansionIndex(int contractionIndex, int shiftX, int shiftY)
         {
-            int x = inputIndex % InputWidth;
-            int y = inputIndex / InputWidth;
+            int strideY = contractionIndex / ContractionWidth;
+            int strideX = contractionIndex - (strideY * ContractionWidth);
+
+            shiftX += strideX * Stride - Padding;
+            shiftY += strideY * Stride - Padding;
+            return shiftY * ExpansionWidth + shiftX;
+        }
+
+        public int GetContractionIndex(int expansionIndex, int shiftX, int shiftY)
+        {
+            int x = expansionIndex % ExpansionWidth;
+            int y = expansionIndex / ExpansionWidth;
+
+            x += Padding - shiftX;
+            y += Padding - shiftY;
+
+            x /= Stride;
+            y /= Stride;
+
+
+
+            x = XMath.Clamp(x, 0, ContractionWidth);
+            y = XMath.Clamp(y, 0, ContractionLength);
+
+            return y * ContractionWidth + x;
+        }
+
+        public (int, int) GetExpansionCoordinates(int expansionIndex)
+        {
+            int x = expansionIndex % ExpansionWidth;
+            int y = expansionIndex / ExpansionWidth;
             return (x, y);
         }
 
-        public (int, int) GetOutputCoordinates(int outputIndex)
+        public (int, int) GetContractionCoordinates(int contractionIndex)
         {
-            int x = outputIndex % OutputWidth;
-            int y = outputIndex / OutputWidth;
+            int x = contractionIndex % ContractionWidth;
+            int y = contractionIndex / ContractionWidth;
             return (x, y);
-        }
-
-        public int OutputIndex(int x, int y)
-        {
-            return y * OutputWidth + x;
         }
 
         public (int,int) GetOffset(int dimension, int batchIndex)
         {
-            int offsetCount = batchIndex * InputDimensions + dimension;
-            return (offsetCount * InputArea, offsetCount * OutputArea);
+            int offsetCount = batchIndex * ExpansionDimensions + dimension;
+            return (offsetCount * ExpansionArea, offsetCount * ContractionArea);
         }
 
-        public void Deconstruct(int x, int y, int z, out int mapIndex, out int inputOffset, out int outputIndex, out int dimension)
+        public void DeconstructContraction(int x, int y, int z, out int mapIndex, out int expansionOffset, out int contractionIndex, out int dimension)
         {
-            outputIndex = z * OutputArea * OutputDimensions + x;
-            int outputDimension = x / OutputArea;
-            dimension = y * OutputDimensions + outputDimension;
-            mapIndex = x % OutputArea;
-            inputOffset = (y + z * InputDimensions) * InputArea;
+            contractionIndex = z * ContractionArea * ContractionDimensions + x;
+            int contractionDimension = x / ContractionArea;
+            dimension = y * ContractionDimensions + contractionDimension;
+            mapIndex = x % ContractionArea;
+            expansionOffset = (y + z * ExpansionDimensions) * ExpansionArea;
         }
 
-        public void DeconstructInverse(int x, int y, int z, out int mapIndex, out int outputOffset, out int inputIndex, out int dimension)
+        public void DeconstructExpansion(int x, int y, int z, out int mapIndex, out int contractionOffset, out int expansionIndex, out int dimension)
         {
-            inputIndex = z * InputArea * InputDimensions + x;
-            int inputDimension = x / InputArea;
-            dimension = inputDimension * OutputDimensions + y;
-            mapIndex = x % InputArea;
-            outputOffset = (y + z * OutputDimensions) * OutputArea;
+            expansionIndex = z * ExpansionArea * ExpansionDimensions + x;
+            int expansionDimension = x / ExpansionArea;
+            dimension = expansionDimension * ContractionDimensions + y;
+            mapIndex = x % ExpansionArea;
+            contractionOffset = (y + z * ContractionDimensions) * ContractionArea;
         }
 
         /// <summary>

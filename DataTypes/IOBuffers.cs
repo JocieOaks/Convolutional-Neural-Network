@@ -12,16 +12,15 @@ namespace ConvolutionalNeuralNetwork.DataTypes
     /// </summary>
     public class IOBuffers
     {
-        private ArrayView<float> _view1;
-        private ArrayView<float> _view2;
+        private ArrayView<float> View { get; set; }
         private int _maxLength = 0;
         private MemoryBuffer1D<float, Stride1D.Dense> _buffer;
 
-        public ArrayView<float> InGradient => _view1;
-        public ArrayView<float> Input => _view2;
-        public ArrayView<float> OutGradient => _view2;
-        public ArrayView<float> Output => _view1;
-        public ArrayView<float> Gradient => _view2;
+        public ArrayView<float> InGradient => View;
+        public ArrayView<float> Input => Compliment.View;
+        public ArrayView<float> OutGradient => Compliment.View;
+        public ArrayView<float> Output => View;
+        public ArrayView<float> Gradient => Compliment.View;
 
         private bool _allocated = false;
 
@@ -34,7 +33,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="buffers2">The second <see cref="IOBuffers"/>.</param>
         public static void SetCompliment(IOBuffers buffers1, IOBuffers buffers2)
         {
-            (buffers1._view2, buffers2._view2) = (buffers2._view1, buffers1._view1);
             buffers1.Compliment = buffers2;
             buffers2.Compliment = buffers1;
         }
@@ -51,7 +49,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             _buffer?.Dispose();
 
             _buffer = GPUManager.Accelerator.Allocate1D<float>(_maxLength * batchSize);
-            _view1 = new ArrayView<float>(_buffer, 0, _maxLength * batchSize);
+            View = new ArrayView<float>(_buffer, 0, _maxLength * batchSize);
             GPUManager.AddExternalMemoryUsage(4 * _maxLength * batchSize);
             _allocated = true;
         }

@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
-    public class InputLayer : Layer
+    public class InputLayer : Layer, IUnchangedLayer
     {
         public override string Name => "Input Layer";
 

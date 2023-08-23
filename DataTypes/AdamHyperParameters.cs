@@ -13,8 +13,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
         [JsonProperty] private readonly float _learningRateDecay = 0.464f;
 
-        public bool UpdateWeights { get; private set; }
-
         /// <summary>
         /// Calculates the learning rate with the correction for moment bias.
         /// </summary>
@@ -24,12 +22,8 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <returns>Returns the learning rate multiplied by the correction term.</returns>
         public void Update(bool updateWeights = true)
         {
-            UpdateWeights = updateWeights;
-            if (updateWeights)
-            {
-                _updates++;
-                _correctedLearningRate = _learningRate * MathF.Pow(_learningRateDecay, _updates / 75e4f) * MathF.Sqrt(1 - MathF.Pow(SecondMomentDecay, _updates)) / (1 - MathF.Pow(FirstMomentDecay, _updates));
-            }
+            _updates++;
+            _correctedLearningRate = _learningRate * MathF.Pow(_learningRateDecay, _updates / 75e4f) * MathF.Sqrt(1 - MathF.Pow(SecondMomentDecay, _updates)) / (1 - MathF.Pow(FirstMomentDecay, _updates));
         }
 
         public AdamHyperParameters Copy()

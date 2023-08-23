@@ -86,7 +86,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int i = 0; i < info.FilterSize; i++)
                 {
-                    if (info.TryGetInputIndex(index.X, i, j, out int inputIndex))
+                    if (info.TryGetExpansionIndex(index.X, i, j, out int inputIndex))
                     {
                         outGradient[inputIndex + inputOffset] = dL;
                     }
@@ -114,7 +114,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             {
                 for (int i = 0; i < info.FilterSize; i++)
                 {
-                    if (info.TryGetInputIndex(index.X, i, j, out int inputIndex))
+                    if (info.TryGetExpansionIndex(index.X, i, j, out int inputIndex))
                         sum += input[inputIndex + inputOffset];
                 }
             }

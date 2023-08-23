@@ -75,23 +75,23 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
         private static void DenseFilterKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> input, ArrayView<float> filterGradient, LayerInfo info)
         {
-            int inputArea = info.InputArea * info.InputDimensions;
+            int inputArea = info.ExpansionArea * info.ExpansionDimensions;
 
-            Atomic.Add(ref filterGradient[index.X + inputArea * index.Z], inGradient[index.Z + info.OutputArea * index.Y] * input[index.X + inputArea * index.Y]);
+            Atomic.Add(ref filterGradient[index.X + inputArea * index.Z], inGradient[index.Z + info.ContractionArea * index.Y] * input[index.X + inputArea * index.Y]);
         }
 
         private static void DenseGradientKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, ArrayView<float> filter, LayerInfo info)
         {
-            int inputArea = info.InputArea * info.InputDimensions;
+            int inputArea = info.ExpansionArea * info.ExpansionDimensions;
 
-            Atomic.Add(ref outGradient[index.X + inputArea * index.Y], inGradient[index.Z + info.OutputArea * index.Y] * filter[index.X + inputArea * index.Z]);
+            Atomic.Add(ref outGradient[index.X + inputArea * index.Y], inGradient[index.Z + info.ContractionArea * index.Y] * filter[index.X + inputArea * index.Z]);
         }
 
         private static void DenseKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, ArrayView<float> filter, LayerInfo info)
         {
-            int inputArea = info.InputArea * info.InputDimensions;
+            int inputArea = info.ExpansionArea * info.ExpansionDimensions;
 
-            Atomic.Add(ref output[index.Z + info.OutputArea * index.Y], input[index.X + inputArea * index.Y] * filter[index.X + inputArea * index.Z]);
+            Atomic.Add(ref output[index.Z + info.ContractionArea * index.Y], input[index.X + inputArea * index.Y] * filter[index.X + inputArea * index.Z]);
         }
 
         protected override void BackwardsNoUpdate(int batchSize)

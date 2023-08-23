@@ -158,7 +158,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             {
                 for (int x = 0; x < width; x++)
                 {
-                    map[x, y] = Math.Clamp(Utility.RandomGauss(0.5f, 0.2f), -1, 1);
+                    map[x, y] = Math.Clamp(Utility.RandomGauss(0, 0.4f), -1, 1);
                 }
             }
             return map;
