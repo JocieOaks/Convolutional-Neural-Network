@@ -6,7 +6,7 @@ using ConvolutionalNeuralNetwork.Layers.Serial;
 using ConvolutionalNeuralNetwork.Layers.Initializers;
 using ConvolutionalNeuralNetwork.Layers.Loss;
 
-namespace ConvolutionalNeuralNetwork.Networks
+namespace ConvolutionalNeuralNetwork
 {
     /// <summary>
     /// The <see cref="Network"/> class is the base class for all Convolutional Neural Networks.
@@ -73,9 +73,9 @@ namespace ConvolutionalNeuralNetwork.Networks
 
         public SerialConv AddConvolution(int outputDimensions, int filterSize, int stride = 1, IWeightInitializer initializer = null, bool useBias = true, IWeightInitializer biasInitializer = null, Activation activation = Activation.None)
         {
-            Weights weights = new (initializer);
+            Weights weights = new(initializer);
             Weights bias = null;
-            if(useBias)
+            if (useBias)
             {
                 bias = new Weights(biasInitializer ?? new Constant(0));
             }
@@ -83,7 +83,7 @@ namespace ConvolutionalNeuralNetwork.Networks
             SerialConv convolution = new(outputDimensions, filterSize, stride, weights, bias);
             AddSerialLayer(convolution);
 
-            if(activation != Activation.None)
+            if (activation != Activation.None)
             {
                 AddActivation(activation);
             }
@@ -123,7 +123,7 @@ namespace ConvolutionalNeuralNetwork.Networks
             SerialDense dense = new(outputUnits, weights, bias);
             AddSerialLayer(dense);
 
-            if(activation != Activation.None)
+            if (activation != Activation.None)
             {
                 AddActivation(activation);
             }
@@ -188,7 +188,7 @@ namespace ConvolutionalNeuralNetwork.Networks
         public SerialBatchNorm AddBatchNormalization()
         {
             SerialBatchNorm norm = new();
-            AddSerialLayer(norm); 
+            AddSerialLayer(norm);
             return norm;
         }
 
@@ -196,17 +196,17 @@ namespace ConvolutionalNeuralNetwork.Networks
         {
             SerialWarp warp = _serializedLayers.FirstOrDefault(x => x is SerialWarp) as SerialWarp;
             warp ??= new SerialWarp();
-            AddSerialLayer(warp); 
+            AddSerialLayer(warp);
             return warp;
         }
         public void Initialize()
         {
-            if(_initialized)
+            if (_initialized)
                 return;
 
             Shape shape = new();
 
-            foreach(var index in _layerIndeces)
+            foreach (var index in _layerIndeces)
             {
                 shape = _serializedLayers[index].Initialize(shape);
             }
@@ -312,8 +312,8 @@ namespace ConvolutionalNeuralNetwork.Networks
 
         public (float, float) Train(List<FeatureMap[][]> inputs, Vector[] expected, bool update = true)
         {
-         
-            if(inputs.Count != _inputLayers.Count)
+
+            if (inputs.Count != _inputLayers.Count)
             {
                 throw new ArgumentException("Incorrect input count.");
             }
@@ -331,7 +331,7 @@ namespace ConvolutionalNeuralNetwork.Networks
             int batchSize = expected.Length;
             for (int i = 0; i < Depth; i++)
             {
-                if(!skipInputLayers || _layers[i] is not InputLayer)
+                if (!skipInputLayers || _layers[i] is not InputLayer)
                     Utility.StopWatch(() => _layers[i].Forward(batchSize), $"Forwards {i} {_layers[i].Name}", PRINTSTOPWATCH);
             }
 
@@ -420,15 +420,15 @@ namespace ConvolutionalNeuralNetwork.Networks
 
         private void Construct()
         {
-            if(!_initialized)
+            if (!_initialized)
             {
                 throw new InvalidOperationException("Network has not been initialized.");
             }
 
-            foreach(var index in _layerIndeces)
+            foreach (var index in _layerIndeces)
             {
                 var layer = _serializedLayers[index].Construct();
-                if(layer is InputLayer input)
+                if (layer is InputLayer input)
                 {
                     _inputLayers.Add(input);
                 }

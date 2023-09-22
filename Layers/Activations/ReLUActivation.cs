@@ -1,5 +1,4 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
-using ConvolutionalNeuralNetwork.Networks;
 using ILGPU;
 using ILGPU.Runtime;
 using ILGPU.Runtime.OpenCL;

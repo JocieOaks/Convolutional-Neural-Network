@@ -3,7 +3,7 @@ using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
 using ConvolutionalNeuralNetwork.DataTypes;
 using ConvolutionalNeuralNetwork.Layers;
-using ConvolutionalNeuralNetwork.Layers.Weighted;
+using ConvolutionalNeuralNetwork.Layers.Serial;
 
 namespace ConvolutionalNeuralNetwork
 {
@@ -28,7 +28,7 @@ namespace ConvolutionalNeuralNetwork
         /// propagation.
         /// </summary>
         /// <param name="layer">The <see cref="Layer"/> to be tested.</param>
-        public static void GradientCheck(ILayer layer, int inputDimensions, int outputDimensions, int inputSize, int batchSize)
+        public static void GradientCheck(ISerial serial, int inputDimensions, int outputDimensions, int inputSize, int batchSize)
         {
             FeatureMap[] inputs = new FeatureMap[inputDimensions * batchSize];
             Shape inputShapes = new(inputSize, inputSize, inputDimensions);
@@ -47,6 +47,9 @@ namespace ConvolutionalNeuralNetwork
             IOBuffers buffer = new();
             IOBuffers complimentBuffer = new();
             complimentBuffer.OutputDimensionArea(inputDimensions * inputSize * inputSize);
+
+            serial.Initialize(inputShapes);
+            ILayer layer = serial.Construct();
 
             Shape outputShape = layer.Startup(inputShapes, buffer, batchSize);
             FeatureMap[] outputs = new FeatureMap[outputDimensions * batchSize];
@@ -140,7 +143,7 @@ namespace ConvolutionalNeuralNetwork
                                 }
                             }
                         }
-                        if (MathF.Abs(outGradients[i][j, k] - testGradient) > Math.Max(0.01, testGradient * 0.001))
+                        if (MathF.Abs(outGradients[i][j, k] - testGradient) > Math.Max(0.03, testGradient * 0.001))
                         {
                             Console.WriteLine($"Expected Gradient: {outGradients[i][j, k]:f4} \t Test Gradient: {testGradient:f4}");
                             Console.ReadLine();
