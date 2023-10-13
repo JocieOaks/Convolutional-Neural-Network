@@ -34,6 +34,17 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             get => _weights[index];
         }
 
+        public Weights Slice(int index, int length)
+        {
+            List<float> weights = new List<float>();
+            for(int i = index; i < index + length; i++)
+            {
+                weights.Add(this[i]);
+            }
+
+            return new Weights(new Predefined(weights));
+        }
+
         public void DecrementLiveGradient(int decrement = 1)
         {
             _gradient.DecrementLiveCount((uint)decrement);

@@ -17,6 +17,8 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         protected Weights _weights;
         protected Vector _inputCopy;
 
+        public Weights Weights => _weights;
+
         public WeightedLayer(int filterSize, int stride, Weights weights, Weights bias) : base (filterSize, stride)
         {
             _weights = weights;

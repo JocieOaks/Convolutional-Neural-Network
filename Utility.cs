@@ -15,13 +15,15 @@ namespace ConvolutionalNeuralNetwork
         //Used to avoid divide by zero or log of zero going to infinity.
         public const float ASYMPTOTEERRORCORRECTION = 1e-7f;
 
-        /// <value>Color with very small values. Used to avoid asymptotic behaviour when a value goes to zero.</value>
-        public static Color AsymptoteErrorColor { get; } = new(ASYMPTOTEERRORCORRECTION);
-
         /// <value>A single <see cref="System.Random"/> for number generation throughout the project. For some functions it is inconvenient
         /// to pass a single <see cref="System.Random"/> but creating multiple in quick succession led to them sometimes being seeded with
         /// the same values, leading to stretches of the same value being generated.</value>
         public static Random Random { get; } = new Random();
+
+        private static float Inputs(int i, int j, int k)
+        {
+            return (i * 0.5f + (i + 1) * j - k) / 10f;
+        }
 
         /// <summary>
         /// Tests whether the backpropogation of a <see cref="Layer"/> is accurate to it's expected value. Used to diagnose issues with a <see cref="Layer"/>s
@@ -39,7 +41,7 @@ namespace ConvolutionalNeuralNetwork
                 {
                     for (int k = 0; k < inputSize; k++)
                     {
-                        inputs[i][j, k] = i * 0.5f + (i + 1) * j - k;
+                        inputs[i][j, k] = Inputs(i, j, k);
                     }
                 }
             }
@@ -82,7 +84,7 @@ namespace ConvolutionalNeuralNetwork
                     new FeatureMap(outputs[i].Width, outputs[i].Length, 1).CopyToBuffer(buffer.InGradient.SubView(outputShape.Area * i, outputShape.Area));
                 }
             }
-            layer.Backwards(batchSize, true);
+            layer.Backwards(batchSize, false);
             FeatureMap[] outGradients = new FeatureMap[inputDimensions * batchSize];
             for (int i = 0; i < inputDimensions * batchSize; i++)
             {
@@ -136,19 +138,277 @@ namespace ConvolutionalNeuralNetwork
                             {
                                 for (int j2 = 0; j2 < testOutput[i2].Width; j2++)
                                 {
-
-
                                     testGradient += (testOutput[i2][j2, k2] - outputs[i2][j2, k2]) / h;
 
                                 }
                             }
                         }
-                        if (MathF.Abs(outGradients[i][j, k] - testGradient) > Math.Max(0.03, testGradient * 0.001))
+                        Console.WriteLine($"Expected Gradient: {outGradients[i][j, k]:f4} \t Test Gradient: {testGradient:f4}");
+                        if (MathF.Abs(outGradients[i][j, k] - testGradient) > Math.Max(0.01, testGradient * 0.001))
                         {
-                            Console.WriteLine($"Expected Gradient: {outGradients[i][j, k]:f4} \t Test Gradient: {testGradient:f4}");
                             Console.ReadLine();
                         }
-                        inputs[i][j, k] = i * 0.5f + (i + 1) * j - k;
+                        inputs[i][j, k] = Inputs(i, j, k);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Tests whether the backpropogation of a <see cref="Layer"/> is accurate to it's expected value. Used to diagnose issues with a <see cref="Layer"/>s
+        /// propagation.
+        /// </summary>
+        /// <param name="layer">The <see cref="Layer"/> to be tested.</param>
+        public static void AtomicCheck(Weights weights, int filterSize, int stride, int inputDimensions, int outputDimensions, int inputSize, int batchSize)
+        {
+            FeatureMap[] outputs;
+            if (true)
+            {
+                FeatureMap[] inputs = new FeatureMap[inputDimensions * batchSize];
+                Shape inputShapes = new(inputSize, inputSize, inputDimensions);
+                for (int i = 0; i < inputDimensions * batchSize; i++)
+                {
+                    inputs[i] = new(inputSize, inputSize);
+                    for (int j = 0; j < inputSize; j++)
+                    {
+                        for (int k = 0; k < inputSize; k++)
+                        {
+                            inputs[i][j, k] = i * 0.5f + (i + 1) * j - k;
+                        }
+                    }
+                }
+
+                IOBuffers buffer = new();
+                IOBuffers complimentBuffer = new();
+                complimentBuffer.OutputDimensionArea(inputDimensions * inputSize * inputSize);
+
+                ISerial serial = new SerialConv(outputDimensions, filterSize, stride, weights, null);
+
+                serial.Initialize(inputShapes);
+                ILayer layer = serial.Construct();
+
+                Shape outputShape = layer.Startup(inputShapes, buffer, batchSize);
+                outputs = new FeatureMap[outputDimensions * batchSize];
+                for (int i = 0; i < outputDimensions * batchSize; i++)
+                {
+                    outputs[i] = new FeatureMap(outputShape);
+                }
+                buffer.Allocate(batchSize);
+                complimentBuffer.Allocate(batchSize);
+                IOBuffers.SetCompliment(buffer, complimentBuffer);
+                for (int i = 0; i < inputDimensions * batchSize; i++)
+                {
+                    inputs[i].CopyToBuffer(buffer.Input.SubView(inputShapes.Area * i, inputShapes.Area));
+                }
+
+                layer.Forward(batchSize);
+                if (layer is IUnchangedLayer)
+                {
+                    for (int i = 0; i < outputDimensions * batchSize; i++)
+                    {
+                        outputs[i].SyncCPU(buffer.Input.SubView(outputShape.Area * i, outputShape.Area));
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < outputDimensions * batchSize; i++)
+                    {
+                        outputs[i].SyncCPU(buffer.Output.SubView(outputShape.Area * i, outputShape.Area));
+                    }
+                }
+
+                
+            }
+
+            FeatureMap[] testOutput = new FeatureMap[outputDimensions * batchSize];
+            for (int i = 0; i < outputDimensions * batchSize; i++)
+            {
+                testOutput[i] = new(outputs[i].Width, outputs[i].Length);
+            }
+
+            for (int p = 0; p < inputDimensions; p++)
+            {
+                FeatureMap[] inputs = new FeatureMap[batchSize];
+                Shape inputShapes = new(inputSize, inputSize, 1);
+                for (int i = 0; i < batchSize; i++)
+                {
+                    inputs[i] = new(inputSize, inputSize);
+                    for (int j = 0; j < inputSize; j++)
+                    {
+                        for (int k = 0; k < inputSize; k++)
+                        {
+                            inputs[i][j, k] = (p * batchSize + i) * 0.5f + ((p * batchSize + i) + 1) * j - k;
+                        }
+                    }
+                }
+
+                IOBuffers buffer = new();
+                IOBuffers complimentBuffer = new();
+                complimentBuffer.OutputDimensionArea(inputSize * inputSize);
+
+                ISerial serial = new SerialConv(outputDimensions, filterSize, stride, weights.Slice(p * filterSize * filterSize, filterSize * filterSize), null);
+
+                serial.Initialize(inputShapes);
+                ILayer layer = serial.Construct();
+
+                Shape outputShape = layer.Startup(inputShapes, buffer, batchSize);
+                FeatureMap[] singleOutputs = new FeatureMap[outputDimensions * batchSize];
+                for (int i = 0; i < outputDimensions * batchSize; i++)
+                {
+                    singleOutputs[i] = new FeatureMap(outputShape);
+                }
+                buffer.Allocate(batchSize);
+                complimentBuffer.Allocate(batchSize);
+                IOBuffers.SetCompliment(buffer, complimentBuffer);
+                for (int i = 0; i < batchSize; i++)
+                {
+                    inputs[i].CopyToBuffer(buffer.Input.SubView(inputShapes.Area * i, inputShapes.Area));
+                }
+
+                layer.Forward(batchSize);
+                if (layer is IUnchangedLayer)
+                {
+                    for (int i = 0; i < outputDimensions * batchSize; i++)
+                    {
+                        singleOutputs[i].SyncCPU(buffer.Input.SubView(outputShape.Area * i, outputShape.Area));
+                        new FeatureMap(singleOutputs[i].Width, singleOutputs[i].Length, 1).CopyToBuffer(buffer.Gradient.SubView(outputShape.Area * i, outputShape.Area));
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < outputDimensions * batchSize; i++)
+                    {
+                        singleOutputs[i].SyncCPU(buffer.Output.SubView(outputShape.Area * i, outputShape.Area));
+                        new FeatureMap(singleOutputs[i].Width, singleOutputs[i].Length, 1).CopyToBuffer(buffer.InGradient.SubView(outputShape.Area * i, outputShape.Area));
+                    }
+                }
+                for (int i = 0; i < batchSize; i++)
+                {
+                    for (int j = 0; j < outputs[i].Length; j++)
+                    {
+                        for (int k = 0; k < outputs[i].Width; k++)
+                        {
+                            testOutput[i][j, k] += singleOutputs[i][j, k];
+                        }
+                    }
+                }
+            }
+
+            for (int i = 0; i < batchSize; i++)
+            {
+                for (int j = 0; j < outputs[i].Length; j++)
+                {
+                    for (int k = 0; k < outputs[i].Width; k++)
+                    {
+                        Console.WriteLine($"Difference: {(outputs[i][j, k] - testOutput[i][j, k]) / 0.001f:f4}");
+                        /*Console.WriteLine($"Expected Output: {outputs[i][j, k]:f4} \t Test Output: {testOutput[i][j, k]:f4}");
+                        if (MathF.Abs(testOutput[i][j, k] - outputs[i][j,k]) > Math.Max(0.03, outputs[i][j, k] * 0.001))
+                        {
+                            Console.ReadLine();
+                        }*/
+
+                    }
+                }
+            }
+        }
+
+        public static void GradientCheck(Weights weights, int filterSize, int stride, int inputDimensions, int outputDimensions, int inputSize, int batchSize)
+        {
+            Shape outputShape;
+            FeatureMap[] outGradients = new FeatureMap[inputDimensions * batchSize];
+            if (true)
+            {
+                FeatureMap[] inputs = new FeatureMap[inputDimensions * batchSize];
+                Shape inputShapes = new(inputSize, inputSize, inputDimensions);
+
+                IOBuffers buffer = new();
+                IOBuffers complimentBuffer = new();
+                complimentBuffer.OutputDimensionArea(inputDimensions * inputSize * inputSize);
+
+                ISerial serial = new SerialConv(outputDimensions, filterSize, stride, weights, null);
+
+                serial.Initialize(inputShapes);
+                ILayer layer = serial.Construct();
+
+                outputShape = layer.Startup(inputShapes, buffer, batchSize);
+
+                buffer.Allocate(batchSize);
+                complimentBuffer.Allocate(batchSize);
+                IOBuffers.SetCompliment(buffer, complimentBuffer);
+                if (layer is IUnchangedLayer)
+                {
+                    for (int i = 0; i < outputDimensions * batchSize; i++)
+                    {
+                        new FeatureMap(outputShape.Width, outputShape.Length, 1).CopyToBuffer(buffer.Gradient.SubView(outputShape.Area * i, outputShape.Area));
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < outputDimensions * batchSize; i++)
+                    {
+                        new FeatureMap(outputShape.Width, outputShape.Length, 1).CopyToBuffer(buffer.InGradient.SubView(outputShape.Area * i, outputShape.Area));
+                    }
+                }
+                layer.Backwards(batchSize, false);
+                
+                for (int i = 0; i < inputDimensions * batchSize; i++)
+                {
+                    outGradients[i] = new FeatureMap(inputSize, inputSize);
+                    outGradients[i].SyncCPU(buffer.OutGradient.SubView(inputShapes.Area * i, inputShapes.Area));
+                }
+            }
+
+            for (int p = 0; p < inputDimensions; p++)
+            {
+                FeatureMap[] inputs = new FeatureMap[batchSize];
+                Shape inputShapes = new(inputSize, inputSize, 1);
+
+                IOBuffers buffer = new();
+                IOBuffers complimentBuffer = new();
+                complimentBuffer.OutputDimensionArea(inputSize * inputSize);
+
+                ISerial serial = new SerialConv(outputDimensions, filterSize, stride, weights.Slice(p * filterSize * filterSize, filterSize * filterSize), null);
+
+                serial.Initialize(inputShapes);
+                ILayer layer = serial.Construct();
+
+                Shape singleOutputShape = layer.Startup(inputShapes, buffer, batchSize);
+
+                buffer.Allocate(batchSize);
+                complimentBuffer.Allocate(batchSize);
+                IOBuffers.SetCompliment(buffer, complimentBuffer);
+
+                if (layer is IUnchangedLayer)
+                {
+                    for (int i = 0; i < outputDimensions * batchSize; i++)
+                    {
+                        new FeatureMap(singleOutputShape.Width, singleOutputShape.Length, 1).CopyToBuffer(buffer.Gradient.SubView(singleOutputShape.Area * i, singleOutputShape.Area));
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < outputDimensions * batchSize; i++)
+                    {
+                        new FeatureMap(singleOutputShape.Width, singleOutputShape.Length, 1).CopyToBuffer(buffer.InGradient.SubView(singleOutputShape.Area * i, singleOutputShape.Area));
+                    }
+                }
+
+                layer.Backwards(batchSize, false);
+
+                for (int i = 0; i < batchSize; i++)
+                {
+                    FeatureMap outGradient = new FeatureMap(inputSize, inputSize);
+                    outGradient.SyncCPU(buffer.OutGradient.SubView(inputShapes.Area * i, inputShapes.Area));
+                    for (int j = 0; j < singleOutputShape.Length; j++)
+                    {
+                        for (int k = 0; k < singleOutputShape.Width; k++)
+                        {
+                            Console.WriteLine($"Expected Output: {outGradients[i + p * batchSize][j, k]:f4} \t Test Output: {outGradient[j, k]:f4}");
+                            if (MathF.Abs(outGradients[i + p * batchSize][j, k] - outGradient[j, k]) > Math.Max(0.03, outGradient[j, k] * 0.001))
+                            {
+                                Console.ReadLine();
+                            }
+                        }
                     }
                 }
             }

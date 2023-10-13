@@ -107,34 +107,40 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 int paddingY = (length - bitmap.Height) / 2;
 
                 FeatureMap[] maps = new FeatureMap[channels];
-                System.Drawing.Color background = bitmap.GetPixel(0, 0);
+                Color background = bitmap.GetPixel(0, 0);
+                if(background == Color.FromArgb(0,0,0,0))
+                {
+                    background = Color.FromArgb(Utility.Random.Next());
+                }
                 for (int i = 0; i < maps.Length; i++)
                 {
                     maps[i] = new(width, length);
-                    for(int y = 0; y < length; y++)
-                    {
-                        for(int x = 0; x < width; x++)
-                        {
-                            maps[i][x, y] = i switch {
-                                0 => (background.R - 127.5f) / 127.5f,
-                                1 => (background.G - 127.5f) / 127.5f,
-                                2 => (background.B - 127.5f) / 127.5f,
-                                _ => (background.A - 127.5f) / 127.5f,
-                            };
-                        }
-                    }
 
                     for (int y = 0; y < bitmap.Height; y++)
                     {
                         for (int x = 0; x < bitmap.Width; x++)
                         {
-                            maps[i][paddingX + x, paddingY + bitmap.Height - y - 1] = i switch
+
+                            if (bitmap.GetPixel(x, y) == Color.FromArgb(0, 0, 0, 0))
                             {
-                                0 => (bitmap.GetPixel(x, y).R - 127.5f) / 127.5f,
-                                1 => (bitmap.GetPixel(x, y).G - 127.5f) / 127.5f,
-                                2 => (bitmap.GetPixel(x, y).B - 127.5f) / 127.5f,
-                                _ => (bitmap.GetPixel(x, y).A - 127.5f) / 127.5f,
-                            };
+                                maps[i][x, y] = i switch
+                                {
+                                    0 => (background.R - 127.5f) / 127.5f,
+                                    1 => (background.G - 127.5f) / 127.5f,
+                                    2 => (background.B - 127.5f) / 127.5f,
+                                    _ => (background.A - 127.5f) / 127.5f,
+                                };
+                            }
+                            else
+                            {
+                                maps[i][paddingX + x, paddingY + bitmap.Height - y - 1] = i switch
+                                {
+                                    0 => (bitmap.GetPixel(x, y).R - 127.5f) / 127.5f,
+                                    1 => (bitmap.GetPixel(x, y).G - 127.5f) / 127.5f,
+                                    2 => (bitmap.GetPixel(x, y).B - 127.5f) / 127.5f,
+                                    _ => (bitmap.GetPixel(x, y).A - 127.5f) / 127.5f,
+                                };
+                            }
                         }
                     }
                 }
