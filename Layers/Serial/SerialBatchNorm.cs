@@ -9,7 +9,10 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
         public SerialBatchNorm()
         {
             _bias ??= new Weights(new Constant(0));
-            _weights ??= new Weights(new Constant(1));
+            _weights ??= new Weights(new Constant(1))
+            {
+                IgnoreClip = true
+            };
         }
 
         public override Layer Construct()

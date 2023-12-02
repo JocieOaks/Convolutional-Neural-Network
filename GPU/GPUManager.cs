@@ -1,15 +1,7 @@
-﻿using ConvolutionalNeuralNetwork.DataTypes;
-using ILGPU;
+﻿using ILGPU;
 using ILGPU.Runtime;
 using ILGPU.Runtime.CPU;
 using ILGPU.Runtime.Cuda;
-using ILGPU.Runtime.OpenCL;
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ConvolutionalNeuralNetwork.GPU
 {

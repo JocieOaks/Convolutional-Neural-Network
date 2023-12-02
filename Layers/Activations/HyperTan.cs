@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Text.Json.Serialization;
-using System.Threading.Tasks;
+﻿using System.Text.Json.Serialization;
 using ConvolutionalNeuralNetwork.DataTypes;
 using ConvolutionalNeuralNetwork.GPU;
 using ILGPU;
@@ -12,7 +7,7 @@ using ILGPU.Runtime;
 
 namespace ConvolutionalNeuralNetwork.Layers.Activations
 {
-    public class HyperTan : Layer, IStructuralLayer, IUnchangedLayer
+    public class HyperTan : Layer, IUnchangedLayer
     {
         private Vector _outputCopy;
 

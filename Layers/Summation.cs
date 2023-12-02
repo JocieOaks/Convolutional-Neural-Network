@@ -13,7 +13,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     /// will change.
     /// </summary>
     [Serializable]
-    public class Summation : Layer, IStructuralLayer
+    public class Summation : Layer
     {
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Shape, int> s_backwardsAction =
             GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Shape, int>(SummationGradientKernel);

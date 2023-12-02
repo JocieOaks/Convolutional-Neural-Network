@@ -1,11 +1,9 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using ConvolutionalNeuralNetwork.GPU;
-using ConvolutionalNeuralNetwork.Layers.Initializers;
 using ILGPU;
 using ILGPU.Algorithms;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
-using System.Runtime.Intrinsics.Arm;
 
 namespace ConvolutionalNeuralNetwork.Layers.Weighted
 {
@@ -14,7 +12,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
     /// neural network, by passing <see cref="FeatureMap"/>s through a variety of filters.
     /// </summary>
     [Serializable]
-    public class Convolution : WeightedLayer, IPrimaryLayer
+    public class Convolution : WeightedLayer
     {
         private readonly int _outputDimensions;
 

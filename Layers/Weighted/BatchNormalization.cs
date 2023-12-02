@@ -1,11 +1,9 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using ConvolutionalNeuralNetwork.GPU;
-using ConvolutionalNeuralNetwork.Layers.Initializers;
 using ILGPU;
 using ILGPU.Algorithms;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
-using System.Runtime.Serialization;
 
 namespace ConvolutionalNeuralNetwork.Layers.Weighted
 {
@@ -13,7 +11,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
     /// The <see cref="BatchNormalization"/> class is a <see cref="Layer"/> for normalizing batches of <see cref="FeatureMap"/>s
     /// so that their mean is 0 and standard deviation 1.
     /// </summary>
-    public class BatchNormalization : WeightedLayer, ISecondaryLayer, IUnchangedLayer
+    public class BatchNormalization : WeightedLayer, IUnchangedLayer
     {
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Views, Shape> s_backwardsAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Views, Shape>(WeightsAndGradientKernel);
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Views, Shape> s_gradientAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Views, Shape>(GradientsKernel);

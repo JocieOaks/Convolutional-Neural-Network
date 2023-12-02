@@ -1,6 +1,4 @@
-﻿using ILGPU;
-using ILGPU.Algorithms;
-using ILGPU.IR.Values;
+﻿using ILGPU.Algorithms;
 
 namespace ConvolutionalNeuralNetwork.DataTypes
 {

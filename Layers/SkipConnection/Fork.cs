@@ -1,11 +1,8 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using ConvolutionalNeuralNetwork.GPU;
 using ILGPU;
-using ILGPU.IR.Types;
 using ILGPU.Runtime;
-using ILGPU.Runtime.Cuda;
 using Newtonsoft.Json;
-using System.Runtime.Serialization;
 
 namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
 {
@@ -13,7 +10,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
     /// The <see cref="Fork"/> class is a <see cref="Layer"/> that creates two sets of the same <see cref="FeatureMap"/>s, sending
     /// one as input to the next <see cref="Layer"/> and sending one to a <see cref="Concatenate"/> later in the <see cref="Network"/>.
     /// </summary>
-    public class Fork : Layer, IStructuralLayer, IUnchangedLayer
+    public class Fork : Layer, IUnchangedLayer
     {
         private static int s_nextID = 1;
         public static Dictionary<int, Fork> Splits { get; } = new Dictionary<int, Fork>();

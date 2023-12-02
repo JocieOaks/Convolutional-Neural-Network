@@ -5,6 +5,8 @@ using ILGPU;
 using ConvolutionalNeuralNetwork.Layers.Serial;
 using ConvolutionalNeuralNetwork.Layers.Initializers;
 using ConvolutionalNeuralNetwork.Layers.Loss;
+using System;
+using System.Text.Json.Serialization;
 
 namespace ConvolutionalNeuralNetwork
 {
@@ -19,7 +21,7 @@ namespace ConvolutionalNeuralNetwork
         [JsonProperty] protected bool _initialized = false;
         protected List<InputLayer> _inputLayers = new();
         [JsonProperty] protected Shape _inputShape;
-        [JsonIgnore] protected Shape _outputShape;
+        [Newtonsoft.Json.JsonIgnore] protected Shape _outputShape;
         [JsonProperty] protected List<int> _layerIndeces = new();
         protected bool _ready = false;
         [JsonProperty] protected List<ISerial> _serializedLayers = new();
@@ -27,22 +29,27 @@ namespace ConvolutionalNeuralNetwork
         private readonly List<ILayer> _layers = new();
         protected delegate float LossFunction(Vector[] expected);
 
-        [JsonIgnore] public ArrayView<float> InGradient => _layers.Last().InGradient;
-        [JsonIgnore] public ArrayView<float> Input => _layers.First().Input;
+        [Newtonsoft.Json.JsonIgnore] public ArrayView<float> InGradient => _layers.Last().InGradient;
+        [Newtonsoft.Json.JsonIgnore] public ArrayView<float> Input => _layers.First().Input;
 
-        [JsonIgnore] public ArrayView<float> OutGradient => _layers.First().OutGradient;
-        [JsonIgnore] public ArrayView<float> Output => _layers.Last().Output;
+        [Newtonsoft.Json.JsonIgnore] public ArrayView<float> OutGradient => _layers.First().OutGradient;
+        [Newtonsoft.Json.JsonIgnore] public ArrayView<float> Output => _layers.Last().Output;
         /// <value>The number of <see cref="Layer"/>s in the <see cref="Network"/>.</value>
         protected int Depth => _layers.Count;
 
-        [JsonIgnore] protected Loss Loss { get; }
+        [Newtonsoft.Json.JsonIgnore] protected Loss Loss { get; }
 
-        public Network(Loss loss)
+        public Network(Loss loss, float gradientClip = 1000, float weightClip = 1000)
         {
             Loss = loss;
+            _gradientClip = gradientClip;
+            _weightClip = weightClip;
         }
 
-        [JsonConstructor] private Network() { }
+        [Newtonsoft.Json.JsonConstructor] private Network(float gradientClip)
+        {
+            _gradientClip = gradientClip;
+        }
 
         public SerialActivation AddActivation(Activation activationType)
         {
@@ -54,6 +61,18 @@ namespace ConvolutionalNeuralNetwork
 
             AddSerialLayer(activation);
             return activation;
+        }
+
+        public SerialAugmentation AddAugmentation(Augmentation augmentationType)
+        {
+            SerialAugmentation augmentation = _serializedLayers.FirstOrDefault(x => x is SerialAugmentation act && act.Augmentation == augmentationType) as SerialAugmentation;
+            augmentation ??= new SerialAugmentation()
+            {
+                Augmentation = augmentationType
+            };
+
+            AddSerialLayer(augmentation);
+            return augmentation;
         }
 
         public SerialAvgPool AddAveragePool(int scale)
@@ -275,7 +294,7 @@ namespace ConvolutionalNeuralNetwork
 
         public override void Startup(IOBuffers buffers, Shape outputShape, int maxBatchSize)
         {
-            _buffers = buffers.Compliment;
+            Buffers = buffers.Compliment;
         }
 
         public (float, float) Test(List<FeatureMap[][]> inputs, Vector[] expected, bool saveOutput)
@@ -307,7 +326,7 @@ namespace ConvolutionalNeuralNetwork
 
         protected FeatureMap[][] _outputs;
 
-        [JsonIgnore]
+        [Newtonsoft.Json.JsonIgnore]
         public FeatureMap[][] GetOutputs => _outputs;
 
         public (float, float) Train(List<FeatureMap[][]> inputs, Vector[] expected, bool update = true)
@@ -325,6 +344,9 @@ namespace ConvolutionalNeuralNetwork
 
             return Train(expected, false, update);
         }
+
+        [JsonProperty] private float _weightClip;
+        [JsonProperty] private float _gradientClip;
 
         public (float, float) Train(Vector[] expected, bool skipInputLayers, bool update)
         {
@@ -347,7 +369,7 @@ namespace ConvolutionalNeuralNetwork
                 _adamHyperParameters.Update();
                 foreach (var weight in _weights)
                 {
-                    weight.UpdateWeights(_adamHyperParameters);
+                    weight.UpdateWeights(_adamHyperParameters, _gradientClip, _weightClip);
                 }
             }
             return loss;
@@ -386,10 +408,10 @@ namespace ConvolutionalNeuralNetwork
 
         protected void InitializeLayers(ref Shape current, int maxBatchSize)
         {
-            _buffers ??= new();
+            Buffers ??= new();
 
-            IOBuffers inputBuffers = _buffers;
-            IOBuffers outputBuffers = _buffers.Compliment ?? new();
+            IOBuffers inputBuffers = Buffers;
+            IOBuffers outputBuffers = Buffers.Compliment ?? new();
             IOBuffers.SetCompliment(inputBuffers, outputBuffers);
             outputBuffers.OutputDimensionArea(current.Volume);
 

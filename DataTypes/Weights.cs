@@ -1,7 +1,6 @@
 ﻿using ConvolutionalNeuralNetwork.GPU;
 using ConvolutionalNeuralNetwork.Layers;
 using ConvolutionalNeuralNetwork.Layers.Initializers;
-using ConvolutionalNeuralNetwork.Layers.Weighted;
 using ILGPU;
 using ILGPU.Algorithms;
 using ILGPU.Runtime;
@@ -18,6 +17,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         [JsonProperty] private Vector _secondMoment;
         private Vector _gradient;
         [JsonProperty] private Vector _weights;
+        [JsonProperty] public bool IgnoreClip { private get; init; }
         private IWeightInitializer _initializer;
 
         public Weights(IWeightInitializer initializer)
@@ -29,10 +29,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
         [JsonIgnore] public int Length => _weights.Length;
 
-        public float this[int index]
-        {
-            get => _weights[index];
-        }
+        public float this[int index] => _weights[index];
 
         public Weights Slice(int index, int length)
         {
@@ -171,14 +168,9 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 float testGradient = 0;
                 for (int i2 = 0; i2 < outputDimensions * batchSize; i2++)
                 {
-                    if (layer is IUnchangedLayer)
-                    {
-                        testOutput[i2].SyncCPU(buffer.Input.SubView(outputShapes.Area * i2, outputShapes.Area));
-                    }
-                    else
-                    {
-                        testOutput[i2].SyncCPU(buffer.Output.SubView(outputShapes.Area * i2, outputShapes.Area));
-                    }
+                    testOutput[i2].SyncCPU(layer is IUnchangedLayer
+                        ? buffer.Input.SubView(outputShapes.Area * i2, outputShapes.Area)
+                        : buffer.Output.SubView(outputShapes.Area * i2, outputShapes.Area));
                     for (int j2 = 0; j2 < testOutput[i2].Width; j2++)
                     {
                         for (int k2 = 0; k2 < testOutput[i2].Length; k2++)
@@ -203,14 +195,14 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <summary>
         /// Updates the filter weights along with the first and second moments.
         /// </summary>
-        /// <param name="learningRate">The overall learning rate for the layer updates, corrected for the influence of bias in the first and second moments.</param>
-        /// <param name="firstMomentDecay">The exponential decay rate for the first moment.</param>
-        /// <param name="secondMomentDecay">The exponential decay rate for the second moment.</param>
-        /// <param name="clip">The maximum absolute value to clip the gradient to.</param>
-        public void UpdateWeights(AdamHyperParameters hyperParameters, float clip = 1000f)
+        /// <param name="hyperParameters">The <see cref="AdamHyperParameters"/> detailing how the <see cref="Weights"/> should be updated.</param>
+        /// <param name="weightClip">The maximum absolute value to weightClip the gradient to.</param>
+        public void UpdateWeights(AdamHyperParameters hyperParameters, float gradientClip, float weightClip)
         {
             Index1D index = new(Length);
-            s_updateAction(index, _weights.GetArrayView<float>(), _firstMoment.GetArrayView<float>(), _secondMoment.GetArrayView<float>(), _gradient.GetArrayView<float>(), hyperParameters.LearningRate, hyperParameters.FirstMomentDecay, hyperParameters.SecondMomentDecay, clip);
+            s_updateAction(index, _weights.GetArrayView<float>(), _firstMoment.GetArrayView<float>(),
+                _secondMoment.GetArrayView<float>(), _gradient.GetArrayView<float>(), hyperParameters.LearningRate,
+                hyperParameters.FirstMomentDecay, hyperParameters.SecondMomentDecay, gradientClip, IgnoreClip ? 1000 : weightClip);
             GPUManager.Accelerator.Synchronize();
             _weights.DecrementLiveCount();
             _firstMoment.DecrementLiveCount();
@@ -223,8 +215,8 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return _weights.GetArrayView<T>();
         }
 
-        private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, float, float, float> s_updateAction =
-            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, float, float, float>(UpdateKernel);
+        private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, float, float, float, float> s_updateAction =
+            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, float, float, float, float>(UpdateKernel);
 
         [OnSerializing]
         private void OnSerializing(StreamingContext context)
@@ -234,15 +226,16 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             _secondMoment.SyncCPU();
         }
 
-        private static void UpdateKernel(Index1D index, ArrayView<float> weights, ArrayView<float> firstMoment, ArrayView<float> secondMoment, ArrayView<float> gradients, float learningRate, float firstMomentDecay, float secondMomentDecay, float clip)
+        private static void UpdateKernel(Index1D index, ArrayView<float> weights, ArrayView<float> firstMoment, ArrayView<float> secondMoment, ArrayView<float> gradients, float learningRate, float firstMomentDecay, float secondMomentDecay, float gradientClip, float weightClip)
         {
-            float gradient = XMath.Clamp(gradients[index], -clip, clip);
+            float gradient = XMath.Clamp(gradients[index], -gradientClip, gradientClip);
             float first = firstMomentDecay * firstMoment[index] + (1 - firstMomentDecay) * gradient;
             float second = secondMomentDecay * secondMoment[index] + (1 - secondMomentDecay) * MathF.Pow(gradient, 2);
             firstMoment[index] = first;
             secondMoment[index] = second;
             float result = learningRate * first / (XMath.Sqrt(second) + Utility.ASYMPTOTEERRORCORRECTION);
             weights[index] -= result;
+            weights[index] = XMath.Clamp(weights[index], -weightClip, weightClip);
         }
 
         public void Initialize(int length, SerialWeighted layer)

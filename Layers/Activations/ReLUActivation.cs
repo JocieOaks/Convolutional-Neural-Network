@@ -1,7 +1,6 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using ILGPU;
 using ILGPU.Runtime;
-using ILGPU.Runtime.OpenCL;
 using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers.Activations
@@ -10,13 +9,13 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
     /// The <see cref="ReLUActivation"/> class is a <see cref="Layer"/> is an activation to add non-linearity to the <see cref="Network"/>.
     /// </summary>
     [Serializable]
-    public class ReLUActivation : Layer, ISecondaryLayer, IUnchangedLayer
+    public class ReLUActivation : Layer, IUnchangedLayer
     {
         private static readonly Action<Index1D, ArrayView<int>, ArrayView<float>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<int>, ArrayView<float>>(BackwardsKernel);
         private static readonly Action<Index1D, ArrayView<float>, ArrayView<int>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<int>>(ForwardReLUKernel);
         private ArrayView<int> _deviceZeroed;
 
-        private const float NEGATIVESCALING = 0.2f;
+        private const float NEGATIVE_SCALING = 0.2f;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ReLUActivation"/> class.
@@ -68,7 +67,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             int mask = 1 << bit;
             if ((zeroed[byteIndex] & mask) == 0)
             {
-                inGradient[index.X] = NEGATIVESCALING * inGradient[index.X];
+                inGradient[index.X] = NEGATIVE_SCALING * inGradient[index.X];
             }
         }
 
@@ -80,7 +79,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             if (input[index.X] < 0)
             {
                 Atomic.And(ref zeroed[byteIndex], ~mask);
-                input[index.X] = NEGATIVESCALING * input[index.X];
+                input[index.X] = NEGATIVE_SCALING * input[index.X];
             }
             else
             {

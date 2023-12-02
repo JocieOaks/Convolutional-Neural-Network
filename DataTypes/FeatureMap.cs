@@ -3,7 +3,6 @@ using ILGPU;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
 using System.Drawing;
-using System.Reflection.Metadata.Ecma335;
 
 namespace ConvolutionalNeuralNetwork.DataTypes
 {
@@ -93,7 +92,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// </summary>
         /// <param name="bitmap">The <see cref="Bitmap"/> being converted.</param>
         /// <returns>Returns the <see cref="FeatureMap"/> representation of the <see cref="Bitmap"/>.</returns>
-        public static FeatureMap[] FromBitmap(Bitmap bitmap, int channels, int width = -1, int length = -1)
+        public static FeatureMap[] FromBitmap(Bitmap bitmap, int channels, int width = -1, int length = -1, bool noise = false)
         {
             if (OperatingSystem.IsWindows())
             {
@@ -123,13 +122,17 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
                             if (bitmap.GetPixel(x, y) == Color.FromArgb(0, 0, 0, 0))
                             {
-                                maps[i][x, y] = i switch
+                                maps[i][paddingX + x, paddingY + bitmap.Height - y - 1] = i switch
                                 {
                                     0 => (background.R - 127.5f) / 127.5f,
                                     1 => (background.G - 127.5f) / 127.5f,
                                     2 => (background.B - 127.5f) / 127.5f,
                                     _ => (background.A - 127.5f) / 127.5f,
                                 };
+                                if (noise)
+                                {
+                                    maps[i][paddingX + x, paddingY + bitmap.Height - y - 1] += (float)(Utility.Random.NextDouble() * 0.1f);
+                                }
                             }
                             else
                             {

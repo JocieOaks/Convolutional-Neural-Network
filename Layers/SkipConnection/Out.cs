@@ -1,7 +1,6 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using ConvolutionalNeuralNetwork.GPU;
 using ILGPU;
-using ILGPU.Runtime;
 using Newtonsoft.Json;
 using System.Runtime.Serialization;
 
@@ -11,7 +10,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
     /// The <see cref="Concatenate"/> class is a <see cref="Layer"/> for combining a set of <see cref="FeatureMap"/>s from the previous
     /// <see cref="Layer"/> with the <see cref="FeatureMap"/>s from its corresponding <see cref="Fork"/>.
     /// </summary>
-    public class Out : Layer, IStructuralLayer, IEndpoint
+    public class Out : Layer, IEndpoint
     {
         private Vector _skipConnection;
         private Shape _skipShape;

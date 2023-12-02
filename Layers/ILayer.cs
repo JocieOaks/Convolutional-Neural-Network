@@ -1,6 +1,5 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using ILGPU;
-using System;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
@@ -18,7 +17,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         ArrayView<float> OutGradient { get; }
 
         /// <summary>
-        /// Backpropagates through the <see cref="Layer"/> updating any layer weights, and calculating the outgoing gradient that is
+        /// Back-propagates through the <see cref="Layer"/> updating any layer weights, and calculating the outgoing gradient that is
         /// shared with the previous layer.
         /// </summary>
         /// <param name="batchSize"></param>
@@ -42,27 +41,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <returns>Returns the output and inGradient to share with the next <see cref="Layer"/>.</returns>
         Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize);
     }
-
-    /// <summary>
-    /// The <see cref="IPrimaryLayer"/> interface is for <see cref="Layer"/>s that perform significant manipulation to the <see cref="FeatureMap"/>s,
-    /// and are thus fundamental to the architecture of a <see cref="Network"/>.
-    /// </summary>
-    public interface IPrimaryLayer : ILayer
-    { }
-
-    /// <summary>
-    /// The <see cref="IStructuralLayer"/> interface is for <see cref="Layer"/>s that change the structure of a <see cref="FeatureMap"/>, such as by scaling the map,
-    /// but do not manipulate the actual features, and thus does not need to be activated.
-    /// </summary>
-    public interface IStructuralLayer : IPrimaryLayer
-    { }
-
-    /// <summary>
-    /// The <see cref="ISecondaryLayer"/> interface is for <see cref="Layer"/>s that normalize or activate the <see cref="FeatureMap"/>s.
-    /// These typically always follow <see cref="IPrimaryLayer"/>s.
-    /// </summary>
-    public interface ISecondaryLayer : ILayer
-    { }
 
     /// <summary>
     /// The <see cref="IUnchangedLayer"/> interface is for <see cref="Layer"/>s where the direct input is the same as the direct output. The layer may perform some alternate

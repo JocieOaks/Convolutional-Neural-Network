@@ -2,11 +2,6 @@
 using ConvolutionalNeuralNetwork.GPU;
 using ILGPU.Runtime;
 using ILGPU;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using ILGPU.Algorithms;
 
 namespace ConvolutionalNeuralNetwork.Layers.Loss
@@ -19,24 +14,24 @@ namespace ConvolutionalNeuralNetwork.Layers.Loss
 
         public override (float, float) GetLoss(Vector[] groundTruth)
         {
-            var truth = _truth.GetArrayViewEmpty<float>();
+            var truth = Truth.GetArrayViewEmpty<float>();
             for (int i = 0; i < groundTruth.Length; i++)
             {
-                groundTruth[i].CopyToBuffer(truth.SubView(i * _outputShape.Volume, _outputShape.Volume));
+                groundTruth[i].CopyToBuffer(truth.SubView(i * OutputShape.Volume, OutputShape.Volume));
             }
 
             Index1D index = new(groundTruth.Length);
-            s_lossAction(index, _buffers.Output, truth, _loss.GetArrayViewZeroed<float>().VariableView(0), _accuracy.GetArrayViewZeroed<float>().VariableView(0), _outputShape.Volume);
+            s_lossAction(index, Buffers.Output, truth, Losses.GetArrayViewZeroed<float>().VariableView(0), Accuracy.GetArrayViewZeroed<float>().VariableView(0), OutputShape.Volume);
 
             GPUManager.Accelerator.Synchronize();
 
-            _truth.DecrementLiveCount();
-            _loss.DecrementLiveCount();
-            _accuracy.DecrementLiveCount();
+            Truth.DecrementLiveCount();
+            Losses.DecrementLiveCount();
+            Accuracy.DecrementLiveCount();
 
-            _loss.SyncCPU();
-            _accuracy.SyncCPU();
-            return (_loss[0] / groundTruth.Length, _accuracy[0] / groundTruth.Length);
+            Losses.SyncCPU();
+            Accuracy.SyncCPU();
+            return (Losses[0] / groundTruth.Length, Accuracy[0] / groundTruth.Length);
         }
 
         private static void LossKernel(Index1D index, ArrayView<float> output, ArrayView<float> truth, VariableView<float> totalLoss, VariableView<float> accuracy, int length)

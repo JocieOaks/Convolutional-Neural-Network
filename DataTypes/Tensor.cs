@@ -1,10 +1,7 @@
 ﻿using ConvolutionalNeuralNetwork.GPU;
 using ILGPU;
-using ILGPU.IR;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
-using System;
-using System.Diagnostics;
 
 namespace ConvolutionalNeuralNetwork.DataTypes
 {

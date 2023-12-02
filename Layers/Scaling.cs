@@ -1,14 +1,11 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
-using ILGPU;
-using ILGPU.Runtime;
-using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
     /// <summary>
     /// The <see cref="Scaling"/> class is a <see cref="Layer"/> for upsampling or downsampling a <see cref="FeatureMap"/>.
     /// </summary>
-    public class Scaling : Layer, IStructuralLayer
+    public class Scaling : Layer
     {
         /*private MemoryBuffer1D<ScalingLayerInfo, Stride1D.Dense>[] _deviceInfos;
         [JsonProperty] private int _outputLength;

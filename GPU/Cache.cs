@@ -1,5 +1,4 @@
 ﻿using ILGPU.Runtime;
-using System;
 
 
 namespace ConvolutionalNeuralNetwork.GPU

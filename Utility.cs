@@ -1,7 +1,4 @@
-﻿using ILGPU;
-using ILGPU.Runtime;
-using ILGPU.Runtime.Cuda;
-using ConvolutionalNeuralNetwork.DataTypes;
+﻿using ConvolutionalNeuralNetwork.DataTypes;
 using ConvolutionalNeuralNetwork.Layers;
 using ConvolutionalNeuralNetwork.Layers.Serial;
 

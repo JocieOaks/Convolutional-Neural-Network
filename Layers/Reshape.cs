@@ -1,9 +1,8 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
-using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
-    public class Reshape : Layer, IStructuralLayer, IUnchangedLayer
+    public class Reshape : Layer, IUnchangedLayer
     { 
         public Reshape(Shape outputShape)
         {

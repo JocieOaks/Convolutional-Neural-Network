@@ -11,7 +11,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     /// <see cref="FeatureMap"/> of the previous <see cref="Layer"/>'s outputs.
     /// </summary>
     [Serializable]
-    public class AveragePool : Layer, IStructuralLayer
+    public class AveragePool : Layer
     {
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo>(BackwardsKernel);
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo>(ForwardPoolKernel);

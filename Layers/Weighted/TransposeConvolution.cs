@@ -2,15 +2,11 @@
 using ConvolutionalNeuralNetwork.GPU;
 using ILGPU.Runtime;
 using ILGPU;
-using Newtonsoft.Json;
-using System.Runtime.Serialization;
-using System.Reflection.Emit;
-using ConvolutionalNeuralNetwork.Layers.Initializers;
 using ILGPU.Algorithms;
 
 namespace ConvolutionalNeuralNetwork.Layers.Weighted
 {
-    public class TransposeConvolution : WeightedLayer, IPrimaryLayer
+    public class TransposeConvolution : WeightedLayer
     {
         private readonly int _outputDimensions;
 

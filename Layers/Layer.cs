@@ -2,7 +2,6 @@
 using ConvolutionalNeuralNetwork.GPU;
 using ILGPU;
 using Newtonsoft.Json;
-using System.Reflection.Emit;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {

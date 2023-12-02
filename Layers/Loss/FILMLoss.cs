@@ -3,11 +3,6 @@ using ConvolutionalNeuralNetwork.GPU;
 using ILGPU;
 using ILGPU.Algorithms;
 using ILGPU.Runtime;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ConvolutionalNeuralNetwork.Layers.Loss
 {
@@ -17,22 +12,22 @@ namespace ConvolutionalNeuralNetwork.Layers.Loss
 
         public override (float, float)  GetLoss(Vector[] groundTruth)
         {
-            var truth = _truth.GetArrayViewEmpty<float>();
+            var truth = Truth.GetArrayViewEmpty<float>();
             for(int i = 0; i < groundTruth.Length; i++)
             {
-                groundTruth[i].CopyToBuffer(truth.SubView(i * _outputShape.Volume, _outputShape.Volume));
+                groundTruth[i].CopyToBuffer(truth.SubView(i * OutputShape.Volume, OutputShape.Volume));
             }
 
             Index1D index = new(groundTruth.Length);
-            s_lossAction(index, _buffers.Output, truth, _loss.GetArrayViewZeroed<float>().VariableView(0), _outputShape.Volume);
+            s_lossAction(index, Buffers.Output, truth, Losses.GetArrayViewZeroed<float>().VariableView(0), OutputShape.Volume);
 
             GPUManager.Accelerator.Synchronize();
 
-            _truth.DecrementLiveCount();
-            _loss.DecrementLiveCount();
+            Truth.DecrementLiveCount();
+            Losses.DecrementLiveCount();
 
-            _loss.SyncCPU();
-            return (_loss[0], 1);
+            Losses.SyncCPU();
+            return (Losses[0], 1);
         }
 
         private static void LossKernel(Index1D index, ArrayView<float> output, ArrayView<float> truth, VariableView<float> totalLoss, int length)

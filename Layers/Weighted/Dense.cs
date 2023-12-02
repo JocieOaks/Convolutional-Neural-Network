@@ -1,14 +1,12 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using ConvolutionalNeuralNetwork.GPU;
-using ConvolutionalNeuralNetwork.Layers.Initializers;
 using ILGPU;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
-using System.Collections.Generic;
 
 namespace ConvolutionalNeuralNetwork.Layers.Weighted
 {
-    public class Dense : WeightedLayer, IPrimaryLayer
+    public class Dense : WeightedLayer
     {
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo> s_backwardsFilterAction =
             GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo>(DenseFilterKernel);

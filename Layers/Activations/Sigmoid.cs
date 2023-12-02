@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 
 namespace ConvolutionalNeuralNetwork.Layers.Activations
 {
-    public class Sigmoid : Layer, IStructuralLayer, IUnchangedLayer
+    public class Sigmoid : Layer, IUnchangedLayer
     {
         private Vector _inputCopy;
 

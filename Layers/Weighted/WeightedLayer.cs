@@ -1,11 +1,8 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using ConvolutionalNeuralNetwork.GPU;
-using ConvolutionalNeuralNetwork.Layers.Initializers;
 using ILGPU;
-using ILGPU.Backends.EntryPoints;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
-using System.Runtime.Serialization;
 
 
 namespace ConvolutionalNeuralNetwork.Layers.Weighted
@@ -13,8 +10,8 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
     public abstract class WeightedLayer : Layer
     {
         private bool UseBias => _bias != null;
-        private Weights _bias;
-        protected Weights _weights;
+        private readonly Weights _bias;
+        protected readonly Weights _weights;
         protected Vector _inputCopy;
 
         public Weights Weights => _weights;
@@ -26,12 +23,12 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         }
 
 
-        private static void BiasKernal(Index3D index, ArrayView<float> value, ArrayView<float> bias, int dimensions, int length)
+        private static void BiasKernel(Index3D index, ArrayView<float> value, ArrayView<float> bias, int dimensions, int length)
         {
             Atomic.Add(ref value[(index.Z * dimensions + index.Y) * length + index.X], bias[index.Y]);
         }
 
-        private static void BiasGradientKernal(Index2D index, ArrayView<float> biasGradient, ArrayView<float> inGradient, int dimensions, int length)
+        private static void BiasGradientKernel(Index2D index, ArrayView<float> biasGradient, ArrayView<float> inGradient, int dimensions, int length)
         {
             float sum = 0;
             for (int i = 0; i < length; i++)
@@ -42,9 +39,9 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         }
 
 
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, int, int> s_biasAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, int, int>(BiasKernal);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, int, int> s_biasAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, int, int>(BiasKernel);
 
-        private static readonly Action<Index2D, ArrayView<float>, ArrayView<float>, int, int> s_biasGradientAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<float>, ArrayView<float>, int, int>(BiasGradientKernal);
+        private static readonly Action<Index2D, ArrayView<float>, ArrayView<float>, int, int> s_biasGradientAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<float>, ArrayView<float>, int, int>(BiasGradientKernel);
         
         [JsonConstructor] protected WeightedLayer() { }
 
