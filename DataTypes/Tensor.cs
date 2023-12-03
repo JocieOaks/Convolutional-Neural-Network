@@ -15,39 +15,24 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         [JsonProperty] protected float[] Values;
 
         /// <summary>
-        /// Initializes a new <see cref="Tensor"/> with the given dimensions.
+        /// Initializes a new <see cref="Tensor"/> with the given <see cref="DataTypes.Shape"/>.
         /// </summary>
-        /// <param name="width">The width of the <see cref="Tensor"/>.</param>
-        /// <param name="length">The length of the <see cref="Tensor"/>.</param>
-        public Tensor(int width, int length)
-        {
-            Width = width;
-            Length = length;
-
-            Values = new float[width * length];
-        }
-
-        /// <summary>
-        /// Initializes a new <see cref="Tensor"/> with the given <see cref="Shape"/>.
-        /// </summary>
-        /// <param name="shape">The <see cref="Shape"/> of the new <see cref="Tensor"/>. Ignores dimension.</param>
+        /// <param name="shape">The <see cref="Shape"/> of the new <see cref="Tensor"/>.</param>
         public Tensor(Shape shape)
         {
-            Width = shape.Width;
-            Length = shape.Length;
+            Shape = shape;
 
-            Values = new float[shape.Area];
+            Values = new float[shape.Volume];
         }
 
         /// <summary>
         /// Initializes a new <see cref="Tensor"/> with the given dimensions, initialized with a given value.
         /// </summary>
-        /// <param name="width">The width of the <see cref="Tensor"/>.</param>
-        /// <param name="length">The length of the <see cref="Tensor"/>.</param>
+        /// /// <param name="shape">The <see cref="DataTypes.Shape"/> of the new <see cref="Tensor"/>.</param>
         /// <param name="value">The value to set every entry in the <see cref="Tensor"/> to.</param>
-        public Tensor(int width, int length, float value)
+        public Tensor(Shape shape, float value) : this(shape)
         {
-            for (int i = 0; i < Area; i++)
+            for (int i = 0; i < Volume; i++)
             {
                 Values[i] = value;
             }
@@ -59,50 +44,37 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         [JsonConstructor] protected Tensor() { }
 
         /// <value>The full area of the <see cref="Tensor"/>.</value>
-        [JsonIgnore] public int Area => Values.Length;
+        [JsonIgnore] public int Area => Shape.Area;
+
+        /// <value>The number of dimensions of the <see cref="Tensor"/>.</value>
+        [JsonIgnore] public int Dimensions => Shape.Dimensions;
+
+        /// <value>The total size of the tensor.</value>
+        [JsonIgnore] public int Volume => Values.Length;
 
         /// <value>The y length of the <see cref="Tensor"/>.</value>
-        [JsonProperty] public int Length { get; private set; }
+        [JsonIgnore] public int Length => Shape.Length;
+
+        /// <value>The <see cref="DataTypes.Shape"/> describing the <see cref="Tensor"/>.</value>
+        [JsonProperty] public Shape Shape { get; private set; }
 
         /// <inheritdoc/>
-        public override long MemorySize => Area * 12;
+        [JsonIgnore] public override long MemorySize => Volume * 12;
 
         /// <value>The x width of the <see cref="Tensor"/>.</value>
-        [JsonProperty] public int Width { get; private set; }
+        [JsonIgnore] public int Width => Shape.Width;
+
         /// <summary>
         /// Indexes the <see cref="Tensor"/> to retrieve the value at the given coordinates.
         /// </summary>
         /// <param name="x">The x coordinate of the desired value.</param>
         /// <param name="y">The y coordinate of the desired value.</param>
-        /// <returns>Returns the value at (<paramref name="x"/>, <paramref name="y"/>).</returns>
-        public float this[int x, int y]
+        /// <param name="dimension">The dimension of the desired value.</param>
+        /// <returns>Returns the value at (<paramref name="x"/>, <paramref name="y"/>, <param name="dimension"/>).</returns>
+        public float this[int x, int y, int dimension]
         {
-            get => Values[y * Width + x];
-            set => Values[y * Width + x] = value;
-        }
-
-        /// <summary>
-        /// Multiplies a <see cref="Vector"/> and a <see cref="Tensor"/> by performing tensor contraction using the <see cref="Vector"/> as 
-        /// n tensor and the <see cref="Tensor"/> is an n x m tensor, resulting in a m tensor.
-        /// </summary>
-        /// <param name="vector">The <see cref="Vector"/> of length n.</param>
-        /// <param name="tensor">The <see cref="Tensor"/> of dimensions n x m.</param>
-        /// <returns>Returns a <see cref="Vector"/> of length m, where m is the <see cref="Tensor.Length"/> of <paramref name="tensor"/>.</returns>
-        /// <exception cref="ArgumentException">Thrown if <paramref name="vector"/> length is not equal to <paramref name="tensor"/> width.</exception>
-        public static Vector operator *(Vector vector, Tensor tensor)
-        {
-            if (tensor.Width != vector.Length)
-                throw new ArgumentException("Matrix and vector are not compatible.");
-            Vector output = new(tensor.Length);
-            for (int i = 0; i < tensor.Width; i++)
-            {
-                for (int j = 0; j < tensor.Length; j++)
-                {
-                    output[j] += tensor[i, j] * vector[i];
-                }
-            }
-
-            return output;
+            get => Values[dimension * Area + y * Width + x];
+            set => Values[dimension * Area + y * Width + x] = value;
         }
 
         /// <summary>
@@ -111,7 +83,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="view">The <see cref="ArrayView{T}"/> being copied to.</param>
         public void CopyToView(ArrayView<float> view)
         {
-            view.SubView(0, Area).CopyFromCPU(Values);
+            view.SubView(0, Volume).CopyFromCPU(Values);
         }
 
         /// <inheritdoc/>
@@ -143,7 +115,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 (ID, buffer) = GPUManager.Allocate(this);
             }
             int bytes = Interop.SizeOf<float>();
-            return new ArrayView<float>(buffer, 0, 12 * Area / bytes);
+            return new ArrayView<float>(buffer, 0, 12 * Volume / bytes);
         }
 
         /// <summary>
@@ -165,13 +137,13 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <inheritdoc />
         public override void SyncCPU(MemoryBuffer buffer)
         {
-            buffer.AsArrayView<float>(0, Area).CopyToCPU(Values);
+            buffer.AsArrayView<float>(0, Volume).CopyToCPU(Values);
         }
 
         /// <inheritdoc />
         public override void SyncCPU(ArrayView<float> arrayView)
         {
-            arrayView.SubView(0, Area).CopyToCPU(Values);
+            arrayView.SubView(0, Volume).CopyToCPU(Values);
         }
     }
 }

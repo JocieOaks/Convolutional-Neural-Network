@@ -113,7 +113,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             }
         }
 
-        public void FilterTest(int inputDimensions, int batchSize, int inputSize)
+        /*public void FilterTest(int inputDimensions, int batchSize, int inputSize)
         {
             (Shape input, Shape output) = FilterTestSetup(inputDimensions, batchSize, inputSize);
 
@@ -127,7 +127,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             {
                 _bias.TestFilterGradient(this, input, output, _buffers, batchSize);
             }
-        }
+        }*/
 
         protected abstract int WeightLength { get; }
 

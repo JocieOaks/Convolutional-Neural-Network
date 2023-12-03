@@ -31,27 +31,20 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             _values = new float[length];
         }
 
-        public Vector(Tensor[] maps)
+        public Vector(Tensor maps)
         {
-            int area = maps[0].Area;
-            int width = maps[0].Width;
-            for(int i = 1; i < maps.Length; i++)
-            {
-                if (maps[i].Area != area)
-                {
-                    throw new ArgumentException("Maps do not have same dimensions.");
-                }
-            }
+            int area = maps.Area;
+            int width = maps.Width;
 
-            _values = new float[maps.Length * maps[0].Area];
+            _values = new float[maps.Volume];
 
-            for(int i = 0; i < maps.Length; i++)
+            for(int dimension = 0; dimension < maps.Dimensions; dimension++)
             {
-                for(int y = 0; y < maps[i].Length; y++)
+                for(int y = 0; y < maps.Length; y++)
                 {
-                    for(int x = 0;  x < maps[i].Width; x++)
+                    for(int x = 0;  x < maps.Width; x++)
                     {
-                        _values[i * area + y * width + x] = maps[i][x, y];
+                        _values[dimension * area + y * width + x] = maps[x, y, dimension];
                     }
                 }
             }

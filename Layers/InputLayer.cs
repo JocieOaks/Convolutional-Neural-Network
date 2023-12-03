@@ -6,7 +6,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     {
         public override string Name => "Input Layer";
 
-        private Tensor[][] _input;
+        private Tensor[] _input;
 
         public InputLayer(Shape inputShape)
         {
@@ -21,19 +21,11 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             for(int i = 0; i < batchSize; i++)
             {
-                for(int j = 0; j < _inputShape.Dimensions; j++)
-                {
-                    if (_input[i][j].Area != _inputShape.Area)
-                    {
-                        throw new ArgumentException("Input images are incorrectly sized.");
-                    }
-
-                    _input[i][j].CopyToView(_buffers.Input.SubView(_inputShape.Area * (i * _inputShape.Dimensions + j), _inputShape.Area));
-                }
+                _input[i].CopyToView(_buffers.Input.SubView(i * _inputShape.Volume, _inputShape.Volume));
             }
         }
 
-        public void SetInput(Tensor[][] input)
+        public void SetInput(Tensor[] input)
         {
             _input = input;
         }

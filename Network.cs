@@ -295,7 +295,7 @@ namespace ConvolutionalNeuralNetwork
             Buffers = buffers.Compliment;
         }
 
-        public (float, float) Test(List<Tensor[][]> inputs, Vector[] expected, bool saveOutput)
+        public (float, float) Test(List<Tensor[]> inputs, Vector[] expected, bool saveOutput)
         {
             int batchSize = inputs[0].Length;
             for (int i = 0; i < inputs.Count; i++)
@@ -312,22 +312,19 @@ namespace ConvolutionalNeuralNetwork
             {
                 for (int i = 0; i < _outputs.GetLength(0); i++)
                 {
-                    for (int j = 0; j < _inputShape.Dimensions; j++)
-                    {
-                        _outputs[i][j].SyncCPU(Output.SubView((i * _inputShape.Dimensions + j) * _inputShape.Area, _inputShape.Area));
-                    }
+                    _outputs[i].SyncCPU(Output.SubView(i * _inputShape.Volume, _inputShape.Volume));
                 }
             }
 
             return Loss.GetLoss(expected);
         }
 
-        protected Tensor[][] _outputs;
+        protected Tensor[] _outputs;
 
         [Newtonsoft.Json.JsonIgnore]
-        public Tensor[][] GetOutputs => _outputs;
+        public Tensor[] GetOutputs => _outputs;
 
-        public (float, float) Train(List<Tensor[][]> inputs, Vector[] expected, bool update = true)
+        public (float, float) Train(List<Tensor[]> inputs, Vector[] expected, bool update = true)
         {
 
             if (inputs.Count != _inputLayers.Count)
@@ -372,7 +369,7 @@ namespace ConvolutionalNeuralNetwork
             return loss;
         }
 
-        public void Generate(List<Tensor[][]> inputs, bool saveOutput)
+        public void Generate(List<Tensor[]> inputs, bool saveOutput)
         {
             if (inputs.Count != _inputLayers.Count)
             {
@@ -395,10 +392,7 @@ namespace ConvolutionalNeuralNetwork
             {
                 for (int i = 0; i < _outputs.GetLength(0); i++)
                 {
-                    for (int j = 0; j < _outputShape.Dimensions; j++)
-                    {
-                        _outputs[i][j].SyncCPU(Output.SubView((i * _outputShape.Dimensions + j) * _outputShape.Area, _outputShape.Area));
-                    }
+                    _outputs[i].SyncCPU(Output.SubView(i * _outputShape.Volume, _outputShape.Volume));
                 }
             }
         }
@@ -426,14 +420,10 @@ namespace ConvolutionalNeuralNetwork
             outputBuffers.Allocate(maxBatchSize);
 
             _outputShape = current;
-            _outputs = new Tensor[maxBatchSize][];
+            _outputs = new Tensor[maxBatchSize];
             for (int i = 0; i < maxBatchSize; i++)
             {
-                _outputs[i] = new Tensor[current.Dimensions];
-                for (int j = 0; j < current.Dimensions; j++)
-                {
-                    _outputs[i][j] = new Tensor(current.Width, current.Length);
-                }
+                _outputs[i] = new Tensor(current);
             }
         }
 

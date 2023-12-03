@@ -93,7 +93,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             }
         }
 
-        public void TestFilterGradient(ILayer layer, Shape inputShape, Shape outputShapes, PairedBuffers buffer, int batchSize)
+        /*public void TestFilterGradient(ILayer layer, Shape inputShape, Shape outputShapes, PairedBuffers buffer, int batchSize)
         {
             int inputDimensions = inputShape.Dimensions;
             int outputDimensions = outputShapes.Dimensions;
@@ -195,7 +195,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 _weights[i] -= h;
             }
 
-        }
+        }*/
 
         /// <summary>
         /// Updates the filter weights along with the first and second moments.

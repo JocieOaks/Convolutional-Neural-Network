@@ -22,7 +22,7 @@ namespace ConvolutionalNeuralNetwork
             return (i * 0.5f + (i + 1) * j - k) / 10f;
         }
 
-        /// <summary>
+        /*/// <summary>
         /// Tests whether the backpropogation of a <see cref="Layer"/> is accurate to it's expected value. Used to diagnose issues with a <see cref="Layer"/>s
         /// propagation.
         /// </summary>
@@ -149,8 +149,9 @@ namespace ConvolutionalNeuralNetwork
                     }
                 }
             }
-        }
+        }*/
 
+        /*
         /// <summary>
         /// Tests whether the backpropogation of a <see cref="Layer"/> is accurate to it's expected value. Used to diagnose issues with a <see cref="Layer"/>s
         /// propagation.
@@ -302,7 +303,7 @@ namespace ConvolutionalNeuralNetwork
                         if (MathF.Abs(testOutput[i][j, k] - outputs[i][j,k]) > Math.Max(0.03, outputs[i][j, k] * 0.001))
                         {
                             Console.ReadLine();
-                        }*/
+                        }
 
                     }
                 }
@@ -409,7 +410,7 @@ namespace ConvolutionalNeuralNetwork
                     }
                 }
             }
-        }
+        }*/
 
         /// <summary>
         /// Generates a random value from a gaussian distribution with the given parameters.

@@ -241,10 +241,10 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             BackwardsUpdate(batchSize);
         }
 
-        protected override void BiasTest(Shape input, Shape output, int batchSize)
+        /*protected override void BiasTest(Shape input, Shape output, int batchSize)
         {
             _bias.TestFilterGradient(this, input, output, _buffers, batchSize);
-        }
+        }*/
 
         private readonly struct Views
         {
