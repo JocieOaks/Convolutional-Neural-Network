@@ -42,7 +42,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Augmentations
         }
 
         /// <inheritdoc />
-        public override Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize)
+        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
             if (_ready)
                 return _outputShape;

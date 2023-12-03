@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 
 namespace ConvolutionalNeuralNetwork.Layers.Activations
 {
-    public class Sigmoid : Layer, IUnchangedLayer
+    public class Sigmoid : Layer, IReflexiveLayer
     {
         private Vector _inputCopy;
 
@@ -50,7 +50,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             gradient[index.X] = exp * sig * sig * gradient[index.X];
         }
 
-        public override Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize)
+        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
             if (_ready)
                 return _outputShape;

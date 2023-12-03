@@ -17,12 +17,17 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         [JsonProperty] private Vector _secondMoment;
         private Vector _gradient;
         [JsonProperty] private Vector _weights;
-        [JsonProperty] public bool IgnoreClip { private get; init; }
-        private IWeightInitializer _initializer;
 
-        public Weights(IWeightInitializer initializer)
+        [JsonProperty] private float _gradientClip;
+        [JsonProperty] private float _weightsClip;
+        private IWeightInitializer _initializer;
+        [JsonProperty] private int _updates;
+
+        public Weights(IWeightInitializer initializer, float gradientClip = 1000, float weightsClip = 1000)
         {
             _initializer = initializer;
+            _gradientClip = gradientClip;
+            _weightsClip = weightsClip;
         }
 
         [JsonConstructor] private Weights() { }
@@ -88,14 +93,14 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             }
         }
 
-        public void TestFilterGradient(ILayer layer, Shape inputShape, Shape outputShapes, IOBuffers buffer, int batchSize)
+        public void TestFilterGradient(ILayer layer, Shape inputShape, Shape outputShapes, PairedBuffers buffer, int batchSize)
         {
             int inputDimensions = inputShape.Dimensions;
             int outputDimensions = outputShapes.Dimensions;
-            FeatureMap[] inputs = new FeatureMap[inputDimensions * batchSize];
+            Tensor[] inputs = new Tensor[inputDimensions * batchSize];
             for (int i = 0; i < inputDimensions * batchSize; i++)
             {
-                inputs[i] = new FeatureMap(inputShape);
+                inputs[i] = new Tensor(inputShape);
                 for (int j = 0; j < inputShape.Length; j++)
                 {
                     for (int k = 0; k < inputShape.Width; k++)
@@ -107,23 +112,23 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
             for (int i = 0; i < inputDimensions * batchSize; i++)
             {
-                inputs[i].CopyToBuffer(buffer.Input.SubView(inputShape.Area * i, inputShape.Area));
+                inputs[i].CopyToView(buffer.Input.SubView(inputShape.Area * i, inputShape.Area));
             }
 
-            FeatureMap[] outputs = new FeatureMap[outputDimensions * batchSize];
+            Tensor[] outputs = new Tensor[outputDimensions * batchSize];
             for (int i = 0; i < outputDimensions * batchSize; i++)
             {
-                outputs[i] = new FeatureMap(outputShapes);
+                outputs[i] = new Tensor(outputShapes);
             }
 
             layer.Forward(batchSize);
 
-            if (layer is IUnchangedLayer)
+            if (layer is IReflexiveLayer)
             {
                 for (int i = 0; i < outputDimensions * batchSize; i++)
                 {
                     outputs[i].SyncCPU(buffer.Input.SubView(outputShapes.Area * i, outputShapes.Area));
-                    new FeatureMap(outputs[i].Width, outputs[i].Length, 1).CopyToBuffer(buffer.Gradient.SubView(outputShapes.Area * i, outputShapes.Area));
+                    new Tensor(outputs[i].Width, outputs[i].Length, 1).CopyToView(buffer.Gradient.SubView(outputShapes.Area * i, outputShapes.Area));
                 }
             }
             else
@@ -131,13 +136,13 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 for (int i = 0; i < outputDimensions * batchSize; i++)
                 {
                     outputs[i].SyncCPU(buffer.Output.SubView(outputShapes.Area * i, outputShapes.Area));
-                    new FeatureMap(outputs[i].Width, outputs[i].Length, 1).CopyToBuffer(buffer.InGradient.SubView(outputShapes.Area * i, outputShapes.Area));
+                    new Tensor(outputs[i].Width, outputs[i].Length, 1).CopyToView(buffer.InGradient.SubView(outputShapes.Area * i, outputShapes.Area));
                 }
             }
             layer.Backwards(batchSize, true);
             _gradient.SyncCPU();
 
-            FeatureMap[] testOutput = new FeatureMap[outputDimensions * batchSize];
+            Tensor[] testOutput = new Tensor[outputDimensions * batchSize];
             for (int i = 0; i < outputDimensions * batchSize; i++)
             {
                 testOutput[i] = new(outputs[i].Width, outputs[i].Length);
@@ -145,7 +150,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
             for (int i = 0; i < inputDimensions * batchSize; i++)
             {
-                inputs[i].CopyToBuffer(buffer.Input.SubView(inputShape.Area * i, inputShape.Area));
+                inputs[i].CopyToView(buffer.Input.SubView(inputShape.Area * i, inputShape.Area));
             }
 
             float h = 0.001f;
@@ -155,11 +160,11 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 _weights[i] += h;
                 _weights.UpdateIfAllocated();
 
-                if(layer is IUnchangedLayer)
+                if(layer is IReflexiveLayer)
                 {
                     for (int j = 0; j < inputDimensions * batchSize; j++)
                     {
-                        inputs[j].CopyToBuffer(buffer.Input.SubView(inputShape.Area * j, inputShape.Area));
+                        inputs[j].CopyToView(buffer.Input.SubView(inputShape.Area * j, inputShape.Area));
                     }
                 }
 
@@ -168,7 +173,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 float testGradient = 0;
                 for (int i2 = 0; i2 < outputDimensions * batchSize; i2++)
                 {
-                    testOutput[i2].SyncCPU(layer is IUnchangedLayer
+                    testOutput[i2].SyncCPU(layer is IReflexiveLayer
                         ? buffer.Input.SubView(outputShapes.Area * i2, outputShapes.Area)
                         : buffer.Output.SubView(outputShapes.Area * i2, outputShapes.Area));
                     for (int j2 = 0; j2 < testOutput[i2].Width; j2++)
@@ -196,13 +201,14 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// Updates the filter weights along with the first and second moments.
         /// </summary>
         /// <param name="hyperParameters">The <see cref="AdamHyperParameters"/> detailing how the <see cref="Weights"/> should be updated.</param>
-        /// <param name="weightClip">The maximum absolute value to weightClip the gradient to.</param>
-        public void UpdateWeights(AdamHyperParameters hyperParameters, float gradientClip, float weightClip)
+        public void UpdateWeights(AdamHyperParameters hyperParameters)
         {
+            _updates++;
+
             Index1D index = new(Length);
             s_updateAction(index, _weights.GetArrayView<float>(), _firstMoment.GetArrayView<float>(),
                 _secondMoment.GetArrayView<float>(), _gradient.GetArrayView<float>(), hyperParameters.LearningRate,
-                hyperParameters.FirstMomentDecay, hyperParameters.SecondMomentDecay, gradientClip, IgnoreClip ? 1000 : weightClip);
+                hyperParameters.FirstMomentDecay, hyperParameters.SecondMomentDecay, _gradientClip, _weightsClip);
             GPUManager.Accelerator.Synchronize();
             _weights.DecrementLiveCount();
             _firstMoment.DecrementLiveCount();

@@ -7,7 +7,7 @@ using ILGPU.Runtime;
 
 namespace ConvolutionalNeuralNetwork.Layers.Activations
 {
-    public class HyperTan : Layer, IUnchangedLayer
+    public class HyperTan : Layer, IReflexiveLayer
     {
         private Vector _outputCopy;
 
@@ -50,7 +50,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             gradient[index.X] = gradient[index.X] * (1 - XMath.Pow(output[index.X], 2));
         }
 
-        public override Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize)
+        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
             if (_ready)
                 return _outputShape;

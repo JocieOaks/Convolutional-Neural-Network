@@ -2,7 +2,7 @@
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
-    public class InputLayer : Layer, IUnchangedLayer
+    public class InputLayer : Layer, IReflexiveLayer
     {
         public override string Name => "Input Layer";
 
@@ -28,7 +28,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                         throw new ArgumentException("Input images are incorrectly sized.");
                     }
 
-                    _input[i][j].CopyToBuffer(_buffers.Input.SubView(_inputShape.Area * (i * _inputShape.Dimensions + j), _inputShape.Area));
+                    _input[i][j].CopyToView(_buffers.Input.SubView(_inputShape.Area * (i * _inputShape.Dimensions + j), _inputShape.Area));
                 }
             }
         }
@@ -38,7 +38,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             _input = input;
         }
 
-        public override Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize)
+        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
             _outputShape = _inputShape;
             _buffers = buffers;

@@ -53,7 +53,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         }
 
         /// <inheritdoc/>
-        public override Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize)
+        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
             if (_ready)
                 return _outputShape;
@@ -77,11 +77,10 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         /// Initializes the <see cref="Layer"/> and many of its fields.
         /// </summary>
         /// <param name="inputShape">The previous <see cref="Layer"/>'s output.</param>
-        /// <param name="outGradients">The previous <see cref="Layer"/>'s inGradient.</param>
         /// <param name="outputDimensions">A factor relating the number of input layers to the number of output layers.
         /// A positive number multiplies the number of input dimensions. A negative number divides the number of dimensions.</param>
         /// <exception cref="ArgumentException">Thrown if the ratio of input layers and output layers is not an integer.</exception>
-        protected new void BaseStartup(Shape inputShape, IOBuffers buffers, int outputDimensions = 1)
+        protected new void BaseStartup(Shape inputShape, PairedBuffers buffers, int outputDimensions = 1)
         {
             _inputShape = inputShape;
             _outputShape = new Shape(inputShape.Width * _stride, inputShape.Length * _stride, outputDimensions);

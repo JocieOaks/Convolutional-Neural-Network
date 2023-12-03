@@ -9,7 +9,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
     /// The <see cref="ReLUActivation"/> class is a <see cref="Layer"/> is an activation to add non-linearity to the <see cref="Network"/>.
     /// </summary>
     [Serializable]
-    public class ReLUActivation : Layer, IUnchangedLayer
+    public class ReLUActivation : Layer, IReflexiveLayer
     {
         private static readonly Action<Index1D, ArrayView<int>, ArrayView<float>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<int>, ArrayView<float>>(BackwardsKernel);
         private static readonly Action<Index1D, ArrayView<float>, ArrayView<int>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<int>>(ForwardReLUKernel);
@@ -44,7 +44,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
         }
 
         /// <inheritdoc/>
-        public override Shape Startup(Shape inputShapes, IOBuffers buffers, int maxBatchSize)
+        public override Shape Startup(Shape inputShapes, PairedBuffers buffers, int maxBatchSize)
         {
             if (_ready)
                 return _outputShape;

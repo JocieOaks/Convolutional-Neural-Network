@@ -39,11 +39,9 @@ namespace ConvolutionalNeuralNetwork
 
         [Newtonsoft.Json.JsonIgnore] protected Loss Loss { get; }
 
-        public Network(Loss loss, float gradientClip = 1000, float weightClip = 1000)
+        public Network(Loss loss)
         {
             Loss = loss;
-            _gradientClip = gradientClip;
-            _weightClip = weightClip;
         }
 
         [Newtonsoft.Json.JsonConstructor] private Network(float gradientClip)
@@ -292,12 +290,12 @@ namespace ConvolutionalNeuralNetwork
             _ready = true;
         }
 
-        public override void Startup(IOBuffers buffers, Shape outputShape, int maxBatchSize)
+        public override void Startup(PairedBuffers buffers, Shape outputShape, int maxBatchSize)
         {
             Buffers = buffers.Compliment;
         }
 
-        public (float, float) Test(List<FeatureMap[][]> inputs, Vector[] expected, bool saveOutput)
+        public (float, float) Test(List<Tensor[][]> inputs, Vector[] expected, bool saveOutput)
         {
             int batchSize = inputs[0].Length;
             for (int i = 0; i < inputs.Count; i++)
@@ -324,12 +322,12 @@ namespace ConvolutionalNeuralNetwork
             return Loss.GetLoss(expected);
         }
 
-        protected FeatureMap[][] _outputs;
+        protected Tensor[][] _outputs;
 
         [Newtonsoft.Json.JsonIgnore]
-        public FeatureMap[][] GetOutputs => _outputs;
+        public Tensor[][] GetOutputs => _outputs;
 
-        public (float, float) Train(List<FeatureMap[][]> inputs, Vector[] expected, bool update = true)
+        public (float, float) Train(List<Tensor[][]> inputs, Vector[] expected, bool update = true)
         {
 
             if (inputs.Count != _inputLayers.Count)
@@ -345,7 +343,6 @@ namespace ConvolutionalNeuralNetwork
             return Train(expected, false, update);
         }
 
-        [JsonProperty] private float _weightClip;
         [JsonProperty] private float _gradientClip;
 
         public (float, float) Train(Vector[] expected, bool skipInputLayers, bool update)
@@ -369,13 +366,13 @@ namespace ConvolutionalNeuralNetwork
                 _adamHyperParameters.Update();
                 foreach (var weight in _weights)
                 {
-                    weight.UpdateWeights(_adamHyperParameters, _gradientClip, _weightClip);
+                    weight.UpdateWeights(_adamHyperParameters);
                 }
             }
             return loss;
         }
 
-        public void Generate(List<FeatureMap[][]> inputs, bool saveOutput)
+        public void Generate(List<Tensor[][]> inputs, bool saveOutput)
         {
             if (inputs.Count != _inputLayers.Count)
             {
@@ -410,15 +407,15 @@ namespace ConvolutionalNeuralNetwork
         {
             Buffers ??= new();
 
-            IOBuffers inputBuffers = Buffers;
-            IOBuffers outputBuffers = Buffers.Compliment ?? new();
-            IOBuffers.SetCompliment(inputBuffers, outputBuffers);
+            PairedBuffers inputBuffers = Buffers;
+            PairedBuffers outputBuffers = Buffers.Compliment ?? new();
+            PairedBuffers.SetCompliment(inputBuffers, outputBuffers);
             outputBuffers.OutputDimensionArea(current.Volume);
 
             foreach (var layer in _layers)
             {
                 current = layer.Startup(current, inputBuffers, maxBatchSize);
-                if (layer is not IUnchangedLayer)
+                if (layer is not IReflexiveLayer)
                 {
                     (inputBuffers, outputBuffers) = (outputBuffers, inputBuffers);
                 }
@@ -429,13 +426,13 @@ namespace ConvolutionalNeuralNetwork
             outputBuffers.Allocate(maxBatchSize);
 
             _outputShape = current;
-            _outputs = new FeatureMap[maxBatchSize][];
+            _outputs = new Tensor[maxBatchSize][];
             for (int i = 0; i < maxBatchSize; i++)
             {
-                _outputs[i] = new FeatureMap[current.Dimensions];
+                _outputs[i] = new Tensor[current.Dimensions];
                 for (int j = 0; j < current.Dimensions; j++)
                 {
-                    _outputs[i][j] = new FeatureMap(current.Width, current.Length);
+                    _outputs[i][j] = new Tensor(current.Width, current.Length);
                 }
             }
         }

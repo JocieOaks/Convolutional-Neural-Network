@@ -6,6 +6,10 @@ using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers.Weighted
 {
+    /// <summary>
+    /// The <see cref="Dense"/> layer is a <see cref="WeightedLayer"/> that applies a filter the output of the previous <see cref="Layer"/> creating an
+    /// output whose dimension and length are both 1.
+    /// </summary>
     public class Dense : WeightedLayer
     {
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo> s_backwardsFilterAction =
@@ -23,6 +27,8 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         /// Initializes a new instance of the <see cref="Dense"/> class.
         /// </summary>
         /// <param name="outputUnits">The number of units to output when performing a forward pass with <see cref="Dense"/>.</param>
+        /// <param name="weight">The initial <see cref="Dense"/> layer <see cref="Weights"/>.</param>
+        /// <param name="bias">The initial bias <see cref="Weights"/>. Null if bias should not be applied to the layer.</param>
         public Dense(int outputUnits, Weights weight, Weights bias) : base(0, 0, weight, bias)
         {
             _outputUnits = outputUnits;
@@ -36,11 +42,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         /// <inheritdoc/>
         public override string Name => "Dense Layer";
 
-        /// <summary>
-        /// Gets the <see cref="LayerInfo"/> for a particular dimension.
-        /// </summary>
-        /// <param name="index">The dimension who <see cref="LayerInfo"/> is needed.</param>
-        /// <returns>Return the <see cref="LayerInfo"/> corresponding to an input dimension.</returns>
         private LayerInfo Info => (LayerInfo)_layerInfo;
 
         protected override int WeightLength => _inputShape.Dimensions * _inputShape.Area * _outputUnits;
@@ -58,7 +59,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         }
 
         /// <inheritdoc/>
-        public override Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize)
+        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
             if (_ready)
                 return _outputShape;
@@ -110,7 +111,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             s_backwardsFilterAction(index, _buffers.InGradient, _inputCopy.GetArrayView<float>(), _weights.GradientGPU<float>(), Info);
         }
 
-        private void BaseStartup(Shape inputShapes, IOBuffers buffers)
+        private void BaseStartup(Shape inputShapes, PairedBuffers buffers)
         {
             _inputShape = inputShapes;
             _outputShape = new Shape(_outputUnits, 1, 1);

@@ -29,7 +29,7 @@ namespace ConvolutionalNeuralNetwork
         /// <param name="layer">The <see cref="Layer"/> to be tested.</param>
         public static void GradientCheck(ISerial serial, int inputDimensions, int outputDimensions, int inputSize, int batchSize)
         {
-            FeatureMap[] inputs = new FeatureMap[inputDimensions * batchSize];
+            Tensor[] inputs = new Tensor[inputDimensions * batchSize];
             Shape inputShapes = new(inputSize, inputSize, inputDimensions);
             for (int i = 0; i < inputDimensions * batchSize; i++)
             {
@@ -43,34 +43,34 @@ namespace ConvolutionalNeuralNetwork
                 }
             }
 
-            IOBuffers buffer = new();
-            IOBuffers complimentBuffer = new();
+            PairedBuffers buffer = new();
+            PairedBuffers complimentBuffer = new();
             complimentBuffer.OutputDimensionArea(inputDimensions * inputSize * inputSize);
 
             serial.Initialize(inputShapes);
             ILayer layer = serial.Construct();
 
             Shape outputShape = layer.Startup(inputShapes, buffer, batchSize);
-            FeatureMap[] outputs = new FeatureMap[outputDimensions * batchSize];
+            Tensor[] outputs = new Tensor[outputDimensions * batchSize];
             for(int i = 0; i < outputDimensions * batchSize; i++)
             {
-                outputs[i] = new FeatureMap(outputShape);
+                outputs[i] = new Tensor(outputShape);
             }
             buffer.Allocate(batchSize);
             complimentBuffer.Allocate(batchSize);
-            IOBuffers.SetCompliment(buffer, complimentBuffer);
+            PairedBuffers.SetCompliment(buffer, complimentBuffer);
             for (int i = 0; i < inputDimensions * batchSize; i++)
             {
-                inputs[i].CopyToBuffer(buffer.Input.SubView(inputShapes.Area * i, inputShapes.Area));
+                inputs[i].CopyToView(buffer.Input.SubView(inputShapes.Area * i, inputShapes.Area));
             }
 
             layer.Forward(batchSize);
-            if (layer is IUnchangedLayer)
+            if (layer is IReflexiveLayer)
             {
                 for (int i = 0; i < outputDimensions * batchSize; i++)
                 {
                     outputs[i].SyncCPU(buffer.Input.SubView(outputShape.Area * i, outputShape.Area));
-                    new FeatureMap(outputs[i].Width, outputs[i].Length, 1).CopyToBuffer(buffer.Gradient.SubView(outputShape.Area * i, outputShape.Area));
+                    new Tensor(outputs[i].Width, outputs[i].Length, 1).CopyToView(buffer.Gradient.SubView(outputShape.Area * i, outputShape.Area));
                 }
             }
             else
@@ -78,18 +78,18 @@ namespace ConvolutionalNeuralNetwork
                 for (int i = 0; i < outputDimensions * batchSize; i++)
                 {
                     outputs[i].SyncCPU(buffer.Output.SubView(outputShape.Area * i, outputShape.Area));
-                    new FeatureMap(outputs[i].Width, outputs[i].Length, 1).CopyToBuffer(buffer.InGradient.SubView(outputShape.Area * i, outputShape.Area));
+                    new Tensor(outputs[i].Width, outputs[i].Length, 1).CopyToView(buffer.InGradient.SubView(outputShape.Area * i, outputShape.Area));
                 }
             }
             layer.Backwards(batchSize, false);
-            FeatureMap[] outGradients = new FeatureMap[inputDimensions * batchSize];
+            Tensor[] outGradients = new Tensor[inputDimensions * batchSize];
             for (int i = 0; i < inputDimensions * batchSize; i++)
             {
-                outGradients[i] = new FeatureMap(inputSize, inputSize);
+                outGradients[i] = new Tensor(inputSize, inputSize);
                 outGradients[i].SyncCPU(buffer.OutGradient.SubView(inputShapes.Area * i, inputShapes.Area));
             }
 
-            FeatureMap[] testOutput = new FeatureMap[outputDimensions * batchSize];
+            Tensor[] testOutput = new Tensor[outputDimensions * batchSize];
             for (int i = 0; i < outputDimensions * batchSize; i++)
             {
 
@@ -104,7 +104,7 @@ namespace ConvolutionalNeuralNetwork
             {
                 for (int j = 0; j < inputDimensions * batchSize; j++)
                 {
-                    inputs[j].CopyToBuffer(buffer.Input.SubView(inputShapes.Area * j, inputShapes.Area));
+                    inputs[j].CopyToView(buffer.Input.SubView(inputShapes.Area * j, inputShapes.Area));
                 }
                 for (int k = 0; k < inputSize; k++)
                 {
@@ -114,7 +114,7 @@ namespace ConvolutionalNeuralNetwork
                         inputs[i][j, k] += h;
                         for (int i2 = 0; i2 < inputDimensions * batchSize; i2++)
                         {
-                            inputs[i2].CopyToBuffer(buffer.Input.SubView(inputShapes.Area * i2, inputShapes.Area));
+                            inputs[i2].CopyToView(buffer.Input.SubView(inputShapes.Area * i2, inputShapes.Area));
                         }
 
 
@@ -123,7 +123,7 @@ namespace ConvolutionalNeuralNetwork
                         float testGradient = 0;
                         for (int i2 = 0; i2 < outputDimensions * batchSize; i2++)
                         {
-                            if (layer is IUnchangedLayer)
+                            if (layer is IReflexiveLayer)
                             {
                                 testOutput[i2].SyncCPU(buffer.Input.SubView(outputShape.Area * i2, outputShape.Area));
                             }
@@ -158,10 +158,10 @@ namespace ConvolutionalNeuralNetwork
         /// <param name="layer">The <see cref="Layer"/> to be tested.</param>
         public static void AtomicCheck(Weights weights, int filterSize, int stride, int inputDimensions, int outputDimensions, int inputSize, int batchSize)
         {
-            FeatureMap[] outputs;
+            Tensor[] outputs;
             if (true)
             {
-                FeatureMap[] inputs = new FeatureMap[inputDimensions * batchSize];
+                Tensor[] inputs = new Tensor[inputDimensions * batchSize];
                 Shape inputShapes = new(inputSize, inputSize, inputDimensions);
                 for (int i = 0; i < inputDimensions * batchSize; i++)
                 {
@@ -175,8 +175,8 @@ namespace ConvolutionalNeuralNetwork
                     }
                 }
 
-                IOBuffers buffer = new();
-                IOBuffers complimentBuffer = new();
+                PairedBuffers buffer = new();
+                PairedBuffers complimentBuffer = new();
                 complimentBuffer.OutputDimensionArea(inputDimensions * inputSize * inputSize);
 
                 ISerial serial = new SerialConv(outputDimensions, filterSize, stride, weights, null);
@@ -185,21 +185,21 @@ namespace ConvolutionalNeuralNetwork
                 ILayer layer = serial.Construct();
 
                 Shape outputShape = layer.Startup(inputShapes, buffer, batchSize);
-                outputs = new FeatureMap[outputDimensions * batchSize];
+                outputs = new Tensor[outputDimensions * batchSize];
                 for (int i = 0; i < outputDimensions * batchSize; i++)
                 {
-                    outputs[i] = new FeatureMap(outputShape);
+                    outputs[i] = new Tensor(outputShape);
                 }
                 buffer.Allocate(batchSize);
                 complimentBuffer.Allocate(batchSize);
-                IOBuffers.SetCompliment(buffer, complimentBuffer);
+                PairedBuffers.SetCompliment(buffer, complimentBuffer);
                 for (int i = 0; i < inputDimensions * batchSize; i++)
                 {
-                    inputs[i].CopyToBuffer(buffer.Input.SubView(inputShapes.Area * i, inputShapes.Area));
+                    inputs[i].CopyToView(buffer.Input.SubView(inputShapes.Area * i, inputShapes.Area));
                 }
 
                 layer.Forward(batchSize);
-                if (layer is IUnchangedLayer)
+                if (layer is IReflexiveLayer)
                 {
                     for (int i = 0; i < outputDimensions * batchSize; i++)
                     {
@@ -217,7 +217,7 @@ namespace ConvolutionalNeuralNetwork
                 
             }
 
-            FeatureMap[] testOutput = new FeatureMap[outputDimensions * batchSize];
+            Tensor[] testOutput = new Tensor[outputDimensions * batchSize];
             for (int i = 0; i < outputDimensions * batchSize; i++)
             {
                 testOutput[i] = new(outputs[i].Width, outputs[i].Length);
@@ -225,7 +225,7 @@ namespace ConvolutionalNeuralNetwork
 
             for (int p = 0; p < inputDimensions; p++)
             {
-                FeatureMap[] inputs = new FeatureMap[batchSize];
+                Tensor[] inputs = new Tensor[batchSize];
                 Shape inputShapes = new(inputSize, inputSize, 1);
                 for (int i = 0; i < batchSize; i++)
                 {
@@ -239,8 +239,8 @@ namespace ConvolutionalNeuralNetwork
                     }
                 }
 
-                IOBuffers buffer = new();
-                IOBuffers complimentBuffer = new();
+                PairedBuffers buffer = new();
+                PairedBuffers complimentBuffer = new();
                 complimentBuffer.OutputDimensionArea(inputSize * inputSize);
 
                 ISerial serial = new SerialConv(outputDimensions, filterSize, stride, weights.Slice(p * filterSize * filterSize, filterSize * filterSize), null);
@@ -249,26 +249,26 @@ namespace ConvolutionalNeuralNetwork
                 ILayer layer = serial.Construct();
 
                 Shape outputShape = layer.Startup(inputShapes, buffer, batchSize);
-                FeatureMap[] singleOutputs = new FeatureMap[outputDimensions * batchSize];
+                Tensor[] singleOutputs = new Tensor[outputDimensions * batchSize];
                 for (int i = 0; i < outputDimensions * batchSize; i++)
                 {
-                    singleOutputs[i] = new FeatureMap(outputShape);
+                    singleOutputs[i] = new Tensor(outputShape);
                 }
                 buffer.Allocate(batchSize);
                 complimentBuffer.Allocate(batchSize);
-                IOBuffers.SetCompliment(buffer, complimentBuffer);
+                PairedBuffers.SetCompliment(buffer, complimentBuffer);
                 for (int i = 0; i < batchSize; i++)
                 {
-                    inputs[i].CopyToBuffer(buffer.Input.SubView(inputShapes.Area * i, inputShapes.Area));
+                    inputs[i].CopyToView(buffer.Input.SubView(inputShapes.Area * i, inputShapes.Area));
                 }
 
                 layer.Forward(batchSize);
-                if (layer is IUnchangedLayer)
+                if (layer is IReflexiveLayer)
                 {
                     for (int i = 0; i < outputDimensions * batchSize; i++)
                     {
                         singleOutputs[i].SyncCPU(buffer.Input.SubView(outputShape.Area * i, outputShape.Area));
-                        new FeatureMap(singleOutputs[i].Width, singleOutputs[i].Length, 1).CopyToBuffer(buffer.Gradient.SubView(outputShape.Area * i, outputShape.Area));
+                        new Tensor(singleOutputs[i].Width, singleOutputs[i].Length, 1).CopyToView(buffer.Gradient.SubView(outputShape.Area * i, outputShape.Area));
                     }
                 }
                 else
@@ -276,7 +276,7 @@ namespace ConvolutionalNeuralNetwork
                     for (int i = 0; i < outputDimensions * batchSize; i++)
                     {
                         singleOutputs[i].SyncCPU(buffer.Output.SubView(outputShape.Area * i, outputShape.Area));
-                        new FeatureMap(singleOutputs[i].Width, singleOutputs[i].Length, 1).CopyToBuffer(buffer.InGradient.SubView(outputShape.Area * i, outputShape.Area));
+                        new Tensor(singleOutputs[i].Width, singleOutputs[i].Length, 1).CopyToView(buffer.InGradient.SubView(outputShape.Area * i, outputShape.Area));
                     }
                 }
                 for (int i = 0; i < batchSize; i++)
@@ -312,14 +312,14 @@ namespace ConvolutionalNeuralNetwork
         public static void GradientCheck(Weights weights, int filterSize, int stride, int inputDimensions, int outputDimensions, int inputSize, int batchSize)
         {
             Shape outputShape;
-            FeatureMap[] outGradients = new FeatureMap[inputDimensions * batchSize];
+            Tensor[] outGradients = new Tensor[inputDimensions * batchSize];
             if (true)
             {
-                FeatureMap[] inputs = new FeatureMap[inputDimensions * batchSize];
+                Tensor[] inputs = new Tensor[inputDimensions * batchSize];
                 Shape inputShapes = new(inputSize, inputSize, inputDimensions);
 
-                IOBuffers buffer = new();
-                IOBuffers complimentBuffer = new();
+                PairedBuffers buffer = new();
+                PairedBuffers complimentBuffer = new();
                 complimentBuffer.OutputDimensionArea(inputDimensions * inputSize * inputSize);
 
                 ISerial serial = new SerialConv(outputDimensions, filterSize, stride, weights, null);
@@ -331,37 +331,37 @@ namespace ConvolutionalNeuralNetwork
 
                 buffer.Allocate(batchSize);
                 complimentBuffer.Allocate(batchSize);
-                IOBuffers.SetCompliment(buffer, complimentBuffer);
-                if (layer is IUnchangedLayer)
+                PairedBuffers.SetCompliment(buffer, complimentBuffer);
+                if (layer is IReflexiveLayer)
                 {
                     for (int i = 0; i < outputDimensions * batchSize; i++)
                     {
-                        new FeatureMap(outputShape.Width, outputShape.Length, 1).CopyToBuffer(buffer.Gradient.SubView(outputShape.Area * i, outputShape.Area));
+                        new Tensor(outputShape.Width, outputShape.Length, 1).CopyToView(buffer.Gradient.SubView(outputShape.Area * i, outputShape.Area));
                     }
                 }
                 else
                 {
                     for (int i = 0; i < outputDimensions * batchSize; i++)
                     {
-                        new FeatureMap(outputShape.Width, outputShape.Length, 1).CopyToBuffer(buffer.InGradient.SubView(outputShape.Area * i, outputShape.Area));
+                        new Tensor(outputShape.Width, outputShape.Length, 1).CopyToView(buffer.InGradient.SubView(outputShape.Area * i, outputShape.Area));
                     }
                 }
                 layer.Backwards(batchSize, false);
                 
                 for (int i = 0; i < inputDimensions * batchSize; i++)
                 {
-                    outGradients[i] = new FeatureMap(inputSize, inputSize);
+                    outGradients[i] = new Tensor(inputSize, inputSize);
                     outGradients[i].SyncCPU(buffer.OutGradient.SubView(inputShapes.Area * i, inputShapes.Area));
                 }
             }
 
             for (int p = 0; p < inputDimensions; p++)
             {
-                FeatureMap[] inputs = new FeatureMap[batchSize];
+                Tensor[] inputs = new Tensor[batchSize];
                 Shape inputShapes = new(inputSize, inputSize, 1);
 
-                IOBuffers buffer = new();
-                IOBuffers complimentBuffer = new();
+                PairedBuffers buffer = new();
+                PairedBuffers complimentBuffer = new();
                 complimentBuffer.OutputDimensionArea(inputSize * inputSize);
 
                 ISerial serial = new SerialConv(outputDimensions, filterSize, stride, weights.Slice(p * filterSize * filterSize, filterSize * filterSize), null);
@@ -373,20 +373,20 @@ namespace ConvolutionalNeuralNetwork
 
                 buffer.Allocate(batchSize);
                 complimentBuffer.Allocate(batchSize);
-                IOBuffers.SetCompliment(buffer, complimentBuffer);
+                PairedBuffers.SetCompliment(buffer, complimentBuffer);
 
-                if (layer is IUnchangedLayer)
+                if (layer is IReflexiveLayer)
                 {
                     for (int i = 0; i < outputDimensions * batchSize; i++)
                     {
-                        new FeatureMap(singleOutputShape.Width, singleOutputShape.Length, 1).CopyToBuffer(buffer.Gradient.SubView(singleOutputShape.Area * i, singleOutputShape.Area));
+                        new Tensor(singleOutputShape.Width, singleOutputShape.Length, 1).CopyToView(buffer.Gradient.SubView(singleOutputShape.Area * i, singleOutputShape.Area));
                     }
                 }
                 else
                 {
                     for (int i = 0; i < outputDimensions * batchSize; i++)
                     {
-                        new FeatureMap(singleOutputShape.Width, singleOutputShape.Length, 1).CopyToBuffer(buffer.InGradient.SubView(singleOutputShape.Area * i, singleOutputShape.Area));
+                        new Tensor(singleOutputShape.Width, singleOutputShape.Length, 1).CopyToView(buffer.InGradient.SubView(singleOutputShape.Area * i, singleOutputShape.Area));
                     }
                 }
 
@@ -394,7 +394,7 @@ namespace ConvolutionalNeuralNetwork
 
                 for (int i = 0; i < batchSize; i++)
                 {
-                    FeatureMap outGradient = new FeatureMap(inputSize, inputSize);
+                    Tensor outGradient = new Tensor(inputSize, inputSize);
                     outGradient.SyncCPU(buffer.OutGradient.SubView(inputShapes.Area * i, inputShapes.Area));
                     for (int j = 0; j < singleOutputShape.Length; j++)
                     {

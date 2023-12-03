@@ -10,7 +10,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
     /// The <see cref="Fork"/> class is a <see cref="Layer"/> that creates two sets of the same <see cref="FeatureMap"/>s, sending
     /// one as input to the next <see cref="Layer"/> and sending one to a <see cref="Concatenate"/> later in the <see cref="Network"/>.
     /// </summary>
-    public class Fork : Layer, IUnchangedLayer
+    public class Fork : Layer, IReflexiveLayer
     {
         private static int s_nextID = 1;
         public static Dictionary<int, Fork> Splits { get; } = new Dictionary<int, Fork>();
@@ -119,7 +119,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         }
 
         /// <inheritdoc/>
-        public override Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize)
+        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
             if (_ready)
                 return _outputShape;

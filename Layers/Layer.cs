@@ -11,7 +11,7 @@ namespace ConvolutionalNeuralNetwork.Layers
     [Serializable]
     public abstract class Layer : ILayer
     {
-        protected IOBuffers _buffers;
+        protected PairedBuffers _buffers;
         [JsonProperty] protected int _filterSize;
         protected Shape _inputShape;
         protected ILayerInfo _layerInfo;
@@ -41,13 +41,13 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
         }
 
-        [JsonIgnore] public ArrayView<float> InGradient => this is IUnchangedLayer ? _buffers.OutGradient : _buffers.InGradient;
+        [JsonIgnore] public ArrayView<float> InGradient => this is IReflexiveLayer ? _buffers.OutGradient : _buffers.InGradient;
         [JsonIgnore] public ArrayView<float> Input => _buffers.Input;
         /// <inheritdoc/>
         [JsonIgnore] public abstract string Name { get; }
 
         [JsonIgnore] public ArrayView<float> OutGradient => _buffers.OutGradient;
-        [JsonIgnore] public ArrayView<float> Output => this is IUnchangedLayer ? _buffers.Input : _buffers.Output;
+        [JsonIgnore] public ArrayView<float> Output => this is IReflexiveLayer ? _buffers.Input : _buffers.Output;
         /// <inheritdoc/>
         public abstract void Backwards(int batchSize, bool update);
 
@@ -55,7 +55,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         public abstract void Forward(int batchSize);
 
         /// <inheritdoc/>
-        public abstract Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize);
+        public abstract Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize);
 
         protected static void Synchronize()
         {
@@ -70,7 +70,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="outputDimensions">A factor relating the number of input layers to the number of output layers.
         /// A positive number multiplies the number of input dimensions. A negative number divides the number of dimensions.</param>
         /// <exception cref="ArgumentException">Thrown if the ratio of input layers and output layers is not an integer.</exception>
-        protected void BaseStartup(Shape inputShape, IOBuffers buffers, int outputDimensions = -1)
+        protected void BaseStartup(Shape inputShape, PairedBuffers buffers, int outputDimensions = -1)
         {
             _inputShape = inputShape;
             if(outputDimensions == -1)

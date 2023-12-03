@@ -6,12 +6,13 @@ using Newtonsoft.Json;
 namespace ConvolutionalNeuralNetwork.DataTypes
 {
     /// <summary>
-    /// The <see cref="Tensor"/> class represents a 2D array of <see cref="Color"/>s.
+    /// The <see cref="Tensor"/> class represents a 2D array of floats.
     /// </summary>
     [Serializable]
     public class Tensor : Cacheable<float>
     {
-        [JsonProperty] protected float[] _tensor;
+        /// <value>The values of the <see cref="Tensor"/> as a single dimensional array.</value>
+        [JsonProperty] protected float[] Values;
 
         /// <summary>
         /// Initializes a new <see cref="Tensor"/> with the given dimensions.
@@ -23,15 +24,33 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             Width = width;
             Length = length;
 
-            _tensor = new float[width * length];
+            Values = new float[width * length];
         }
 
+        /// <summary>
+        /// Initializes a new <see cref="Tensor"/> with the given <see cref="Shape"/>.
+        /// </summary>
+        /// <param name="shape">The <see cref="Shape"/> of the new <see cref="Tensor"/>. Ignores dimension.</param>
         public Tensor(Shape shape)
         {
             Width = shape.Width;
             Length = shape.Length;
 
-            _tensor = new float[shape.Area];
+            Values = new float[shape.Area];
+        }
+
+        /// <summary>
+        /// Initializes a new <see cref="Tensor"/> with the given dimensions, initialized with a given value.
+        /// </summary>
+        /// <param name="width">The width of the <see cref="Tensor"/>.</param>
+        /// <param name="length">The length of the <see cref="Tensor"/>.</param>
+        /// <param name="value">The value to set every entry in the <see cref="Tensor"/> to.</param>
+        public Tensor(int width, int length, float value)
+        {
+            for (int i = 0; i < Area; i++)
+            {
+                Values[i] = value;
+            }
         }
 
         /// <summary>
@@ -40,44 +59,35 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         [JsonConstructor] protected Tensor() { }
 
         /// <value>The full area of the <see cref="Tensor"/>.</value>
-        [JsonIgnore] public int Area => _tensor.Length;
-
-        /// <value>The length of the <see cref="Tensor"/> when converted into an array of floats.</value>
-        [JsonIgnore] public int FloatLength => _tensor.Length * 3;
+        [JsonIgnore] public int Area => Values.Length;
 
         /// <value>The y length of the <see cref="Tensor"/>.</value>
         [JsonProperty] public int Length { get; private set; }
 
-        /// <value>The x width of the <see cref="Tensor"/>.</value>
-        [JsonProperty] public int Width { get; private set; }
-
+        /// <inheritdoc/>
         public override long MemorySize => Area * 12;
 
+        /// <value>The x width of the <see cref="Tensor"/>.</value>
+        [JsonProperty] public int Width { get; private set; }
         /// <summary>
-        /// Indexes the <see cref="Tensor"/> to retrieve the <see cref="Color"/> at the given coordinates.
+        /// Indexes the <see cref="Tensor"/> to retrieve the value at the given coordinates.
         /// </summary>
-        /// <param name="x">The x coordinate of the desired <see cref="Color"/>.</param>
-        /// <param name="y">The y coordinate of the desired <see cref="Color"/>.</param>
-        /// <returns>Returns the <see cref="Color"/> at (<paramref name="x"/>, <paramref name="y"/>).</returns>
+        /// <param name="x">The x coordinate of the desired value.</param>
+        /// <param name="y">The y coordinate of the desired value.</param>
+        /// <returns>Returns the value at (<paramref name="x"/>, <paramref name="y"/>).</returns>
         public float this[int x, int y]
         {
-            get => _tensor[y * Width + x];
-            set => _tensor[y * Width + x] = value;
-        }
-
-        private float this[int index]
-        {
-            get => _tensor[index];
-            set => _tensor[index] = value;
+            get => Values[y * Width + x];
+            set => Values[y * Width + x] = value;
         }
 
         /// <summary>
         /// Multiplies a <see cref="Vector"/> and a <see cref="Tensor"/> by performing tensor contraction using the <see cref="Vector"/> as 
-        /// n x 3 tensor and the <see cref="Tensor"/> is an n x m x 3 tensor, resulting in a m x 3 tensor.
+        /// n tensor and the <see cref="Tensor"/> is an n x m tensor, resulting in a m tensor.
         /// </summary>
         /// <param name="vector">The <see cref="Vector"/> of length n.</param>
         /// <param name="tensor">The <see cref="Tensor"/> of dimensions n x m.</param>
-        /// <returns>Returns a <see cref="ColorVector"/> of length m, where m is the <see cref="Tensor.Length"/> of <paramref name="tensor"/>.</returns>
+        /// <returns>Returns a <see cref="Vector"/> of length m, where m is the <see cref="Tensor.Length"/> of <paramref name="tensor"/>.</returns>
         /// <exception cref="ArgumentException">Thrown if <paramref name="vector"/> length is not equal to <paramref name="tensor"/> width.</exception>
         public static Vector operator *(Vector vector, Tensor tensor)
         {
@@ -96,108 +106,23 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         }
 
         /// <summary>
-        /// Multiplies a <see cref="Tensor"/> of dimensions n x m x 3, by a <see cref="ColorVector"/> of dimensions m x 3,
-        /// performing double tensor contraction to get a vector of length n.
+        /// Copies the <see cref="Tensor"/> to an <see cref="ArrayView{T}"/>
         /// </summary>
-        /// <param name="matrix">The first tensor of dimensions n x m x 3.</param>
-        /// <param name="vector">The <see cref="ColorVector"/>, a  tensor of dimensions m x 3.</param>
-        /// <returns>Returns a new <see cref="Vector"/> of length equal to <paramref name="matrix"/> width.</returns>
-        /// <exception cref="ArgumentException">Thrown if <paramref name="matrix"/> <see cref="Tensor.Length"/> is not equal to
-        /// <paramref name="vector"/>'s length.</exception>
-        /*public static Vector operator *(ColorTensor matrix, ColorVector vector)
+        /// <param name="view">The <see cref="ArrayView{T}"/> being copied to.</param>
+        public void CopyToView(ArrayView<float> view)
         {
-            if (matrix.Length != vector.Length)
-                throw new ArgumentException("Matrix and vector are not compatible.");
-
-            Vector output = new(matrix.Width);
-            for (int i = 0; i < matrix.Width; i++)
-            {
-                for (int j = 0; j < matrix.Length; j++)
-                {
-                    output[i] += Color.Dot(matrix[i, j], vector[j]);
-                }
-            }
-
-            return output;
-        }*/
-
-        /// <summary>
-        /// Generates a new <see cref="ColorTensor"/> of the given dimensions with randomized values. Used for creating starting noise
-        /// for a <see cref="Networks.Generator"/>.
-        /// </summary>
-        /// <param name="width"></param>
-        /// <param name="length"></param>
-        /// <returns></returns>
-        public static Tensor Random(int width, int length, float mean, float stdDev)
-        {
-            Tensor tensor = new(width, length);
-            for (int y = 0; y < length; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    tensor[x, y] = Utility.RandomGauss(mean, stdDev);
-                }
-            }
-            return tensor;
+            view.SubView(0, Area).CopyFromCPU(Values);
         }
 
-        public void Randomize(float mean, float stdDev)
-        {
-            for(int i = 0; i < Area; i++)
-            {
-                _tensor[i] = Utility.RandomGauss(0, stdDev);
-            }
-        }
-
-        public void CopyToBuffer(ArrayView<float> buffer)
-        {
-            buffer.SubView(0, Area).CopyFromCPU(_tensor);
-        }
-
-        public override float[] GetValues()
-        {
-            return _tensor;
-        }
-
-        public ArrayView<T> GetArrayViewEmpty<T>() where T : unmanaged
-        {
-            IncrementLiveCount();
-            MemoryBuffer buffer = GetBuffer();
-            if (buffer == null)
-            {
-                (ID, buffer) = GPUManager.AllocateEmpty<float>(this, Area);
-            }
-            int bytes = Interop.SizeOf<T>();
-            return new ArrayView<T>(buffer, 0, 12 * Area / bytes);
-        }
-
-        public ArrayView<T> GetArrayView<T>() where T: unmanaged
-        {
-            IncrementLiveCount();
-            MemoryBuffer buffer = GetBuffer();
-            if(buffer == null)
-            {
-                (ID, buffer) = GPUManager.Allocate<float>(this);
-            }
-            int bytes = Interop.SizeOf<T>();
-            return new ArrayView<T>(buffer, 0, 12 * Area / bytes);
-        }
-
-        public ArrayView<T> GetArrayViewZeroed<T>() where T: unmanaged
-        {
-            ArrayView<T> arrayView = GetArrayView<T>();
-            arrayView.MemSetToZero();
-            return arrayView;
-        }
-
+        /// <inheritdoc/>
         public override void DeCache()
         {
             // If the tensor is not cached - it's technically already decached
-            if (ID == 0) 
+            if (ID == 0)
                 return;
 
             // If the tensor is live - Fail
-            if (LiveCount != 0) 
+            if (LiveCount != 0)
                 return;
 
             // Else Decache
@@ -205,20 +130,48 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             ID = GPUManager.GCItem(ID);
         }
 
+        /// <summary>
+        /// Gets the <see cref="ArrayView{T}"/> for the cached <see cref="Tensor"/> or allocates it if the <see cref="Tensor"/> is decached.
+        /// </summary>
+        /// <returns></returns>
+        public ArrayView<float> GetArrayView()
+        {
+            IncrementLiveCount();
+            MemoryBuffer buffer = GetBuffer();
+            if (buffer == null)
+            {
+                (ID, buffer) = GPUManager.Allocate(this);
+            }
+            int bytes = Interop.SizeOf<float>();
+            return new ArrayView<float>(buffer, 0, 12 * Area / bytes);
+        }
+
+        /// <summary>
+        /// Gives all the values of the <see cref="Tensor"/>.
+        /// </summary>
+        /// <returns>Returns the <see cref="Tensor"/>'s values as a single dimensional array of floats.</returns>
+        public override float[] GetValues()
+        {
+            return Values;
+        }
+
+        /// <inheritdoc />
         public override void SyncCPU()
         {
             if(ID != 0)
                 SyncCPU(GetBuffer());
         }
 
+        /// <inheritdoc />
         public override void SyncCPU(MemoryBuffer buffer)
         {
-            buffer.AsArrayView<float>(0, Area).CopyToCPU(_tensor);
+            buffer.AsArrayView<float>(0, Area).CopyToCPU(Values);
         }
 
+        /// <inheritdoc />
         public override void SyncCPU(ArrayView<float> arrayView)
         {
-            arrayView.SubView(0, Area).CopyToCPU(_tensor);
+            arrayView.SubView(0, Area).CopyToCPU(Values);
         }
     }
 }

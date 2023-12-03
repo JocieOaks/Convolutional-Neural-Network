@@ -31,7 +31,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             _values = new float[length];
         }
 
-        public Vector(FeatureMap[] maps)
+        public Vector(Tensor[] maps)
         {
             int area = maps[0].Area;
             int width = maps[0].Width;

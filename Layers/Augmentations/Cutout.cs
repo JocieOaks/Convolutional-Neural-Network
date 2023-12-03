@@ -6,7 +6,7 @@ using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers.Augmentations
 {
-    public class Cutout : Layer, IUnchangedLayer
+    public class Cutout : Layer, IReflexiveLayer
     {
         private int _halfWidth;
         private int _halfLength;
@@ -68,7 +68,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Augmentations
         }
 
         /// <inheritdoc />
-        public override Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize)
+        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
             if (_ready)
                 return _outputShape;

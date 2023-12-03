@@ -140,8 +140,8 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             Shape inputShape = new Shape(inputSize, inputSize, inputDimensions);
 
 
-            IOBuffers buffer = new();
-            IOBuffers complimentBuffer = new();
+            PairedBuffers buffer = new();
+            PairedBuffers complimentBuffer = new();
             complimentBuffer.OutputDimensionArea(inputDimensions * inputSize * inputSize);
 
             Shape outputShape = Startup(inputShape, buffer, batchSize);
@@ -153,7 +153,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
             buffer.Allocate(batchSize);
             complimentBuffer.Allocate(batchSize);
-            IOBuffers.SetCompliment(buffer, complimentBuffer);
+            PairedBuffers.SetCompliment(buffer, complimentBuffer);
 
 
             inputShape = new Shape(inputSize, inputSize, inputDimensions);

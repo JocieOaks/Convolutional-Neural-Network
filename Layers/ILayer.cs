@@ -39,13 +39,13 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="inputs">The previous <see cref="Layer"/>'s output.</param>
         /// <param name="outGradients">The previous <see cref="Layer"/>'s inGradient.</param>
         /// <returns>Returns the output and inGradient to share with the next <see cref="Layer"/>.</returns>
-        Shape Startup(Shape inputShape, IOBuffers buffers, int maxBatchSize);
+        Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize);
     }
 
     /// <summary>
-    /// The <see cref="IUnchangedLayer"/> interface is for <see cref="Layer"/>s where the direct input is the same as the direct output. The layer may perform some alternate
+    /// The <see cref="IReflexiveLayer"/> interface is for <see cref="Layer"/>s where the direct input is the same as the direct output. The layer may perform some alternate
     /// task, such as modifying the shape of the output (but the single dimensional values remain constant) or copying the input for a later layer.
     /// </summary>
-    public interface IUnchangedLayer : ILayer
+    public interface IReflexiveLayer : ILayer
     { }
 }

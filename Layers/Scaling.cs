@@ -77,7 +77,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <inheritdoc/>
-        public override Shape[] Startup(Shape[] inputShapes, IOBuffers buffers, uint batchSize)
+        public override Shape[] Startup(Shape[] inputShapes, PairedBuffers buffers, uint batchSize)
         {
 
         if (_ready)
@@ -287,7 +287,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             throw new NotImplementedException();
         }
 
-        public override Shape Startup(Shape inputShapes, IOBuffers buffers, int maxBatchSize)
+        public override Shape Startup(Shape inputShapes, PairedBuffers buffers, int maxBatchSize)
         {
             throw new NotImplementedException();
         }

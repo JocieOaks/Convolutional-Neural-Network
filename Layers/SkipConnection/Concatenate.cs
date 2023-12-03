@@ -96,7 +96,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         }
 
         /// <inheritdoc/>
-        public override Shape Startup(Shape inputShape, IOBuffers buffers, int batchSize)
+        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int batchSize)
         {
             if (_ready)
                 return _outputShape;
