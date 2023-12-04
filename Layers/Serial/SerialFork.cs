@@ -17,7 +17,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
 
         public int ID { get; init; }
         
-        [JsonIgnore] public Shape OutputShape { get; private set; }
+        [JsonIgnore] public TensorShape OutputShape { get; private set; }
 
         public Layer Construct()
         {
@@ -26,7 +26,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
             return fork;
         }
 
-        public Shape Initialize(Shape inputShape)
+        public TensorShape Initialize(TensorShape inputShape)
         {
             OutputShape = inputShape;
             return inputShape;

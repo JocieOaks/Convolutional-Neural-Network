@@ -30,7 +30,7 @@ namespace ConvolutionalNeuralNetwork
         public static void GradientCheck(ISerial serial, int inputDimensions, int outputDimensions, int inputSize, int batchSize)
         {
             Tensor[] inputs = new Tensor[inputDimensions * batchSize];
-            Shape inputShapes = new(inputSize, inputSize, inputDimensions);
+            TensorShape inputShapes = new(inputSize, inputSize, inputDimensions);
             for (int i = 0; i < inputDimensions * batchSize; i++)
             {
                 inputs[i] = new(inputSize, inputSize);
@@ -50,7 +50,7 @@ namespace ConvolutionalNeuralNetwork
             serial.Initialize(inputShapes);
             ILayer layer = serial.Construct();
 
-            Shape outputShape = layer.Startup(inputShapes, buffer, batchSize);
+            TensorShape outputShape = layer.Startup(inputShapes, buffer, batchSize);
             Tensor[] outputs = new Tensor[outputDimensions * batchSize];
             for(int i = 0; i < outputDimensions * batchSize; i++)
             {
@@ -163,7 +163,7 @@ namespace ConvolutionalNeuralNetwork
             if (true)
             {
                 Tensor[] inputs = new Tensor[inputDimensions * batchSize];
-                Shape inputShapes = new(inputSize, inputSize, inputDimensions);
+                TensorShape inputShapes = new(inputSize, inputSize, inputDimensions);
                 for (int i = 0; i < inputDimensions * batchSize; i++)
                 {
                     inputs[i] = new(inputSize, inputSize);
@@ -185,7 +185,7 @@ namespace ConvolutionalNeuralNetwork
                 serial.Initialize(inputShapes);
                 ILayer layer = serial.Construct();
 
-                Shape outputShape = layer.Startup(inputShapes, buffer, batchSize);
+                TensorShape outputShape = layer.Startup(inputShapes, buffer, batchSize);
                 outputs = new Tensor[outputDimensions * batchSize];
                 for (int i = 0; i < outputDimensions * batchSize; i++)
                 {
@@ -227,7 +227,7 @@ namespace ConvolutionalNeuralNetwork
             for (int p = 0; p < inputDimensions; p++)
             {
                 Tensor[] inputs = new Tensor[batchSize];
-                Shape inputShapes = new(inputSize, inputSize, 1);
+                TensorShape inputShapes = new(inputSize, inputSize, 1);
                 for (int i = 0; i < batchSize; i++)
                 {
                     inputs[i] = new(inputSize, inputSize);
@@ -249,7 +249,7 @@ namespace ConvolutionalNeuralNetwork
                 serial.Initialize(inputShapes);
                 ILayer layer = serial.Construct();
 
-                Shape outputShape = layer.Startup(inputShapes, buffer, batchSize);
+                TensorShape outputShape = layer.Startup(inputShapes, buffer, batchSize);
                 Tensor[] singleOutputs = new Tensor[outputDimensions * batchSize];
                 for (int i = 0; i < outputDimensions * batchSize; i++)
                 {
@@ -312,12 +312,12 @@ namespace ConvolutionalNeuralNetwork
 
         public static void GradientCheck(Weights weights, int filterSize, int stride, int inputDimensions, int outputDimensions, int inputSize, int batchSize)
         {
-            Shape outputShape;
+            TensorShape outputShape;
             Tensor[] outGradients = new Tensor[inputDimensions * batchSize];
             if (true)
             {
                 Tensor[] inputs = new Tensor[inputDimensions * batchSize];
-                Shape inputShapes = new(inputSize, inputSize, inputDimensions);
+                TensorShape inputShapes = new(inputSize, inputSize, inputDimensions);
 
                 PairedBuffers buffer = new();
                 PairedBuffers complimentBuffer = new();
@@ -359,7 +359,7 @@ namespace ConvolutionalNeuralNetwork
             for (int p = 0; p < inputDimensions; p++)
             {
                 Tensor[] inputs = new Tensor[batchSize];
-                Shape inputShapes = new(inputSize, inputSize, 1);
+                TensorShape inputShapes = new(inputSize, inputSize, 1);
 
                 PairedBuffers buffer = new();
                 PairedBuffers complimentBuffer = new();
@@ -370,7 +370,7 @@ namespace ConvolutionalNeuralNetwork
                 serial.Initialize(inputShapes);
                 ILayer layer = serial.Construct();
 
-                Shape singleOutputShape = layer.Startup(inputShapes, buffer, batchSize);
+                TensorShape singleOutputShape = layer.Startup(inputShapes, buffer, batchSize);
 
                 buffer.Allocate(batchSize);
                 complimentBuffer.Allocate(batchSize);

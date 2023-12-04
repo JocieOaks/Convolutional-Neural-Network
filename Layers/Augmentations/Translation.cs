@@ -42,7 +42,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Augmentations
         }
 
         /// <inheritdoc />
-        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize)
+        public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
             if (_ready)
                 return _outputShape;
@@ -55,10 +55,10 @@ namespace ConvolutionalNeuralNetwork.Layers.Augmentations
             return _outputShape;
         }
 
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Shape, int, int> s_translateAction =
-            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Shape, int, int>(TranslateKernel);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, TensorShape, int, int> s_translateAction =
+            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, TensorShape, int, int>(TranslateKernel);
 
-        private static void TranslateKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, Shape shape, int x, int y)
+        private static void TranslateKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, TensorShape shape, int x, int y)
         {
             int offset = shape.GetOffset(index.Z, index.Y);
 

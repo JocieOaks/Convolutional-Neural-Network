@@ -16,7 +16,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
 
         [JsonConstructor] protected SerialWeighted() { }
 
-        public abstract Shape Initialize(Shape inputShape);
+        public abstract TensorShape Initialize(TensorShape inputShape);
 
         protected void InitializeWeights()
         {

@@ -1,31 +1,29 @@
-﻿using ILGPU.Algorithms;
+﻿using ConvolutionalNeuralNetwork.Layers;
+using ILGPU;
+using ILGPU.Algorithms;
 
 namespace ConvolutionalNeuralNetwork.DataTypes
 {
     /// <summary>
-    /// The <see cref="ILayerInfo"/> interface is for structs to store a variety of data about <see cref="Layers.Layer"/>s
-    /// and <see cref="FeatureMap"/>s for use by an <see cref="ILGPU"/> kernel.
+    /// The <see cref="LayerInfo"/> struct contains a variety of data about a <see cref="Layer"/>
+    /// and its input and output <see cref="Tensor"/>s for use by an <see cref="ILGPU"/> kernel.
     /// </summary>
-    public interface ILayerInfo
+    public readonly struct LayerInfo
     {
-    }
 
-    /// <summary>
-    /// The <see cref="LayerInfo"/> struct contains a variety of data about <see cref="Layers.Layer"/>s
-    /// and <see cref="FeatureMap"/>s for use by an <see cref="ILGPU"/> kernel.
-    /// </summary>
-    public readonly struct LayerInfo : ILayerInfo
-    {
-        public LayerInfo(Shape expansionShape,  Shape contractionShape, int filterSize, int stride)
+        /// <summary>
+        /// Initializes a new instance of <see cref="Layer"/>.
+        /// </summary>
+        /// <param name="expansionShape">The <see cref="TensorShape"/> corresponding to the larger of the two <see cref="Tensor"/>s.
+        /// May be input or output.</param>
+        /// <param name="contractionShape">The <see cref="TensorShape"/> corresponding to the smaller of the two <see cref="Tensor"/>s.
+        /// May be input or output.</param>
+        /// <param name="filterSize">The width and length of the <see cref="Layer"/>'s filter.</param>
+        /// <param name="stride">The stride of the <see cref="Layer"/>.</param>
+        public LayerInfo(TensorShape expansionShape,  TensorShape contractionShape, int filterSize, int stride)
         {
-            ExpansionWidth = expansionShape.Width;
-            ExpansionLength = expansionShape.Length;
-            ExpansionArea = expansionShape.Area;
-            ExpansionDimensions = expansionShape.Dimensions;
-            ContractionWidth = contractionShape.Width;
-            ContractionLength = contractionShape.Length;
-            ContractionArea = contractionShape.Area;
-            ContractionDimensions = contractionShape.Dimensions;
+            ContractionShape = contractionShape;
+            ExpansionShape = expansionShape;
             FilterSize = filterSize;
             FilterArea = filterSize * filterSize;
             InverseFilterArea = 1f / FilterArea;
@@ -33,52 +31,192 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             Stride = stride;
         }
 
-        /// <inheritdoc/>
-        public int ExpansionWidth { get; }
+        /// <value>The area of the <see cref="ContractionShape"/> <see cref="Tensor"/>.</value>
+        public int ContractionArea => ContractionShape.Area;
 
-        /// <inheritdoc/>
-        public int ExpansionLength { get; }
+        /// <value>The dimensions of the <see cref="ContractionShape"/> <see cref="Tensor"/>.</value>
+        public int ContractionDimensions => ContractionShape.Dimensions;
 
-        /// <inheritdoc/>
-        public int ExpansionArea { get; }
+        /// <value>The length of the <see cref="ContractionShape"/> <see cref="Tensor"/>.</value>
+        public int ContractionLength => ContractionShape.Length;
 
-        /// <inheritdoc/>
-        public float InverseFilterArea { get; }
+        /// <value>The <see cref="TensorShape"/> referring to the smaller <see cref="Tensor"/> from the <see cref="Layer"/>s input and output.</value>
+        public TensorShape ContractionShape { get; }
 
-        /// <inheritdoc/>
-        public int FilterSize { get; }
+        /// <value>The width of the <see cref="ContractionShape"/> <see cref="Tensor"/>.</value>
+        public int ContractionWidth => ContractionShape.Width;
 
+        /// <value>The area of the <see cref="ExpansionShape"/> <see cref="Tensor"/>.</value>
+        public int ExpansionArea => ExpansionShape.Area;
+
+        /// <value>The dimensions of the <see cref="ExpansionShape"/> <see cref="Tensor"/>.</value>
+        public int ExpansionDimensions => ExpansionShape.Dimensions;
+
+        /// <value>The length of the <see cref="ExpansionShape"/> <see cref="Tensor"/>.</value>
+        public int ExpansionLength => ExpansionShape.Length;
+
+        /// <value>The <see cref="TensorShape"/> referring to the larger <see cref="Tensor"/> from the <see cref="Layer"/>s input and output.</value>
+        public TensorShape ExpansionShape { get; }
+        /// <value>The width of the <see cref="ExpansionShape"/> <see cref="Tensor"/>.</value>
+        public int ExpansionWidth => ExpansionShape.Width;
+
+        /// <value>The area of the <see cref="Layer"/>'s filter.</value>
         public int FilterArea { get; }
 
-        /// <inheritdoc/>
-        public int ContractionWidth { get; }
+        /// <value>The length and width of the <see cref="Layer"/>'s filter.</value>
+        public int FilterSize { get; }
 
-        /// <inheritdoc/>
-        public int ContractionLength { get; }
+        /// <value>One over the area of the <see cref="Layer"/>'s filter.</value>
+        public float InverseFilterArea { get; }
 
-        /// <inheritdoc/>
-        public int ContractionArea { get; }
-
-        public int ExpansionDimensions { get; }
-
-        public int ContractionDimensions { get; }
-
-        /// <inheritdoc/>
-        public int Stride { get; }
-
+        /// <value>The amount of padding to offset for the size of the input <see cref="Tensor"/>.</value>
         public int Padding { get; }
 
-        public bool TryGetExpansionIndex(int contractionIndex, int shiftX, int shiftY, out int index)
+        /// <value>The stride of the <see cref="Layer"/>.</value>
+        public int Stride { get; }
+
+        /// <summary>
+        /// Deconstructs an <see cref="ILGPU"/> kernel <see cref="Index3D"/> to get useful values.
+        /// </summary>
+        /// <param name="index">The <see cref="Index3D"/> being deconstructed.
+        /// X: Contraction Volume
+        /// Y: Expansion Dimensions
+        /// Z: Batch size</param>
+        /// <param name="mapIndex">The index within a flattened 2D array of the Expansion <see cref="Tensor"/>.</param>
+        /// <param name="expansionOffset">The index of the zeroth element of a flattened 2D array corresponding to the specified dimension and tensor.</param>
+        /// <param name="contractionIndex">The index within a flattened 2D array of the Contraction <see cref="Tensor"/>.</param>
+        /// <param name="filterDimension">The corresponding filter for the specific input and output dimensions.</param>
+        public void DeconstructContraction(Index3D index, out int mapIndex, out int expansionOffset,
+            out int contractionIndex, out int filterDimension)
+        {
+            contractionIndex = index.Z * ContractionArea * ContractionDimensions + index.X;
+            int contractionDimension = index.X / ContractionArea;
+            filterDimension = index.Y * ContractionDimensions + contractionDimension;
+            mapIndex = index.X % ContractionArea;
+            expansionOffset = (index.Y + index.Z * ExpansionDimensions) * ExpansionArea;
+        }
+
+        /// <summary>
+        /// Deconstructs an <see cref="ILGPU"/> kernel <see cref="Index3D"/> to get useful values.
+        /// </summary>
+        /// <param name="index">The <see cref="Index3D"/> being deconstructed.
+        ///     X: Contraction Volume
+        ///     Y: Expansion Dimensions
+        ///     Z: Batch size</param>
+        /// <param name="mapIndex">The index within a flattened 2D array of the Expansion <see cref="Tensor"/>.</param>
+        /// <param name="contractionOffset">The index of the zeroth element of a flattened 2D array corresponding to the specified dimension and tensor</param>
+        /// <param name="expansionIndex">The index within a flattened 2D array of the Expansion <see cref="Tensor"/>.</param>
+        /// <param name="filterDimension">The corresponding filter for the specific input and output dimensions.</param>
+        public void DeconstructExpansion(Index3D index, out int mapIndex, out int contractionOffset,
+            out int expansionIndex, out int filterDimension)
+        {
+            expansionIndex = index.Z * ExpansionArea * ExpansionDimensions + index.X;
+            int expansionDimension = index.X / ExpansionArea;
+            filterDimension = expansionDimension * ContractionDimensions + index.Y;
+            mapIndex = index.X % ExpansionArea;
+            contractionOffset = (index.Y + index.Z * ContractionDimensions) * ContractionArea;
+        }
+
+        /// <summary>
+        /// Calculates the single dimensional array index for a flattened filter.
+        /// </summary>
+        /// <param name="x">The x coordinate of the desired index.</param>
+        /// <param name="y">The y coordinate of the desired index.</param>
+        /// <param name="dimension">The dimension of the filter.</param>
+        /// <returns>Returns the index corresponding to (<paramref name="x"/>, <paramref name="y"/>, <param name="dimension"/>).</returns>
+        public int FilterIndex(int x, int y, int dimension)
+        {
+            return dimension * FilterArea + y * FilterSize + x;
+        }
+
+        /// <summary>
+        /// Find the 2 dimensional coordinates corresponding to the index of the Contraction <see cref="Tensor"/>.
+        /// </summary>
+        /// <param name="contractionIndex">The index of the Contraction <see cref="Tensor"/>.</param>
+        /// <returns>Returns the desired coordinates as a tuple.</returns>
+        public (int, int) GetContractionCoordinates(int contractionIndex)
+        {
+            int x = contractionIndex % ContractionWidth;
+            int y = contractionIndex / ContractionWidth;
+            return (x, y);
+        }
+
+        /// <summary>
+        /// Gets the index in the Contraction <see cref="Tensor"/> corresponding to the given index in the Expansion <see cref="Tensor"/>
+        /// with some shift.
+        /// </summary>
+        /// <param name="expansionIndex">The original index of the Expansion <see cref="Tensor"/>.</param>
+        /// <param name="shiftX">The shift in the x-axis.</param>
+        /// <param name="shiftY">The shift in the y-axis.</param>
+        /// <returns>Returns the desired index.</returns>
+        public int GetContractionIndex(int expansionIndex, int shiftX, int shiftY)
+        {
+            int x = expansionIndex % ExpansionWidth;
+            int y = expansionIndex / ExpansionWidth;
+
+            x += Padding - shiftX;
+            y += Padding - shiftY;
+
+            x /= Stride;
+            y /= Stride;
+
+
+
+            x = XMath.Clamp(x, 0, ContractionWidth);
+            y = XMath.Clamp(y, 0, ContractionLength);
+
+            return y * ContractionWidth + x;
+        }
+
+        /// <summary>
+        /// Find the 2 dimensional coordinates corresponding to the index of the Expansion <see cref="Tensor"/>.
+        /// </summary>
+        /// <param name="expansionIndex">The index of the Expansion <see cref="Tensor"/>.</param>
+        /// <returns>Returns the desired coordinates as a tuple.</returns>
+        public (int, int) GetExpansionCoordinates(int expansionIndex)
+        {
+            int x = expansionIndex % ExpansionWidth;
+            int y = expansionIndex / ExpansionWidth;
+            return (x, y);
+        }
+
+        /// <summary>
+        /// Gets the index in the Expansion <see cref="Tensor"/> corresponding to the given index in the Contraction <see cref="Tensor"/>
+        /// with some shift.
+        /// </summary>
+        /// <param name="contractionIndex">The original index of the Contraction <see cref="Tensor"/>.</param>
+        /// <param name="shiftX">The shift in the x-axis.</param>
+        /// <param name="shiftY">The shift in the y-axis.</param>
+        /// <returns>Returns the desired index.</returns>
+        public int GetExpansionIndex(int contractionIndex, int shiftX, int shiftY)
         {
             int strideY = contractionIndex / ContractionWidth;
             int strideX = contractionIndex - (strideY * ContractionWidth);
 
             shiftX += strideX * Stride - Padding;
             shiftY += strideY * Stride - Padding;
-            index = shiftY * ExpansionWidth + shiftX;
-            return shiftX >= 0 && shiftY >= 0 && shiftX < ExpansionWidth && shiftY < ExpansionLength;
+            return shiftY * ExpansionWidth + shiftX;
         }
 
+        /// <summary>
+        /// Gets the index of the first element of a particular <see cref="Tensor"/> and dimension.
+        /// </summary>
+        /// <returns>Returns the zeroth element index.</returns>
+        public (int, int) GetOffset(int dimension, int tensorIndex)
+        {
+            int offsetCount = tensorIndex * ExpansionDimensions + dimension;
+            return (offsetCount * ExpansionArea, offsetCount * ContractionArea);
+        }
+
+        /// <summary>
+        /// Tries to get the index in the Contraction <see cref="Tensor"/> corresponding to the given index in the Expansion <see cref="Tensor"/>
+        /// with some shift.
+        /// </summary>
+        /// <param name="expansionIndex">The original index of the Expansion <see cref="Tensor"/>.</param>
+        /// <param name="shiftX">The shift in the x-axis.</param>
+        /// <param name="shiftY">The shift in the y-axis.</param>
+        /// <param name="index">The index in the Contraction <see cref="Tensor"/>.</param>
+        /// <returns>Returns false if the desired index is bounds of the 2D array and thus <param name="index"/> is invalid.</returns>
         public bool TryGetContractionIndex(int expansionIndex, int shiftX, int shiftY, out int index)
         {
             int x = expansionIndex % ExpansionWidth;
@@ -99,193 +237,24 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return shiftX >= 0 && shiftY >= 0 && shiftX < ContractionWidth && shiftY < ContractionLength;
         }
 
-        public int GetExpansionIndex(int contractionIndex, int shiftX, int shiftY)
+        /// <summary>
+        /// Gets the index in the Expansion <see cref="Tensor"/> corresponding to the given index in the Contraction <see cref="Tensor"/>
+        /// with some shift.
+        /// </summary>
+        /// <param name="contractionIndex">The original index of the Contraction <see cref="Tensor"/>.</param>
+        /// <param name="shiftX">The shift in the x-axis.</param>
+        /// <param name="shiftY">The shift in the y-axis.</param>
+        /// <param name="index">The index in the Expansion <see cref="Tensor"/>.</param>
+        /// <returns>Returns false if the desired index is bounds of the 2D array and thus <param name="index"/> is invalid.</returns>
+        public bool TryGetExpansionIndex(int contractionIndex, int shiftX, int shiftY, out int index)
         {
             int strideY = contractionIndex / ContractionWidth;
             int strideX = contractionIndex - (strideY * ContractionWidth);
 
             shiftX += strideX * Stride - Padding;
             shiftY += strideY * Stride - Padding;
-            return shiftY * ExpansionWidth + shiftX;
-        }
-
-        public int GetContractionIndex(int expansionIndex, int shiftX, int shiftY)
-        {
-            int x = expansionIndex % ExpansionWidth;
-            int y = expansionIndex / ExpansionWidth;
-
-            x += Padding - shiftX;
-            y += Padding - shiftY;
-
-            x /= Stride;
-            y /= Stride;
-
-
-
-            x = XMath.Clamp(x, 0, ContractionWidth);
-            y = XMath.Clamp(y, 0, ContractionLength);
-
-            return y * ContractionWidth + x;
-        }
-
-        public (int, int) GetExpansionCoordinates(int expansionIndex)
-        {
-            int x = expansionIndex % ExpansionWidth;
-            int y = expansionIndex / ExpansionWidth;
-            return (x, y);
-        }
-
-        public (int, int) GetContractionCoordinates(int contractionIndex)
-        {
-            int x = contractionIndex % ContractionWidth;
-            int y = contractionIndex / ContractionWidth;
-            return (x, y);
-        }
-
-        public (int,int) GetOffset(int dimension, int batchIndex)
-        {
-            int offsetCount = batchIndex * ExpansionDimensions + dimension;
-            return (offsetCount * ExpansionArea, offsetCount * ContractionArea);
-        }
-
-        public void DeconstructContraction(int x, int y, int z, out int mapIndex, out int expansionOffset, out int contractionIndex, out int dimension)
-        {
-            contractionIndex = z * ContractionArea * ContractionDimensions + x;
-            int contractionDimension = x / ContractionArea;
-            dimension = y * ContractionDimensions + contractionDimension;
-            mapIndex = x % ContractionArea;
-            expansionOffset = (y + z * ExpansionDimensions) * ExpansionArea;
-        }
-
-        public void DeconstructExpansion(int x, int y, int z, out int mapIndex, out int contractionOffset, out int expansionIndex, out int dimension)
-        {
-            expansionIndex = z * ExpansionArea * ExpansionDimensions + x;
-            int expansionDimension = x / ExpansionArea;
-            dimension = expansionDimension * ContractionDimensions + y;
-            mapIndex = x % ExpansionArea;
-            contractionOffset = (y + z * ContractionDimensions) * ContractionArea;
-        }
-
-        /// <summary>
-        /// Calculates the single dimensional array index for a flattened filter.
-        /// </summary>
-        /// <param name="x">The x coordinate of the desired index.</param>
-        /// <param name="y">The y coordinate of the desired index.</param>
-        /// <returns>Returns the index corresponding to (<paramref name="x"/>, <paramref name="y"/>).</returns>
-        public int FilterIndex(int x, int y, int dimension)
-        {
-            return dimension * FilterArea + y * FilterSize + x;
-        }
-    }
-
-    public readonly struct InverseLayerInfo : ILayerInfo
-    {
-        public InverseLayerInfo(Shape inputShape, Shape outputShape, int filterSize, int stride)
-        {
-            InputWidth = inputShape.Width;
-            InputLength = inputShape.Length;
-            InputArea = inputShape.Area;
-            InputDimensions = inputShape.Dimensions;
-            OutputWidth = outputShape.Width;
-            OutputLength = outputShape.Length;
-            OutputArea = outputShape.Area;
-            OutputDimensions = outputShape.Dimensions;
-            FilterSize = filterSize;
-            FilterArea = filterSize * filterSize;
-            InverseFilterArea = 1f / FilterArea;
-            Padding = (filterSize - 1) / 2;
-            Stride = stride;
-        }
-
-        /// <inheritdoc/>
-        public int InputWidth { get; }
-
-        /// <inheritdoc/>
-        public int InputLength { get; }
-
-        /// <inheritdoc/>
-        public int InputArea { get; }
-
-        /// <inheritdoc/>
-        public float InverseFilterArea { get; }
-
-        /// <inheritdoc/>
-        public int FilterSize { get; }
-
-        public int FilterArea { get; }
-
-        /// <inheritdoc/>
-        public int OutputWidth { get; }
-
-        /// <inheritdoc/>
-        public int OutputLength { get; }
-
-        /// <inheritdoc/>
-        public int OutputArea { get; }
-
-        public int InputDimensions { get; }
-
-        public int OutputDimensions { get; }
-
-        /// <inheritdoc/>
-        public int Stride { get; }
-
-        public int Padding { get; }
-
-        public bool TryGetOutputIndex(int inputIndex, int shiftX, int shiftY, out int index)
-        {
-
-            int strideY = inputIndex / InputWidth;
-            int strideX = inputIndex - (strideY * InputWidth);
-
-            shiftX += strideX * Stride - Padding;
-            shiftY += strideY * Stride - Padding;
-            index = shiftY * OutputWidth + shiftX;
-            return shiftX >= 0 && shiftY >= 0 && shiftX < OutputWidth && shiftY < OutputLength;
-        }
-
-        public (int, int) GetInputCoordinates(int outputIndex, out float xFloat, out float yFloat)
-        {
-            int x = outputIndex % OutputWidth;
-            int y = outputIndex / OutputWidth;
-
-            x += Padding;
-            y += Padding;
-
-            xFloat = (float)x / Stride;
-            yFloat = (float)y / Stride;
-
-            x /= Stride;
-            y /= Stride;
-
-            return (x, y);
-        }
-
-        public bool TryGetInputIndex(int x, int y, int shiftX, int shiftY, out int inputIndex)
-        {
-            x += shiftX;
-            y += shiftY;
-
-            inputIndex = y * InputWidth + x;
-
-            return x >= 0 && y >= 0 && x < InputWidth && y < InputLength;
-        }
-
-
-        public (int, int) GetOffset(int batchIndex, int dimension)
-        {
-            return ((dimension % InputDimensions + batchIndex * InputDimensions) * InputArea, (dimension % OutputDimensions + batchIndex * OutputDimensions) * OutputArea);
-        }
-
-        /// <summary>
-        /// Calculates the single dimensional array index for a flattened filter.
-        /// </summary>
-        /// <param name="x">The x coordinate of the desired index.</param>
-        /// <param name="y">The y coordinate of the desired index.</param>
-        /// <returns>Returns the index corresponding to (<paramref name="x"/>, <paramref name="y"/>).</returns>
-        public int FilterIndex(int x, int y, int dimension)
-        {
-            return dimension * FilterSize * FilterSize + y * FilterSize + x;
+            index = shiftY * ExpansionWidth + shiftX;
+            return shiftX >= 0 && shiftY >= 0 && shiftX < ExpansionWidth && shiftY < ExpansionLength;
         }
     }
 }

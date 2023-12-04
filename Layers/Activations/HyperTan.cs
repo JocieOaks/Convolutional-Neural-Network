@@ -18,7 +18,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
         public override void Backwards(int batchSize, bool update)
         {
             Index1D index = new(batchSize * _inputShape.Volume);
-            BackwardsAction(index, _outputCopy.GetArrayView<float>(), _buffers.Gradient);
+            BackwardsAction(index, _outputCopy.GetArrayView(), _buffers.Gradient);
             Synchronize();
 
             _outputCopy.DecrementLiveCount();
@@ -30,7 +30,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             ForwardAction(index, _buffers.Input);
             Synchronize();
 
-            GPUManager.CopyAction(index, _buffers.Input, _outputCopy.GetArrayViewEmpty<float>());
+            GPUManager.CopyAction(index, _buffers.Input, _outputCopy.GetArrayViewEmpty());
             Synchronize();
 
             _outputCopy.DecrementLiveCount();
@@ -50,7 +50,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             gradient[index.X] = gradient[index.X] * (1 - XMath.Pow(output[index.X], 2));
         }
 
-        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize)
+        public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
             if (_ready)
                 return _outputShape;

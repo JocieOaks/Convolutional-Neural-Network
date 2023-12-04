@@ -28,7 +28,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
             }
         }
 
-        public Shape Initialize(Shape inputShape)
+        public TensorShape Initialize(TensorShape inputShape)
         {
             return _source.OutputShape;
         }

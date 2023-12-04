@@ -4,7 +4,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 {
     public class Reshape : Layer, IReflexiveLayer
     { 
-        public Reshape(Shape outputShape)
+        public Reshape(TensorShape outputShape)
         {
             _outputShape = outputShape;
         }
@@ -19,7 +19,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
         }
 
-        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize)
+        public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
             if (_ready)
                 return _outputShape;

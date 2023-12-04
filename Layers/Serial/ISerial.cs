@@ -4,7 +4,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
 {
     public interface ISerial
     {
-        Shape Initialize(Shape inputShape);
+        TensorShape Initialize(TensorShape inputShape);
 
         Layer Construct();
     }

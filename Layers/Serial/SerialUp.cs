@@ -19,9 +19,9 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
             return new Upsampling(Scale);
         }
 
-        public Shape Initialize(Shape inputShape)
+        public TensorShape Initialize(TensorShape inputShape)
         {
-            return new Shape(Scale * inputShape.Width, Scale * inputShape.Length, inputShape.Dimensions);
+            return new TensorShape(Scale * inputShape.Width, Scale * inputShape.Length, inputShape.Dimensions);
         }
     }
 }

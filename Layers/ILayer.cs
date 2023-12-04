@@ -39,7 +39,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="inputs">The previous <see cref="Layer"/>'s output.</param>
         /// <param name="outGradients">The previous <see cref="Layer"/>'s inGradient.</param>
         /// <returns>Returns the output and inGradient to share with the next <see cref="Layer"/>.</returns>
-        Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize);
+        TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize);
     }
 
     /// <summary>

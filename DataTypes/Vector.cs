@@ -6,7 +6,7 @@ using Newtonsoft.Json;
 namespace ConvolutionalNeuralNetwork.DataTypes
 {
     /// <summary>
-    /// The <see cref="Vector"/> class stores an array of floats for performing vector mathematics.
+    /// The <see cref="Vector"/> class stores a cacheable array of floats for performing vector mathematics.
     /// </summary>
     [Serializable]
     public class Vector : Cacheable<float>, IEquatable<Vector>
@@ -31,26 +31,10 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             _values = new float[length];
         }
 
-        public Vector(Tensor maps)
-        {
-            int area = maps.Area;
-            int width = maps.Width;
-
-            _values = new float[maps.Volume];
-
-            for(int dimension = 0; dimension < maps.Dimensions; dimension++)
-            {
-                for(int y = 0; y < maps.Length; y++)
-                {
-                    for(int x = 0;  x < maps.Width; x++)
-                    {
-                        _values[dimension * area + y * width + x] = maps[x, y, dimension];
-                    }
-                }
-            }
-        }
-
-        private Vector() { }
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Vector"/> class used for deserialization.
+        /// </summary>
+        [JsonConstructor] Vector() { }
 
         /// <value>The number of dimensions of the <see cref="Vector"/>.</value>
         [JsonIgnore] public int Length => _values.Length;
@@ -61,15 +45,16 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             get
             {
                 float sum = 0;
-                for (int i = 0; i < _values.Length; i++)
+                foreach (float value in _values)
                 {
-                    sum += _values[i] * _values[i];
+                    sum += value * value;
                 }
 
                 return MathF.Sqrt(sum);
             }
         }
 
+        /// <inheritdoc/>
         [JsonIgnore] public override long MemorySize => Length * 4;
 
         /// <summary>
@@ -79,8 +64,8 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <returns>Returns the float at <paramref name="index"/> dimension of the <see cref="Vector"/>.</returns>
         public float this[int index]
         {
-            get { return _values[index]; }
-            set { _values[index] = value; }
+            get => _values[index];
+            set => _values[index] = value;
         }
 
         /// <summary>
@@ -136,13 +121,15 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return vector * scaler;
         }
 
+        ///<inheritdoc/>
         public bool Equals(Vector vector)
         {
-            if (Length != vector.Length)
+            if (vector == null || Length != vector.Length)
                 return false;
+
             for(int i = 0; i < Length; i++)
             {
-                if (_values[i] != vector[i])
+                if (Math.Abs(_values[i] - vector[i]) > 0.0001)
                     return false;
             }
             return true;
@@ -172,13 +159,20 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return new Vector(values);
         }
 
-
+        /// <summary>
+        /// Calculates the distance between two vectors.
+        /// </summary>
+        /// <returns>Returns the distance between <param name="v1"/> and <param name="v2"/>.</returns>
         public static float Distance(Vector v1, Vector v2)
         {
             
             return MathF.Sqrt(DistanceSquared(v1, v2));
         }
 
+        /// <summary>
+        /// Calculates the squared distance between two vectors.
+        /// </summary>
+        /// <returns>Returns the squared distance between <param name="v1"/> and <param name="v2"/>.</returns>
         public static float DistanceSquared(Vector v1, Vector v2)
         {
             if (v1.Length != v2.Length)
@@ -193,11 +187,16 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return squareDistance;
         }
 
+
+        /// <summary>
+        /// Copies the <see cref="Vector"/> to an <see cref="ArrayView{T}"/>
+        /// </summary>
         public void CopyToBuffer(ArrayView<float> arrayView)
         {
             arrayView.SubView(0, Length).CopyFromCPU(_values);
         }
 
+        /// <inheritdoc />
         public override void DeCache()
         {
             // If the tensor is not cached - it's technically already decached
@@ -213,7 +212,11 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             ID = GPUManager.GCItem(ID);
         }
 
-        public ArrayView<T> GetArrayView<T>() where T : unmanaged
+        /// <summary>
+        /// Gets the <see cref="ArrayView{T}"/> for the cached <see cref="Vector"/> or allocates it if the <see cref="Vector"/> is decached.
+        /// </summary>
+        /// <returns>Returns an <see cref="ArrayView{T}"/>.</returns>
+        public ArrayView<float> GetArrayView()
         {
             IncrementLiveCount();
             MemoryBuffer buffer = GetBuffer();
@@ -221,11 +224,15 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             {
                 (ID, buffer) = GPUManager.Allocate(this);
             }
-            int bytes = Interop.SizeOf<T>();
-            return new ArrayView<T>(buffer, 0, 4 * Length / bytes);
+            int bytes = Interop.SizeOf<float>();
+            return new ArrayView<float>(buffer, 0, 4 * Length / bytes);
         }
 
-        public ArrayView<T> GetArrayViewEmpty<T>() where T : unmanaged
+        /// Gets the <see cref="ArrayView{T}"/> for the cached <see cref="Vector"/> or allocates it if the <see cref="Vector"/> is decached.
+        /// A newly allocated <see cref="ArrayView{T}"/> will have random values, rather than the values of the <see cref="Vector"/>.
+        /// </summary>
+        /// <returns>Returns an <see cref="ArrayView{T}"/>.</returns>
+        public ArrayView<float> GetArrayViewEmpty()
         {
             IncrementLiveCount();
             MemoryBuffer buffer = GetBuffer();
@@ -233,26 +240,32 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             {
                 (ID, buffer) = GPUManager.AllocateEmpty<float>(this, Length);
             }
-            int bytes = Interop.SizeOf<T>();
-            return new ArrayView<T>(buffer, 0, 4 * Length / bytes);
+            int bytes = Interop.SizeOf<float>();
+            return new ArrayView<float>(buffer, 0, 4 * Length / bytes);
         }
 
-        public ArrayView<T> GetArrayViewZeroed<T>() where T : unmanaged
+        /// <summary>
+        /// Gets the <see cref="ArrayView{T}"/> for the cached <see cref="Vector"/> or allocates it if the <see cref="Vector"/> is decached
+        /// and sets every value to zero.
+        /// </summary>
+        /// <returns>Returns an <see cref="ArrayView{T}"/>.</returns>
+        public ArrayView<float> GetArrayViewZeroed()
         {
-            ArrayView<T> arrayView = GetArrayView<T>();
+            ArrayView<float> arrayView = GetArrayView();
             arrayView.MemSetToZero();
             return arrayView;
         }
 
+        /// <inheritdoc />
         public override float[] GetValues()
         {
             return _values;
         }
 
         /// <summary>
-        /// Normalizes the <see cref="Vector"/> returning a new unit <see cref="Vector"/> that is parralel to the original <see cref="Vector"/>.
+        /// Normalizes the <see cref="Vector"/> returning a new unit <see cref="Vector"/> that is parallel to the original <see cref="Vector"/>.
         /// </summary>
-        /// <returns>Returns a unit <see cref="Vector"/> with magnitude one that is parralel to the original <see cref="Vector"/>.</returns>
+        /// <returns>Returns a unit <see cref="Vector"/> with magnitude one that is parallel to the original <see cref="Vector"/>.</returns>
         public Vector Normalized()
         {
             float magnitude = Magnitude;
@@ -263,10 +276,13 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return this * (1 / magnitude);
         }
 
+        /// <inheritdoc />
         public override void SyncCPU(ArrayView<float> arrayView)
         {
             arrayView.SubView(0, Length).CopyToCPU(_values);
         }
+
+        /// <inheritdoc />
         public override void SyncCPU()
         {
             if (ID == 0)
@@ -278,20 +294,10 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 SyncCPU(buffer);
         }
 
+        /// <inheritdoc />
         public override void SyncCPU(MemoryBuffer buffer)
         {
             buffer.AsArrayView<float>(0, Length).CopyToCPU(_values);
-        }
-        public void UpdateIfAllocated()
-        {
-            if (ID == 0)
-                return;
-
-            MemoryBuffer buffer = GetBuffer();
-            if (buffer == null)
-                return;
-
-            buffer.AsArrayView<float>(0, Length).CopyFromCPU(_values);
         }
     }
 }

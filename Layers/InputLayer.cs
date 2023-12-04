@@ -8,7 +8,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         private Tensor[] _input;
 
-        public InputLayer(Shape inputShape)
+        public InputLayer(TensorShape inputShape)
         {
             _inputShape = inputShape;
         }
@@ -30,7 +30,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             _input = input;
         }
 
-        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize)
+        public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
             _outputShape = _inputShape;
             _buffers = buffers;

@@ -44,7 +44,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
         }
 
         /// <inheritdoc/>
-        public override Shape Startup(Shape inputShapes, PairedBuffers buffers, int maxBatchSize)
+        public override TensorShape Startup(TensorShape inputShapes, PairedBuffers buffers, int maxBatchSize)
         {
             if (_ready)
                 return _outputShape;

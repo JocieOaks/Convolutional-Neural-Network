@@ -5,9 +5,9 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
 {
     public class SerialReshape : ISerial
     {
-        [JsonProperty] private Shape _outputShape;
+        [JsonProperty] private TensorShape _outputShape;
 
-        public SerialReshape(Shape outputShape)
+        public SerialReshape(TensorShape outputShape)
         {
             _outputShape = outputShape;
         }
@@ -19,7 +19,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
             return new Reshape(_outputShape);
         }
 
-        public Shape Initialize(Shape inputShape)
+        public TensorShape Initialize(TensorShape inputShape)
         {
             int inputLength = inputShape.Volume;
 

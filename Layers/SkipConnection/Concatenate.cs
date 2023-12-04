@@ -14,7 +14,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
     public class Concatenate : Layer, IEndpoint
     {
         private Vector _skipConnection;
-        private Shape _skipShape;
+        private TensorShape _skipShape;
 
         [JsonProperty] public int ID { get; private set; }
 
@@ -48,7 +48,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
             s_backwardsAction(index, _buffers.InGradient, _buffers.OutGradient, _outputShape, _inputShape, 0);
 
             index = new(_skipShape.Area, _skipShape.Dimensions, batchSize);
-            s_backwardsAction(index, _buffers.InGradient, _skipConnection.GetArrayView<float>(), _outputShape, _skipShape, _inputShape.Dimensions);
+            s_backwardsAction(index, _buffers.InGradient, _skipConnection.GetArrayView(), _outputShape, _skipShape, _inputShape.Dimensions);
 
             Synchronize();
             _skipConnection.DecrementLiveCount();
@@ -60,7 +60,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         /// </summary>
         /// <param name="inputs">The split outputs of the <see cref="Fork"/>.</param>
         /// <param name="outGradients">The split inGradients of the <see cref="Fork"/>.</param>
-        public void Connect(Vector skipConnection, Shape skipInputShape, int id)
+        public void Connect(Vector skipConnection, TensorShape skipInputShape, int id)
         {
             _skipConnection = skipConnection;
             _skipShape = skipInputShape;
@@ -73,30 +73,30 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
             Index3D index = new(_inputShape.Area, _inputShape.Dimensions, batchSize);
             s_forwardAction(index, _buffers.Input, _buffers.Output, _inputShape, _outputShape, 0);
             index = new(_skipShape.Area, _skipShape.Dimensions, batchSize);
-            s_forwardAction(index, _skipConnection.GetArrayView<float>(), _buffers.Output, _skipShape, _outputShape, _inputShape.Dimensions);
+            s_forwardAction(index, _skipConnection.GetArrayView(), _buffers.Output, _skipShape, _outputShape, _inputShape.Dimensions);
 
             Synchronize();
             _skipConnection.DecrementLiveCount();
         }
 
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Shape, Shape, int> s_forwardAction =
-            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Shape, Shape, int>(ConcatenationKernel);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, TensorShape, TensorShape, int> s_forwardAction =
+            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, TensorShape, TensorShape, int>(ConcatenationKernel);
 
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Shape, Shape, int> s_backwardsAction =
-            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Shape, Shape, int>(ConcatenationGradientKernel);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, TensorShape, TensorShape, int> s_backwardsAction =
+            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, TensorShape, TensorShape, int>(ConcatenationGradientKernel);
 
-        private static void ConcatenationKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, Shape inputShape, Shape outputShape, int offset)
+        private static void ConcatenationKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, TensorShape inputShape, TensorShape outputShape, int offset)
         {
             output[(index.Z * outputShape.Dimensions + index.Y + offset) * outputShape.Area + index.X] = input[(index.Z * inputShape.Dimensions + index.Y) * inputShape.Area + index.X];
         }
 
-        private static void ConcatenationGradientKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, Shape inShape, Shape outShape, int offset)
+        private static void ConcatenationGradientKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, TensorShape inShape, TensorShape outShape, int offset)
         {
             outGradient[(index.Z * outShape.Dimensions + index.Y) * outShape.Area + index.X] = inGradient[(index.Z * inShape.Dimensions + index.Y + offset) * inShape.Area + index.X];
         }
 
         /// <inheritdoc/>
-        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int batchSize)
+        public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int batchSize)
         {
             if (_ready)
                 return _outputShape;
@@ -107,7 +107,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
                 throw new ArgumentException("Input shapes do not match.");
             }
 
-            _outputShape = new Shape(inputShape.Width, inputShape.Length, inputShape.Dimensions + _skipShape.Dimensions);
+            _outputShape = new TensorShape(inputShape.Width, inputShape.Length, inputShape.Dimensions + _skipShape.Dimensions);
 
             _buffers = buffers;
             _inputShape = inputShape;

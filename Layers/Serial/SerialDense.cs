@@ -20,9 +20,9 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
             return new Dense(_outputUnits, _weights, _bias);
         }
 
-        public override Shape Initialize(Shape inputShape)
+        public override TensorShape Initialize(TensorShape inputShape)
         {
-            Shape outputShape = new(_outputUnits, 1, 1);
+            TensorShape outputShape = new(_outputUnits, 1, 1);
 
             FanIn = inputShape.Volume;
             FanOut = _outputUnits;

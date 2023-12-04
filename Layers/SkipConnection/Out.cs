@@ -13,7 +13,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
     public class Out : Layer, IEndpoint
     {
         private Vector _skipConnection;
-        private Shape _skipShape;
+        private TensorShape _skipShape;
 
         [JsonProperty] public int ID { get; private set; }
 
@@ -44,7 +44,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         public override void Backwards(int batchSize, bool update)
         {
             Index1D index = new(batchSize * _skipShape.Volume);
-            GPUManager.CopyAction(index, _buffers.InGradient, _skipConnection.GetArrayViewEmpty<float>());
+            GPUManager.CopyAction(index, _buffers.InGradient, _skipConnection.GetArrayViewEmpty());
 
             Synchronize();
             _skipConnection.DecrementLiveCount();
@@ -56,7 +56,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         /// </summary>
         /// <param name="inputs">The split outputs of the <see cref="Fork"/>.</param>
         /// <param name="outGradients">The split inGradients of the <see cref="Fork"/>.</param>
-        public void Connect(Vector skipConnection, Shape skipInputShape, int id)
+        public void Connect(Vector skipConnection, TensorShape skipInputShape, int id)
         {
             _skipConnection = skipConnection;
             _skipShape = skipInputShape;
@@ -67,14 +67,14 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         public override void Forward(int batchSize)
         {
             Index1D index = new(batchSize * _skipShape.Volume);
-            GPUManager.CopyAction(index, _skipConnection.GetArrayViewEmpty<float>(), _buffers.Output);
+            GPUManager.CopyAction(index, _skipConnection.GetArrayViewEmpty(), _buffers.Output);
 
             Synchronize();
             _skipConnection.DecrementLiveCount();
         }
 
         /// <inheritdoc/>
-        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int batchSize)
+        public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int batchSize)
         {
             if (_ready)
                 return _outputShape;

@@ -50,16 +50,16 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         protected override void ForwardChild(int batchSize)
         {
             Index1D copyIndex = new(_inputShape.Volume * batchSize);
-            GPUManager.CopyAction(copyIndex, _buffers.Input, _inputCopy.GetArrayViewEmpty<float>());
+            GPUManager.CopyAction(copyIndex, _buffers.Input, _inputCopy.GetArrayViewEmpty());
 
             _buffers.Output.SubView(0, _outputUnits * batchSize).MemSetToZero();
 
             Index3D index = new(_inputShape.Volume, batchSize, _outputUnits);
-            s_forwardAction(index, _buffers.Input, _buffers.Output, _weights.WeightsGPU<float>(), Info);
+            s_forwardAction(index, _buffers.Input, _buffers.Output, _weights.WeightsGPU(), Info);
         }
 
         /// <inheritdoc/>
-        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize)
+        public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
             if (_ready)
                 return _outputShape;
@@ -98,7 +98,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             _buffers.OutGradient.SubView(0, batchSize * _inputShape.Volume).MemSetToZero();
 
             Index3D index = new(_inputShape.Volume, batchSize, _outputUnits);
-            s_backwardsOutAction(index, _buffers.InGradient, _buffers.OutGradient, _weights.WeightsGPU<float>(), Info);
+            s_backwardsOutAction(index, _buffers.InGradient, _buffers.OutGradient, _weights.WeightsGPU(), Info);
         }
 
         protected override void BackwardsUpdate(int batchSize)
@@ -107,14 +107,14 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
             Index3D index = new(_inputShape.Volume, batchSize, _outputUnits);
 
-            s_backwardsOutAction(index, _buffers.InGradient, _buffers.OutGradient, _weights.WeightsGPU<float>(), Info);
-            s_backwardsFilterAction(index, _buffers.InGradient, _inputCopy.GetArrayView<float>(), _weights.GradientGPU<float>(), Info);
+            s_backwardsOutAction(index, _buffers.InGradient, _buffers.OutGradient, _weights.WeightsGPU(), Info);
+            s_backwardsFilterAction(index, _buffers.InGradient, _inputCopy.GetArrayView(), _weights.GradientGPU(), Info);
         }
 
-        private void BaseStartup(Shape inputShapes, PairedBuffers buffers)
+        private void BaseStartup(TensorShape inputShapes, PairedBuffers buffers)
         {
             _inputShape = inputShapes;
-            _outputShape = new Shape(_outputUnits, 1, 1);
+            _outputShape = new TensorShape(_outputUnits, 1, 1);
 
             _layerInfo = new LayerInfo(inputShapes, _outputShape, 1, 1);
 

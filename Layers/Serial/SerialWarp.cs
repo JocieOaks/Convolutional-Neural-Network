@@ -9,9 +9,9 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
             return new Warp();
         }
 
-        public Shape Initialize(Shape inputShape)
+        public TensorShape Initialize(TensorShape inputShape)
         {
-            return new Shape(inputShape.Width, inputShape.Length, inputShape.Dimensions - 2);
+            return new TensorShape(inputShape.Width, inputShape.Length, inputShape.Dimensions - 2);
         }
     }
 }

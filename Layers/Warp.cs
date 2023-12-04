@@ -20,7 +20,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             _buffers.OutGradient.SubView(0, batchSize * _inputShape.Volume).MemSetToZero();
 
             Index3D index = new(_inputShape.Area, _inputShape.Dimensions - 2, batchSize);
-            s_backwardsAction(index, _buffers.InGradient, _inputCopy.GetArrayView<float>(),_buffers.OutGradient, _inputShape, _outputShape);
+            s_backwardsAction(index, _buffers.InGradient, _inputCopy.GetArrayView(),_buffers.OutGradient, _inputShape, _outputShape);
 
             Synchronize();
 
@@ -30,7 +30,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         public override void Forward(int batchSize)
         {
             Index1D copyIndex = new(batchSize * _inputShape.Volume);
-            GPUManager.CopyAction(copyIndex, _buffers.Input, _inputCopy.GetArrayViewEmpty<float>());
+            GPUManager.CopyAction(copyIndex, _buffers.Input, _inputCopy.GetArrayViewEmpty());
 
             Index3D index = new(_inputShape.Area, _inputShape.Dimensions - 2, batchSize);
             s_forwardAction(index, _buffers.Input, _buffers.Output, _inputShape, _outputShape);
@@ -40,10 +40,10 @@ namespace ConvolutionalNeuralNetwork.Layers
             _inputCopy.DecrementLiveCount();
         }
 
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, Shape, Shape> s_forwardAction
-            = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, Shape, Shape>(WarpKernel);
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, Shape, Shape> s_backwardsAction
-            = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, Shape, Shape>(WarpGradientKernel);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, TensorShape, TensorShape> s_forwardAction
+            = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, TensorShape, TensorShape>(WarpKernel);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, TensorShape, TensorShape> s_backwardsAction
+            = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, TensorShape, TensorShape>(WarpGradientKernel);
 
         /// <summary>
         /// 
@@ -53,7 +53,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// Y - Dimension
         /// Z - Position Index</param>
         /// <param name=""></param>
-        private static void WarpKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, Shape inputShape, Shape outputShape)
+        private static void WarpKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, TensorShape inputShape, TensorShape outputShape)
         {
             int outputOffset = outputShape.GetOffset(index.Z, index.Y);
             int inputOffset = inputShape.GetOffset(index.Z, index.Y + 2);      //The first two dimensions are the x and y warp components.
@@ -89,7 +89,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             output[outputOffset + index.X] = sum;
         }
 
-        private static void WarpGradientKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> input, ArrayView<float> outGradient, Shape inputShape, Shape outputShape)
+        private static void WarpGradientKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> input, ArrayView<float> outGradient, TensorShape inputShape, TensorShape outputShape)
         {
             int outputOffset = outputShape.GetOffset(index.Z, index.Y);
             int inputOffset = inputShape.GetOffset(index.Z, index.Y + 2);   //The first two dimensions are the x and y warp components.
@@ -123,7 +123,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
-        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize)
+        public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
             if (_ready)
                 return _outputShape;
@@ -132,7 +132,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             BaseStartup(inputShape, buffers, maxBatchSize);
 
             _inputCopy = new Vector(maxBatchSize *  inputShape.Volume);
-            _outputShape = new Shape(inputShape.Width, inputShape.Length, inputShape.Dimensions - 2);
+            _outputShape = new TensorShape(inputShape.Width, inputShape.Length, inputShape.Dimensions - 2);
 
             return _outputShape;
         }

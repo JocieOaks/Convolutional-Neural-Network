@@ -20,8 +20,8 @@ namespace ConvolutionalNeuralNetwork
         [JsonProperty] protected AdamHyperParameters _adamHyperParameters;
         [JsonProperty] protected bool _initialized = false;
         protected List<InputLayer> _inputLayers = new();
-        [JsonProperty] protected Shape _inputShape;
-        [Newtonsoft.Json.JsonIgnore] protected Shape _outputShape;
+        [JsonProperty] protected TensorShape _inputShape;
+        [Newtonsoft.Json.JsonIgnore] protected TensorShape _outputShape;
         [JsonProperty] protected List<int> _layerIndeces = new();
         protected bool _ready = false;
         [JsonProperty] protected List<ISerial> _serializedLayers = new();
@@ -155,14 +155,14 @@ namespace ConvolutionalNeuralNetwork
             return fork;
         }
 
-        public SerialInput AddInput(Shape input)
+        public SerialInput AddInput(TensorShape input)
         {
             SerialInput layer = new(input);
             AddSerialLayer(layer);
             return layer;
         }
 
-        public SerialReshape AddReshape(Shape output)
+        public SerialReshape AddReshape(TensorShape output)
         {
             SerialReshape reshape = new(output);
             AddSerialLayer(reshape);
@@ -221,7 +221,7 @@ namespace ConvolutionalNeuralNetwork
             if (_initialized)
                 return;
 
-            Shape shape = new();
+            TensorShape shape = new();
 
             foreach (var index in _layerIndeces)
             {
@@ -283,14 +283,14 @@ namespace ConvolutionalNeuralNetwork
                 }
             }
 
-            Shape shape = new();
+            TensorShape shape = new();
             InitializeLayers(ref shape, maxBatchSize);
 
             _adamHyperParameters ??= hyperParameters;
             _ready = true;
         }
 
-        public override void Startup(PairedBuffers buffers, Shape outputShape, int maxBatchSize)
+        public override void Startup(PairedBuffers buffers, TensorShape outputShape, int maxBatchSize)
         {
             Buffers = buffers.Compliment;
         }
@@ -397,7 +397,7 @@ namespace ConvolutionalNeuralNetwork
             }
         }
 
-        protected void InitializeLayers(ref Shape current, int maxBatchSize)
+        protected void InitializeLayers(ref TensorShape current, int maxBatchSize)
         {
             Buffers ??= new();
 

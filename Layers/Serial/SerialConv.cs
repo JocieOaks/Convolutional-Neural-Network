@@ -26,7 +26,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
             return new Convolution(_filterSize, _stride, _outputDimensions, _weights, _bias);
         }
 
-        public override Shape Initialize(Shape inputShape)
+        public override TensorShape Initialize(TensorShape inputShape)
         {
             if(_inputDimensions != 0)
             {
@@ -42,7 +42,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
 
             int outputWidth = (int)MathF.Ceiling(inputShape.Width / (float)_stride);
             int outputLength = (int)MathF.Ceiling(inputShape.Length / (float)_stride);
-            Shape outputShape = new(outputWidth, outputLength, _outputDimensions);
+            TensorShape outputShape = new(outputWidth, outputLength, _outputDimensions);
 
             FanIn = inputShape.Volume;
             FanOut = outputShape.Volume;

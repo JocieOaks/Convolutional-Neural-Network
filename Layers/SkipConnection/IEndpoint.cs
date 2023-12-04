@@ -6,6 +6,6 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
     {
         int ID { get; }
 
-        void Connect(Vector skipConnection, Shape skipInputShape, int id);
+        void Connect(Vector skipConnection, TensorShape skipInputShape, int id);
     }
 }

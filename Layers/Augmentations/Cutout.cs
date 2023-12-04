@@ -68,7 +68,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Augmentations
         }
 
         /// <inheritdoc />
-        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize)
+        public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
             if (_ready)
                 return _outputShape;
@@ -84,10 +84,10 @@ namespace ConvolutionalNeuralNetwork.Layers.Augmentations
             return _outputShape;
         }
 
-        private static readonly Action<Index3D, ArrayView<float>, Shape, int, int> s_cutoutAction =
-            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, Shape, int, int>(CutoutKernel);
+        private static readonly Action<Index3D, ArrayView<float>, TensorShape, int, int> s_cutoutAction =
+            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, TensorShape, int, int>(CutoutKernel);
 
-        private static void CutoutKernel(Index3D index, ArrayView<float> input, Shape shape, int x, int y)
+        private static void CutoutKernel(Index3D index, ArrayView<float> input, TensorShape shape, int x, int y)
         {
             int offset = index.Z * shape.Area;
 

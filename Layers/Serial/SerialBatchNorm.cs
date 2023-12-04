@@ -17,7 +17,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
             return new BatchNormalization(_weights, _bias);
         }
 
-        public override Shape Initialize(Shape inputShape)
+        public override TensorShape Initialize(TensorShape inputShape)
         {
             WeightLength = inputShape.Dimensions;
             BiasLength = inputShape.Dimensions;

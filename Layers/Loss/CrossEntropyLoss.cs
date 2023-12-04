@@ -14,14 +14,14 @@ namespace ConvolutionalNeuralNetwork.Layers.Loss
 
         public override (float, float) GetLoss(Vector[] groundTruth)
         {
-            var truth = Truth.GetArrayViewEmpty<float>();
+            var truth = Truth.GetArrayViewEmpty();
             for (int i = 0; i < groundTruth.Length; i++)
             {
                 groundTruth[i].CopyToBuffer(truth.SubView(i * OutputShape.Volume, OutputShape.Volume));
             }
 
             Index1D index = new(groundTruth.Length);
-            s_lossAction(index, Buffers.Output, truth, Losses.GetArrayViewZeroed<float>().VariableView(0), Accuracy.GetArrayViewZeroed<float>().VariableView(0), OutputShape.Volume);
+            s_lossAction(index, Buffers.Output, truth, Losses.GetArrayViewZeroed().VariableView(0), Accuracy.GetArrayViewZeroed().VariableView(0), OutputShape.Volume);
 
             GPUManager.Accelerator.Synchronize();
 

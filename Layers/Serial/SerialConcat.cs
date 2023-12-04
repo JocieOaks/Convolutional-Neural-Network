@@ -28,14 +28,14 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
             }
         }
 
-        public Shape Initialize(Shape inputShape)
+        public TensorShape Initialize(TensorShape inputShape)
         {
             if (inputShape.Area != _source.OutputShape.Area)
             {
                 throw new ArgumentException("Input shapes do not match.");
             }
 
-            return new Shape(inputShape.Width, inputShape.Length, inputShape.Dimensions + _source.OutputShape.Dimensions);
+            return new TensorShape(inputShape.Width, inputShape.Length, inputShape.Dimensions + _source.OutputShape.Dimensions);
         }
     }
 }

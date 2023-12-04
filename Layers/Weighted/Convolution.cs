@@ -43,7 +43,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         protected override int WeightLength => _filterSize * _filterSize * _outputShape.Dimensions * _inputShape.Dimensions;
 
         /// <inheritdoc/>
-        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize)
+        public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
             if (_ready)
                 return _outputShape;
@@ -70,7 +70,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             _buffers.OutGradient.SubView(0, batchSize * _inputShape.Volume).MemSetToZero();
 
             Index3D gradientIndex = new(_inputShape.Volume, _outputShape.Dimensions, batchSize);
-            BackwardsOutGradientAction(gradientIndex, _buffers.InGradient, _weights.WeightsGPU<float>(), _buffers.OutGradient, Info);
+            BackwardsOutGradientAction(gradientIndex, _buffers.InGradient, _weights.WeightsGPU(), _buffers.OutGradient, Info);
         }
 
         /// <summary>
@@ -87,20 +87,20 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             Index3D gradientIndex = new(_inputShape.Volume, _outputShape.Dimensions, batchSize);
 
             var stream = GPUManager.Accelerator.DefaultStream;
-            BackwardsOutGradientAction(gradientIndex, _buffers.InGradient, _weights.WeightsGPU<float>(), _buffers.OutGradient, Info);
+            BackwardsOutGradientAction(gradientIndex, _buffers.InGradient, _weights.WeightsGPU(), _buffers.OutGradient, Info);
             KernelConfig config = new(new Index3D(Info.FilterArea, _inputShape.Dimensions, batchSize), new Index3D(_outputShape.Dimensions, 1, 1));
-            BackwardsFilterAction(config, _buffers.InGradient, _inputCopy.GetArrayView<float>(), _weights.GradientGPU<float>(), Info);
+            BackwardsFilterAction(config, _buffers.InGradient, _inputCopy.GetArrayView(), _weights.GradientGPU(), Info);
         }
 
         /// <inheritdoc/>
         protected override void ForwardChild(int batchSize)
         {
             Index1D copyIndex = new(_inputShape.Volume * batchSize);
-            GPUManager.CopyAction(copyIndex, _buffers.Input, _inputCopy.GetArrayViewEmpty<float>());
+            GPUManager.CopyAction(copyIndex, _buffers.Input, _inputCopy.GetArrayViewEmpty());
 
             _buffers.Output.SubView(0, batchSize * _outputShape.Volume).MemSetToZero();
             Index3D index = new(_outputShape.Volume, _inputShape.Dimensions, batchSize);
-            ForwardAction(index, _buffers.Input, _buffers.Output, _weights.WeightsGPU<float>(), Info);
+            ForwardAction(index, _buffers.Input, _buffers.Output, _weights.WeightsGPU(), Info);
         }
 
         /// <summary>
@@ -153,7 +153,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
         private static void ConvGradientKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> filter, ArrayView<float> outGradient, LayerInfo info)
         {
-            info.DeconstructExpansion(index.X, index.Y, index.Z, out int mapIndex, out int inGradientOffset, out int outGradientIndex, out int dimension);
+            info.DeconstructExpansion(index, out int mapIndex, out int inGradientOffset, out int outGradientIndex, out int dimension);
 
             (int x, int y) = info.GetExpansionCoordinates(mapIndex);
 
@@ -201,7 +201,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
         private static void ConvKernel(Index3D index, ArrayView<float> input, ArrayView<float> convoluted, ArrayView<float> filter, LayerInfo info)
         {
-            info.DeconstructContraction(index.X, index.Y, index.Z, out int mapIndex, out int inputOffset, out int outputIndex, out int dimension);
+            info.DeconstructContraction(index, out int mapIndex, out int inputOffset, out int outputIndex, out int dimension);
             
             float sum = 0;
 

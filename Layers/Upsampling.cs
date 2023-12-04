@@ -29,21 +29,21 @@ namespace ConvolutionalNeuralNetwork.Layers
             Synchronize();
         }
 
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, InverseLayerInfo> s_forwardAction
-            = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, InverseLayerInfo>(ForwardUpKernel);
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, InverseLayerInfo> s_backwardsAction
-            = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, InverseLayerInfo>(BackwardsKernel);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo> s_forwardAction
+            = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo>(ForwardUpKernel);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo> s_backwardsAction
+            = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo>(BackwardsKernel);
 
-        private static void ForwardUpKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, InverseLayerInfo info)
+        private static void ForwardUpKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, LayerInfo info)
         {
             (int inputOffset, int outputOffset) = info.GetOffset(index.Z, index.Y);
 
-            (int x1, int y1) = info.GetInputCoordinates(index.X, out float x, out float y);
+            (int x1, int y1) = GetInputCoordinates(info, index.X, out float x, out float y);
 
             int x2 = x1 + 1;
             int y2 = y1 + 1;
 
-            info.TryGetInputIndex(x1, y1, 0, 0, out int baseIndex);
+            info.TryGetContractionIndex(index.X, 0, 0, out int baseIndex);
             float x0y0 = input[baseIndex + inputOffset];
 
 
@@ -56,7 +56,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                     float width = i == 0 ? x2 - x : x - x1;
                     float length = j == 0 ? y2 - y : y - y1;
 
-                    if (info.TryGetInputIndex(x1, y1, i, j, out int inputIndex))
+                    if (info.TryGetContractionIndex(index.X, i, j, out int inputIndex))
                     {
                         sum += width * length * input[inputIndex + inputOffset];
                     }
@@ -70,16 +70,16 @@ namespace ConvolutionalNeuralNetwork.Layers
             output[index.X + outputOffset] = sum;
         }
 
-        private static void BackwardsKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, InverseLayerInfo info)
+        private static void BackwardsKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, LayerInfo info)
         {
             (int outGradientOffset, int inGradientOffset) = info.GetOffset(index.Z, index.Y);
 
-            (int x1, int y1) = info.GetInputCoordinates(index.X, out float x, out float y);
+            (int x1, int y1) = GetInputCoordinates(info, index.X, out float x, out float y);
 
             int x2 = x1 + 1;
             int y2 = y1 + 1;
 
-            info.TryGetInputIndex(x1, y1, 0, 0, out int baseIndex);
+            info.TryGetContractionIndex(index.X, 0, 0, out int baseIndex);
 
             float dL = inGradient[index.X + inGradientOffset];
 
@@ -90,7 +90,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                     float width = i == 0 ? x2 - x : x - x1;
                     float length = j == 0 ? y2 - y : y - y1;
 
-                    if (info.TryGetInputIndex(x1, y1, i, j, out int inputIndex))
+                    if (info.TryGetContractionIndex(index.X, i, j, out int inputIndex))
                     {
                         Atomic.Add(ref outGradient[inputIndex + outGradientOffset], width * length * dL);
                     }
@@ -102,7 +102,24 @@ namespace ConvolutionalNeuralNetwork.Layers
             }
         }
 
-        public override Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize)
+        private static (int, int) GetInputCoordinates(LayerInfo info, int outputIndex, out float xFloat, out float yFloat)
+        {
+            int x = outputIndex % info.ExpansionWidth;
+            int y = outputIndex / info.ExpansionWidth;
+
+            x += info.Padding;
+            y += info.Padding;
+
+            xFloat = (float)x / info.Stride;
+            yFloat = (float)y / info.Stride;
+
+            x /= info.Stride;
+            y /= info.Stride;
+
+            return (x, y);
+        }
+
+        public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
             if (_ready)
                 return _outputShape;
@@ -111,13 +128,13 @@ namespace ConvolutionalNeuralNetwork.Layers
             BaseStartup(inputShape, buffers, maxBatchSize);
 
 
-            _outputShape = new Shape(_stride * inputShape.Width, _stride * inputShape.Length, inputShape.Dimensions);
-            _layerInfo = new InverseLayerInfo(inputShape, _outputShape, _filterSize, _stride);
+            _outputShape = new TensorShape(_stride * inputShape.Width, _stride * inputShape.Length, inputShape.Dimensions);
+            _layerInfo = new LayerInfo(inputShape, _outputShape, _filterSize, _stride);
             buffers.OutputDimensionArea(_outputShape.Volume);
 
             return _outputShape;
         }
 
-        private InverseLayerInfo Info => (InverseLayerInfo)_layerInfo;
+        private LayerInfo Info => (LayerInfo)_layerInfo;
     }
 }

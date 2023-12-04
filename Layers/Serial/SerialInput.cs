@@ -5,9 +5,9 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
 {
     public class SerialInput : ISerial
     {
-        [JsonProperty] Shape _inputShape;
+        [JsonProperty] TensorShape _inputShape;
 
-        public SerialInput(Shape inputShape)
+        public SerialInput(TensorShape inputShape)
         {
             _inputShape = inputShape;
         }
@@ -19,7 +19,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
             return new InputLayer(_inputShape);
         }
 
-        public Shape Initialize(Shape inputShape)
+        public TensorShape Initialize(TensorShape inputShape)
         {
             return _inputShape;
         }

@@ -15,10 +15,10 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         [JsonProperty] protected float[] Values;
 
         /// <summary>
-        /// Initializes a new <see cref="Tensor"/> with the given <see cref="DataTypes.Shape"/>.
+        /// Initializes a new <see cref="Tensor"/> with the given <see cref="TensorShape"/>.
         /// </summary>
         /// <param name="shape">The <see cref="Shape"/> of the new <see cref="Tensor"/>.</param>
-        public Tensor(Shape shape)
+        public Tensor(TensorShape shape)
         {
             Shape = shape;
 
@@ -28,9 +28,9 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <summary>
         /// Initializes a new <see cref="Tensor"/> with the given dimensions, initialized with a given value.
         /// </summary>
-        /// /// <param name="shape">The <see cref="DataTypes.Shape"/> of the new <see cref="Tensor"/>.</param>
+        /// /// <param name="shape">The <see cref="TensorShape"/> of the new <see cref="Tensor"/>.</param>
         /// <param name="value">The value to set every entry in the <see cref="Tensor"/> to.</param>
-        public Tensor(Shape shape, float value) : this(shape)
+        public Tensor(TensorShape shape, float value) : this(shape)
         {
             for (int i = 0; i < Volume; i++)
             {
@@ -49,17 +49,17 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <value>The number of dimensions of the <see cref="Tensor"/>.</value>
         [JsonIgnore] public int Dimensions => Shape.Dimensions;
 
-        /// <value>The total size of the tensor.</value>
-        [JsonIgnore] public int Volume => Values.Length;
-
         /// <value>The y length of the <see cref="Tensor"/>.</value>
         [JsonIgnore] public int Length => Shape.Length;
 
-        /// <value>The <see cref="DataTypes.Shape"/> describing the <see cref="Tensor"/>.</value>
-        [JsonProperty] public Shape Shape { get; private set; }
-
         /// <inheritdoc/>
         [JsonIgnore] public override long MemorySize => Volume * 12;
+
+        /// <value>The <see cref="TensorShape"/> describing the <see cref="Tensor"/>.</value>
+        [JsonProperty] public TensorShape Shape { get; private set; }
+
+        /// <value>The total size of the tensor.</value>
+        [JsonIgnore] public int Volume => Values.Length;
 
         /// <value>The x width of the <see cref="Tensor"/>.</value>
         [JsonIgnore] public int Width => Shape.Width;
@@ -105,7 +105,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <summary>
         /// Gets the <see cref="ArrayView{T}"/> for the cached <see cref="Tensor"/> or allocates it if the <see cref="Tensor"/> is decached.
         /// </summary>
-        /// <returns></returns>
+        /// <returns>Returns an <see cref="ArrayView{T}"/>.</returns>
         public ArrayView<float> GetArrayView()
         {
             IncrementLiveCount();

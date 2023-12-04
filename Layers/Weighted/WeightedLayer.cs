@@ -73,7 +73,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             if (UseBias)
             {
                 Index3D biasIndex = new(_outputShape.Area, _outputShape.Dimensions, batchSize);
-                s_biasAction(biasIndex, _buffers.Output, _bias.WeightsGPU<float>(), _outputShape.Dimensions, _outputShape.Area);
+                s_biasAction(biasIndex, _buffers.Output, _bias.WeightsGPU(), _outputShape.Dimensions, _outputShape.Area);
             }
 
             Synchronize();
@@ -95,7 +95,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
                 if (UseBias)
                 {
                     Index2D biasIndex = new(_outputShape.Dimensions, batchSize);
-                    s_biasGradientAction(biasIndex, _bias.GradientGPU<float>(), _buffers.InGradient, _outputShape.Dimensions, _outputShape.Area);
+                    s_biasGradientAction(biasIndex, _bias.GradientGPU(), _buffers.InGradient, _outputShape.Dimensions, _outputShape.Area);
                 }
 
                 Synchronize();
@@ -115,13 +115,13 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
         /*public void FilterTest(int inputDimensions, int batchSize, int inputSize)
         {
-            (Shape input, Shape output) = FilterTestSetup(inputDimensions, batchSize, inputSize);
+            (TensorShape input, TensorShape output) = FilterTestSetup(inputDimensions, batchSize, inputSize);
 
             _weights.TestFilterGradient(this, input, output, _buffers, batchSize);
             BiasTest(input, output, batchSize);
         }
 
-        protected virtual void BiasTest(Shape input, Shape output, int batchSize)
+        protected virtual void BiasTest(TensorShape input, TensorShape output, int batchSize)
         {
             if (UseBias)
             {
@@ -135,16 +135,16 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
         public int FanOut => _outputShape.Volume;
 
-        protected (Shape, Shape) FilterTestSetup(int inputDimensions, int batchSize, int inputSize)
+        protected (TensorShape, TensorShape) FilterTestSetup(int inputDimensions, int batchSize, int inputSize)
         {
-            Shape inputShape = new Shape(inputSize, inputSize, inputDimensions);
+            TensorShape inputShape = new TensorShape(inputSize, inputSize, inputDimensions);
 
 
             PairedBuffers buffer = new();
             PairedBuffers complimentBuffer = new();
             complimentBuffer.OutputDimensionArea(inputDimensions * inputSize * inputSize);
 
-            Shape outputShape = Startup(inputShape, buffer, batchSize);
+            TensorShape outputShape = Startup(inputShape, buffer, batchSize);
             var adam = new AdamHyperParameters()
             {
                 LearningRate = 0
@@ -156,7 +156,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             PairedBuffers.SetCompliment(buffer, complimentBuffer);
 
 
-            inputShape = new Shape(inputSize, inputSize, inputDimensions);
+            inputShape = new TensorShape(inputSize, inputSize, inputDimensions);
 
             return (inputShape, outputShape);
         }

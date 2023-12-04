@@ -19,9 +19,9 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
             return new AveragePool(Scale);
         }
 
-        public Shape Initialize(Shape inputShape)
+        public TensorShape Initialize(TensorShape inputShape)
         {
-            return new Shape(inputShape.Width / Scale, inputShape.Length / Scale, inputShape.Dimensions);
+            return new TensorShape(inputShape.Width / Scale, inputShape.Length / Scale, inputShape.Dimensions);
         }
     }
 }

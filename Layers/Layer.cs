@@ -13,14 +13,14 @@ namespace ConvolutionalNeuralNetwork.Layers
     {
         protected PairedBuffers _buffers;
         [JsonProperty] protected int _filterSize;
-        protected Shape _inputShape;
-        protected ILayerInfo _layerInfo;
-        protected Shape _outputShape;
+        protected TensorShape _inputShape;
+        protected LayerInfo _layerInfo;
+        protected TensorShape _outputShape;
         [JsonProperty] protected int _stride;
 
         protected bool _ready = false;
 
-        [JsonIgnore] public Shape OutputShape => _outputShape;
+        [JsonIgnore] public TensorShape OutputShape => _outputShape;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Layer"/> class.
@@ -55,7 +55,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         public abstract void Forward(int batchSize);
 
         /// <inheritdoc/>
-        public abstract Shape Startup(Shape inputShape, PairedBuffers buffers, int maxBatchSize);
+        public abstract TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize);
 
         protected static void Synchronize()
         {
@@ -70,7 +70,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <param name="outputDimensions">A factor relating the number of input layers to the number of output layers.
         /// A positive number multiplies the number of input dimensions. A negative number divides the number of dimensions.</param>
         /// <exception cref="ArgumentException">Thrown if the ratio of input layers and output layers is not an integer.</exception>
-        protected void BaseStartup(Shape inputShape, PairedBuffers buffers, int outputDimensions = -1)
+        protected void BaseStartup(TensorShape inputShape, PairedBuffers buffers, int outputDimensions = -1)
         {
             _inputShape = inputShape;
             if(outputDimensions == -1)
@@ -80,13 +80,13 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             if (_stride == 1 && _filterSize == 1 && Name != "Convolutional Layer")
             {
-                _outputShape = new Shape(inputShape.Width, inputShape.Length, outputDimensions);
+                _outputShape = new TensorShape(inputShape.Width, inputShape.Length, outputDimensions);
             }
             else
             {
                 int outputWidth = (int)MathF.Ceiling(inputShape.Width / (float)_stride);
                 int outputLength = (int)MathF.Ceiling(inputShape.Length / (float)_stride);
-                _outputShape = new Shape(outputWidth, outputLength, outputDimensions);
+                _outputShape = new TensorShape(outputWidth, outputLength, outputDimensions);
                 _layerInfo = new LayerInfo(inputShape, _outputShape, _filterSize, _stride);
             }
 

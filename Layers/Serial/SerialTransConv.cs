@@ -26,7 +26,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
             return new TransposeConvolution(_filterSize, _stride, _outputDimensions, _weights, _bias);
         }
 
-        public override Shape Initialize(Shape inputShape)
+        public override TensorShape Initialize(TensorShape inputShape)
         {
             if (_inputDimensions != 0)
             {
@@ -40,7 +40,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
                 _inputDimensions = inputShape.Dimensions;
             }
 
-            Shape outputShape = new Shape(inputShape.Width * _stride, inputShape.Length * _stride, _outputDimensions);
+            TensorShape outputShape = new TensorShape(inputShape.Width * _stride, inputShape.Length * _stride, _outputDimensions);
 
             FanIn = inputShape.Volume;
             FanOut = outputShape.Volume;
