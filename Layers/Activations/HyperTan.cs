@@ -21,7 +21,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             BackwardsAction(index, _outputCopy.GetArrayView(), _buffers.Gradient);
             Synchronize();
 
-            _outputCopy.DecrementLiveCount();
+            _outputCopy.Release();
         }
 
         public override void Forward(int batchSize)
@@ -33,7 +33,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             GPUManager.CopyAction(index, _buffers.Input, _outputCopy.GetArrayViewEmpty());
             Synchronize();
 
-            _outputCopy.DecrementLiveCount();
+            _outputCopy.Release();
         }
 
         private static readonly Action<Index1D, ArrayView<float>> ForwardAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>>(HyperTanKernel);

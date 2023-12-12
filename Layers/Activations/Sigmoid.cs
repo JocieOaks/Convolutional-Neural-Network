@@ -23,7 +23,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
 
             Synchronize();
 
-            _inputCopy.DecrementLiveCount();
+            _inputCopy.Release();
         }
 
         public override void Backwards(int batchSize, bool update)
@@ -32,7 +32,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             BackwardsAction(index, _inputCopy.GetArrayView(), _buffers.Gradient);
             Synchronize();
 
-            _inputCopy.DecrementLiveCount();
+            _inputCopy.Release();
         }
 
         private static readonly Action<Index1D, ArrayView<float>> ForwardAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>>(SigmoidKernel);

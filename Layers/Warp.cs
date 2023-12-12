@@ -24,7 +24,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             Synchronize();
 
-            _inputCopy.DecrementLiveCount();
+            _inputCopy.Release();
         }
 
         public override void Forward(int batchSize)
@@ -37,7 +37,7 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             Synchronize();
 
-            _inputCopy.DecrementLiveCount();
+            _inputCopy.Release();
         }
 
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, TensorShape, TensorShape> s_forwardAction

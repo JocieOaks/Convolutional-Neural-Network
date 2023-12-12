@@ -49,7 +49,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             _buffers.Output.SubView(0, batchSize * _outputShape.Volume).MemSetToZero();
 
             Index3D index = new(_outputShape.Volume, _inputShape.Dimensions, batchSize);
-            ForwardAction(index, _buffers.Input, _buffers.Output, _weights.WeightsGPU(), Info);
+            ForwardAction(index, _buffers.Input, _buffers.Output, _weights.WeightsView(), Info);
         }
 
         /// <inheritdoc/>
@@ -222,7 +222,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             _buffers.OutGradient.SubView(0, batchSize * _inputShape.Volume).MemSetToZero();
 
             Index3D index = new(_inputShape.Volume, _outputShape.Dimensions, batchSize);
-            BackwardsOutGradientAction(index, _buffers.InGradient, _buffers.OutGradient, _weights.WeightsGPU(), Info);
+            BackwardsOutGradientAction(index, _buffers.InGradient, _buffers.OutGradient, _weights.WeightsView(), Info);
         }
 
 
@@ -238,9 +238,9 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             _buffers.OutGradient.SubView(0, batchSize * _inputShape.Volume).MemSetToZero();
 
             Index3D index = new(_inputShape.Volume, _outputShape.Dimensions, batchSize);
-            BackwardsOutGradientAction(index, _buffers.InGradient, _buffers.OutGradient, _weights.WeightsGPU(), Info);
+            BackwardsOutGradientAction(index, _buffers.InGradient, _buffers.OutGradient, _weights.WeightsView(), Info);
             KernelConfig config = new(new Index3D(Info.FilterArea, _outputShape.Dimensions, batchSize), new Index3D(_inputShape.Dimensions, 1, 1));
-            BackwardsFilterAction(config, _buffers.InGradient, _inputCopy.GetArrayView(), _weights.GradientGPU(), Info);
+            BackwardsFilterAction(config, _buffers.InGradient, _inputCopy.GetArrayView(), _weights.GradientView(), Info);
         }
     }
 }

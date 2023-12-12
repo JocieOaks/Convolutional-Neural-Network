@@ -97,7 +97,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
 
             foreach (var skipConnection in _skipConnections)
             {
-                skipConnection.DecrementLiveCount();
+                skipConnection.Release();
             }
         }
 
@@ -114,7 +114,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
 
             foreach (var skipConnection in _skipConnections)
             {
-                skipConnection.DecrementLiveCount();
+                skipConnection.Release();
             }
         }
 

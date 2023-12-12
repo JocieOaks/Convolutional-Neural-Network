@@ -218,7 +218,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <returns>Returns an <see cref="ArrayView{T}"/>.</returns>
         public ArrayView<float> GetArrayView()
         {
-            IncrementLiveCount();
+            Live();
             MemoryBuffer buffer = GetBuffer();
             if (buffer == null)
             {
@@ -234,7 +234,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <returns>Returns an <see cref="ArrayView{T}"/>.</returns>
         public ArrayView<float> GetArrayViewEmpty()
         {
-            IncrementLiveCount();
+            Live();
             MemoryBuffer buffer = GetBuffer();
             if (buffer == null)
             {

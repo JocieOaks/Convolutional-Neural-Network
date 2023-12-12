@@ -51,7 +51,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
             s_backwardsAction(index, _buffers.InGradient, _skipConnection.GetArrayView(), _outputShape, _skipShape, _inputShape.Dimensions);
 
             Synchronize();
-            _skipConnection.DecrementLiveCount();
+            _skipConnection.Release();
         }
 
         /// <summary>
@@ -76,7 +76,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
             s_forwardAction(index, _skipConnection.GetArrayView(), _buffers.Output, _skipShape, _outputShape, _inputShape.Dimensions);
 
             Synchronize();
-            _skipConnection.DecrementLiveCount();
+            _skipConnection.Release();
         }
 
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, TensorShape, TensorShape, int> s_forwardAction =

@@ -23,8 +23,8 @@ namespace ConvolutionalNeuralNetwork.Layers.Loss
 
             GPUManager.Accelerator.Synchronize();
 
-            Truth.DecrementLiveCount();
-            Losses.DecrementLiveCount();
+            Truth.Release();
+            Losses.Release();
 
             Losses.SyncCPU();
             return (Losses[0], 1);

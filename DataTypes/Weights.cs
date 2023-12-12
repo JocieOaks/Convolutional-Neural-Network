@@ -55,22 +55,23 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <returns>Returns the weight as <paramref name="index"/>.</returns>
         public float this[int index] => _weights[index];
 
-        public void DecrementLiveGradient(int decrement = 1)
-        {
-            _gradient.DecrementLiveCount((uint)decrement);
-        }
-
-        public void DecrementLiveWeights(int decrement = 1)
-        {
-            _weights.DecrementLiveCount((uint)decrement);
-        }
-
-        public ArrayView<float> GradientGPU()
+        /// <summary>
+        /// Gets the <see cref="ArrayView{T}"/> of the <see cref="Weights"/> gradient, and sets the gradient to live for GPU caching.
+        /// </summary>
+        /// <returns>Returns the gradient as an <see cref="ArrayView{T}"/>.</returns>
+        public ArrayView<float> GradientView()
         {
             return _gradient.GetArrayViewZeroed();
         }
 
-        public void Initialize(int length, SerialWeighted layer)
+        /// <summary>
+        /// Sets the initial weights of <see cref="Weights"/> for the given <see cref="SerialWeighted"/>.
+        /// </summary>
+        /// <param name="length">The number of weights.</param>
+        /// <param name="layer">The <see cref="SerialWeighted"/> whose <see cref="Weights"/> are being initialized.</param>
+        /// <exception cref="ArgumentException">Thrown when <see cref="Weights"/> is already initialized and the <param name="length"/> is not the same
+        /// as the already established length.</exception>
+        public void InitializeWeights(int length, SerialWeighted layer)
         {
             if (_weights != null)
             {
@@ -96,12 +97,21 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             }
         }
 
-        [OnDeserialized]
-        public void OnDeserialized(StreamingContext context)
+        /// <summary>
+        /// Releases the gradient and its associated <see cref="ArrayView{T}"/> for when it is no longer being used by an <see cref="ILGPU"/> kernel.
+        /// </summary>
+        public void ReleaseGradient()
         {
-            _gradient = new Vector(Length);
+            _gradient.Release();
         }
 
+        /// <summary>
+        /// Releases the weights and its associated <see cref="ArrayView{T}"/> for when it is no longer being used by an <see cref="ILGPU"/> kernel.
+        /// </summary>
+        public void ReleaseWeights()
+        {
+            _weights.Release();
+        }
         /// <summary>
         /// Updates the filter weights along with the first and second moments.
         /// </summary>
@@ -113,17 +123,27 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 _secondMoment.GetArrayView(), _gradient.GetArrayView(), hyperParameters.LearningRate,
                 hyperParameters.FirstMomentDecay, hyperParameters.SecondMomentDecay, _gradientClip, _weightsClip);
             GPUManager.Accelerator.Synchronize();
-            _weights.DecrementLiveCount();
-            _firstMoment.DecrementLiveCount();
-            _secondMoment.DecrementLiveCount();
-            _gradient.DecrementLiveCount();
+            _weights.Release();
+            _firstMoment.Release();
+            _secondMoment.Release();
+            _gradient.Release();
         }
 
-        public ArrayView<float> WeightsGPU()
+        /// <summary>
+        /// Gets the <see cref="ArrayView{T}"/> of the <see cref="Weights"/>, and sets the weights to live for GPU caching.
+        /// </summary>
+        /// <returns>Returns the weights as an <see cref="ArrayView{T}"/>.</returns>
+        public ArrayView<float> WeightsView()
         {
             return _weights.GetArrayView();
         }
-        private static void UpdateKernel(Index1D index, ArrayView<float> weights, ArrayView<float> firstMoment, ArrayView<float> secondMoment, ArrayView<float> gradients, float learningRate, float firstMomentDecay, float secondMomentDecay, float gradientClip, float weightClip)
+
+        /// <summary>
+        /// Updates <see cref="Weights"/> using Adam.
+        /// </summary>
+        private static void UpdateKernel(Index1D index, ArrayView<float> weights, ArrayView<float> firstMoment,
+            ArrayView<float> secondMoment, ArrayView<float> gradients, float learningRate, float firstMomentDecay,
+            float secondMomentDecay, float gradientClip, float weightClip)
         {
             float gradient = XMath.Clamp(gradients[index], -gradientClip, gradientClip);
             float first = firstMomentDecay * firstMoment[index] + (1 - firstMomentDecay) * gradient;
@@ -135,6 +155,11 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             weights[index] = XMath.Clamp(weights[index], -weightClip, weightClip);
         }
 
+        [OnDeserialized]
+        private void OnDeserialized(StreamingContext context)
+        {
+            _gradient = new Vector(Length);
+        }
         [OnSerializing]
         private void OnSerializing(StreamingContext context)
         {

@@ -20,8 +20,8 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
 
         protected void InitializeWeights()
         {
-            _weights.Initialize(WeightLength, this);
-            _bias?.Initialize(BiasLength, this);
+            _weights.InitializeWeights(WeightLength, this);
+            _bias?.InitializeWeights(BiasLength, this);
         }
 
         public void GetWeights(List<Weights> weights)

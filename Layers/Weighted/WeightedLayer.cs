@@ -51,20 +51,20 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
         protected virtual void ForwardFinish()
         {
-            _inputCopy.DecrementLiveCount();
-            _weights.DecrementLiveWeights();
+            _inputCopy.Release();
+            _weights.ReleaseWeights();
         }
 
         protected virtual void BackwardsUpdateFinish()
         {
-            _inputCopy.DecrementLiveCount();
-            _weights.DecrementLiveGradient();
-            _weights.DecrementLiveWeights();
+            _inputCopy.Release();
+            _weights.ReleaseGradient();
+            _weights.ReleaseWeights();
         }
 
         protected virtual void BackwardsNoUpdateFinish()
         {
-            _weights.DecrementLiveWeights();
+            _weights.ReleaseWeights();
         }
 
         public sealed override void Forward(int batchSize)
@@ -73,7 +73,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             if (UseBias)
             {
                 Index3D biasIndex = new(_outputShape.Area, _outputShape.Dimensions, batchSize);
-                s_biasAction(biasIndex, _buffers.Output, _bias.WeightsGPU(), _outputShape.Dimensions, _outputShape.Area);
+                s_biasAction(biasIndex, _buffers.Output, _bias.WeightsView(), _outputShape.Dimensions, _outputShape.Area);
             }
 
             Synchronize();
@@ -82,7 +82,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
             if(UseBias)
             {
-                _bias.DecrementLiveWeights();
+                _bias.ReleaseWeights();
             }
         }
 
@@ -95,14 +95,14 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
                 if (UseBias)
                 {
                     Index2D biasIndex = new(_outputShape.Dimensions, batchSize);
-                    s_biasGradientAction(biasIndex, _bias.GradientGPU(), _buffers.InGradient, _outputShape.Dimensions, _outputShape.Area);
+                    s_biasGradientAction(biasIndex, _bias.GradientView(), _buffers.InGradient, _outputShape.Dimensions, _outputShape.Area);
                 }
 
                 Synchronize();
                 BackwardsUpdateFinish();
                 if (UseBias)
                 {
-                    _bias.DecrementLiveGradient();
+                    _bias.ReleaseGradient();
                 }
             }
             else

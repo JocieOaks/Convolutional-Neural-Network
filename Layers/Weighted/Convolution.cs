@@ -70,7 +70,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             _buffers.OutGradient.SubView(0, batchSize * _inputShape.Volume).MemSetToZero();
 
             Index3D gradientIndex = new(_inputShape.Volume, _outputShape.Dimensions, batchSize);
-            BackwardsOutGradientAction(gradientIndex, _buffers.InGradient, _weights.WeightsGPU(), _buffers.OutGradient, Info);
+            BackwardsOutGradientAction(gradientIndex, _buffers.InGradient, _weights.WeightsView(), _buffers.OutGradient, Info);
         }
 
         /// <summary>
@@ -87,9 +87,9 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             Index3D gradientIndex = new(_inputShape.Volume, _outputShape.Dimensions, batchSize);
 
             var stream = GPUManager.Accelerator.DefaultStream;
-            BackwardsOutGradientAction(gradientIndex, _buffers.InGradient, _weights.WeightsGPU(), _buffers.OutGradient, Info);
+            BackwardsOutGradientAction(gradientIndex, _buffers.InGradient, _weights.WeightsView(), _buffers.OutGradient, Info);
             KernelConfig config = new(new Index3D(Info.FilterArea, _inputShape.Dimensions, batchSize), new Index3D(_outputShape.Dimensions, 1, 1));
-            BackwardsFilterAction(config, _buffers.InGradient, _inputCopy.GetArrayView(), _weights.GradientGPU(), Info);
+            BackwardsFilterAction(config, _buffers.InGradient, _inputCopy.GetArrayView(), _weights.GradientView(), Info);
         }
 
         /// <inheritdoc/>
@@ -100,7 +100,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
             _buffers.Output.SubView(0, batchSize * _outputShape.Volume).MemSetToZero();
             Index3D index = new(_outputShape.Volume, _inputShape.Dimensions, batchSize);
-            ForwardAction(index, _buffers.Input, _buffers.Output, _weights.WeightsGPU(), Info);
+            ForwardAction(index, _buffers.Input, _buffers.Output, _weights.WeightsView(), Info);
         }
 
         /// <summary>

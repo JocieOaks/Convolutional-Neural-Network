@@ -47,7 +47,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
             GPUManager.CopyAction(index, _buffers.InGradient, _skipConnection.GetArrayViewEmpty());
 
             Synchronize();
-            _skipConnection.DecrementLiveCount();
+            _skipConnection.Release();
         }
 
         /// <summary>
@@ -70,7 +70,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
             GPUManager.CopyAction(index, _skipConnection.GetArrayViewEmpty(), _buffers.Output);
 
             Synchronize();
-            _skipConnection.DecrementLiveCount();
+            _skipConnection.Release();
         }
 
         /// <inheritdoc/>

@@ -48,16 +48,18 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             {
                 Mean = _mean.GetArrayView(),
                 Sigma = _sigma.GetArrayView(),
-                Weight = _weights.WeightsGPU(),
-                Bias = _bias.WeightsGPU(),
+                Weight = _weights.WeightsView(),
+                Bias = _bias.WeightsView(),
                 MeanGradient = _meanGradient.GetArrayView(),
                 SigmaGradient = _sigmaGradient.GetArrayView(),
-                WeightGradient = _weights.GradientGPU(),
-                BiasGradient = _bias.GradientGPU()
+                WeightGradient = _weights.GradientView(),
+                BiasGradient = _bias.GradientView()
             };
 
+            ArrayView<float> input = _inputCopy.GetArrayView();
+
             Index3D index = new(_inputShape.Area, _inputShape.Dimensions, batchSize);
-            s_gradientAction(index, _inputCopy.GetArrayView(), _buffers.Gradient, views, _inputShape);
+            s_gradientAction(index, input, _buffers.Gradient, views, _inputShape);
 
             Synchronize();
 
@@ -68,20 +70,20 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             Synchronize();
 
 
-            s_backwardsAction(index, _inputCopy.GetArrayView(), _buffers.Gradient, views, _inputShape);
+            s_backwardsAction(index, input, _buffers.Gradient, views, _inputShape);
         }
 
         protected override void BackwardsUpdateFinish()
         {
-            _mean.DecrementLiveCount();
-            _sigma.DecrementLiveCount();
-            _weights.DecrementLiveWeights();
-            _bias.DecrementLiveWeights();
-            _meanGradient.DecrementLiveCount();
-            _sigmaGradient.DecrementLiveCount();
-            _weights.DecrementLiveGradient();
-            _bias.DecrementLiveGradient();
-            _inputCopy.DecrementLiveCount(2);
+            _mean.Release();
+            _sigma.Release();
+            _weights.ReleaseWeights();
+            _bias.ReleaseWeights();
+            _meanGradient.Release();
+            _sigmaGradient.Release();
+            _weights.ReleaseGradient();
+            _bias.ReleaseGradient();
+            _inputCopy.Release();
         }
 
         protected override void BackwardsNoUpdateFinish()
@@ -100,8 +102,8 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             {
                 Mean = _mean.GetArrayViewZeroed(),
                 Sigma = _sigma.GetArrayViewZeroed(),
-                Weight = _weights.WeightsGPU(),
-                Bias = _bias.WeightsGPU()
+                Weight = _weights.WeightsView(),
+                Bias = _bias.WeightsView()
             };
 
             Index3D index = new(_inputShape.Area, _inputShape.Dimensions, batchSize);
@@ -133,11 +135,11 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
         protected override void ForwardFinish()
         {
-            _inputCopy.DecrementLiveCount();
-            _mean.DecrementLiveCount();
-            _sigma.DecrementLiveCount();
-            _weights.DecrementLiveWeights();
-            _bias.DecrementLiveWeights();
+            _inputCopy.Release();
+            _mean.Release();
+            _sigma.Release();
+            _weights.ReleaseWeights();
+            _bias.ReleaseWeights();
         }
 
         /// <inheritdoc/>
