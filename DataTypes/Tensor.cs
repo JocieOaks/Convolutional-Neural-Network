@@ -86,22 +86,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             view.SubView(0, Volume).CopyFromCPU(Values);
         }
 
-        /// <inheritdoc/>
-        public override void DeCache()
-        {
-            // If the tensor is not cached - it's technically already decached
-            if (ID == 0)
-                return;
-
-            // If the tensor is live - Fail
-            if (LiveCount != 0)
-                return;
-
-            // Else Decache
-            SyncCPU();
-            ID = GPUManager.GCItem(ID);
-        }
-
         /// <summary>
         /// Gets the <see cref="ArrayView{T}"/> for the cached <see cref="Tensor"/> or allocates it if the <see cref="Tensor"/> is decached.
         /// </summary>
@@ -140,8 +124,11 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             buffer.AsArrayView<float>(0, Volume).CopyToCPU(Values);
         }
 
-        /// <inheritdoc />
-        public override void SyncCPU(ArrayView<float> arrayView)
+        /// <summary>
+        /// Syncs the data on the CPU with the data stored on the GPU using the specified <see cref="ArrayView{T}"/>.
+        /// </summary>
+        /// <param name="arrayView">The <see cref="ArrayView{T}"/> containing the cached data.</param>
+        public void SyncCPU(ArrayView<float> arrayView)
         {
             arrayView.SubView(0, Volume).CopyToCPU(Values);
         }

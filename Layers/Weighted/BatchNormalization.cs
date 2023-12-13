@@ -193,7 +193,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
         private static void SigmaKernel(Index1D index, Views values, float inverseArea)
         {
-            values.Sigma[index] = XMath.Pow(values.Sigma[index] * inverseArea + Utility.ASYMPTOTEERRORCORRECTION, 0.5f);
+            values.Sigma[index] = XMath.Pow(values.Sigma[index] * inverseArea + Utility.ASYMPTOTE_ERROR_CORRECTION, 0.5f);
         }
 
         /// <summary>

@@ -196,22 +196,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             arrayView.SubView(0, Length).CopyFromCPU(_values);
         }
 
-        /// <inheritdoc />
-        public override void DeCache()
-        {
-            // If the tensor is not cached - it's technically already decached
-            if (ID == 0)
-                return;
-
-            // If the tensor is live - Fail
-            if (LiveCount != 0)
-                return;
-
-            // Else Decache
-            SyncCPU();
-            ID = GPUManager.GCItem(ID);
-        }
-
         /// <summary>
         /// Gets the <see cref="ArrayView{T}"/> for the cached <see cref="Vector"/> or allocates it if the <see cref="Vector"/> is decached.
         /// </summary>
@@ -228,7 +212,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             return new ArrayView<float>(buffer, 0, 4 * Length / bytes);
         }
 
-        /// Gets the <see cref="ArrayView{T}"/> for the cached <see cref="Vector"/> or allocates it if the <see cref="Vector"/> is decached.
+        /// <summary> Gets the <see cref="ArrayView{T}"/> for the cached <see cref="Vector"/> or allocates it if the <see cref="Vector"/> is decached.
         /// A newly allocated <see cref="ArrayView{T}"/> will have random values, rather than the values of the <see cref="Vector"/>.
         /// </summary>
         /// <returns>Returns an <see cref="ArrayView{T}"/>.</returns>
@@ -274,12 +258,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
                 return this;
 
             return this * (1 / magnitude);
-        }
-
-        /// <inheritdoc />
-        public override void SyncCPU(ArrayView<float> arrayView)
-        {
-            arrayView.SubView(0, Length).CopyToCPU(_values);
         }
 
         /// <inheritdoc />

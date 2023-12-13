@@ -60,7 +60,6 @@ namespace ConvolutionalNeuralNetwork.DataTypes
 
             _buffer = GPUManager.Accelerator.Allocate1D<float>(_maxLength * batchSize);
             View = new ArrayView<float>(_buffer, 0, _maxLength * batchSize);
-            GPUManager.AddExternalMemoryUsage(4 * _maxLength * batchSize);
             _allocated = true;
         }
 

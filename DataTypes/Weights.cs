@@ -150,7 +150,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
             float second = secondMomentDecay * secondMoment[index] + (1 - secondMomentDecay) * MathF.Pow(gradient, 2);
             firstMoment[index] = first;
             secondMoment[index] = second;
-            float result = learningRate * first / (XMath.Sqrt(second) + Utility.ASYMPTOTEERRORCORRECTION);
+            float result = learningRate * first / (XMath.Sqrt(second) + Utility.ASYMPTOTE_ERROR_CORRECTION);
             weights[index] -= result;
             weights[index] = XMath.Clamp(weights[index], -weightClip, weightClip);
         }

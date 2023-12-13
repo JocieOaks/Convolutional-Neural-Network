@@ -45,12 +45,12 @@ namespace ConvolutionalNeuralNetwork.Layers.Loss
 
             float score = (product + 1) / 2;
 
-            float loss = -XMath.Log(score + Utility.ASYMPTOTEERRORCORRECTION);
+            float loss = -XMath.Log(score + Utility.ASYMPTOTE_ERROR_CORRECTION);
             Atomic.Add(ref accuracy.Value, XMath.Round(score));
 
             for (int i = 0; i < length; i++)
             {
-                output[offset + i] = (-1 / (score + Utility.ASYMPTOTEERRORCORRECTION)) * truth[offset + i];
+                output[offset + i] = (-1 / (score + Utility.ASYMPTOTE_ERROR_CORRECTION)) * truth[offset + i];
             }
 
             Atomic.Add(ref totalLoss.Value, loss);
