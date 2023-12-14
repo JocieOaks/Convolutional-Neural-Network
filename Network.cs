@@ -5,8 +5,6 @@ using ILGPU;
 using ConvolutionalNeuralNetwork.Layers.Serial;
 using ConvolutionalNeuralNetwork.Layers.Initializers;
 using ConvolutionalNeuralNetwork.Layers.Loss;
-using System;
-using System.Text.Json.Serialization;
 
 namespace ConvolutionalNeuralNetwork
 {
@@ -15,40 +13,37 @@ namespace ConvolutionalNeuralNetwork
     /// </summary>
     public class Network : Loss
     {
-        protected const bool PRINTSTOPWATCH = false;
-
-        [JsonProperty] protected AdamHyperParameters _adamHyperParameters;
-        [JsonProperty] protected bool _initialized = false;
-        protected List<InputLayer> _inputLayers = new();
-        [JsonProperty] protected TensorShape _inputShape;
-        [Newtonsoft.Json.JsonIgnore] protected TensorShape _outputShape;
-        [JsonProperty] protected List<int> _layerIndeces = new();
-        protected bool _ready = false;
-        [JsonProperty] protected List<ISerial> _serializedLayers = new();
-        protected List<Weights> _weights;
+        private readonly List<InputLayer> _inputLayers = new();
         private readonly List<ILayer> _layers = new();
-        protected delegate float LossFunction(Vector[] expected);
-
-        [Newtonsoft.Json.JsonIgnore] public ArrayView<float> InGradient => _layers.Last().InGradient;
-        [Newtonsoft.Json.JsonIgnore] public ArrayView<float> Input => _layers.First().Input;
-
-        [Newtonsoft.Json.JsonIgnore] public ArrayView<float> OutGradient => _layers.First().OutGradient;
-        [Newtonsoft.Json.JsonIgnore] public ArrayView<float> Output => _layers.Last().Output;
-        /// <value>The number of <see cref="Layer"/>s in the <see cref="Network"/>.</value>
-        protected int Depth => _layers.Count;
-
-        [Newtonsoft.Json.JsonIgnore] protected Loss Loss { get; }
-
+        [JsonProperty] private AdamHyperParameters _adamHyperParameters;
+        [JsonProperty] private bool _initialized;
+        [JsonProperty] private TensorShape _inputShape;
+        [JsonProperty] private List<int> _layerIndices = new();
+        private Tensor[] _outputs;
+        [JsonIgnore] private TensorShape _outputShape;
+        [JsonProperty] private List<ISerial> _serializedLayers = new();
+        private List<Weights> _weights;
         public Network(Loss loss)
         {
             Loss = loss;
         }
 
-        [Newtonsoft.Json.JsonConstructor] private Network(float gradientClip)
+        [JsonConstructor]
+        private Network()
         {
-            _gradientClip = gradientClip;
         }
 
+        [JsonIgnore]
+        public Tensor[] GetOutputs => _outputs;
+
+        [JsonIgnore] public ArrayView<float> Input => _layers.First().Input;
+
+        [JsonIgnore] public ArrayView<float> Output => _layers.Last().Output;
+
+        /// <value>The number of <see cref="Layer"/>s in the <see cref="Network"/>.</value>
+        private int Depth => _layers.Count;
+
+        [JsonIgnore] private Loss Loss { get; }
         public SerialActivation AddActivation(Activation activationType)
         {
             SerialActivation activation = _serializedLayers.FirstOrDefault(x => x is SerialActivation act && act.Activation == activationType) as SerialActivation;
@@ -81,6 +76,13 @@ namespace ConvolutionalNeuralNetwork
             return avgPool;
         }
 
+        public SerialBatchNorm AddBatchNormalization()
+        {
+            SerialBatchNorm norm = new();
+            AddSerialLayer(norm);
+            return norm;
+        }
+
         public SerialConcat AddConcatenation(SerialFork fork)
         {
             SerialConcat concatenation = new(fork);
@@ -106,26 +108,6 @@ namespace ConvolutionalNeuralNetwork
             }
 
             return convolution;
-        }
-
-        public SerialTransConv AddTransConv(int outputDimensions, int filterSize, int stride = 1, IWeightInitializer initializer = null, bool useBias = true, IWeightInitializer biasInitializer = null, Activation activation = Activation.None)
-        {
-            Weights weights = new(initializer);
-            Weights bias = null;
-            if (useBias)
-            {
-                bias = new Weights(biasInitializer ?? new Constant(0));
-            }
-
-            SerialTransConv transConv = new(outputDimensions, filterSize, stride, weights, bias);
-            AddSerialLayer(transConv);
-
-            if (activation != Activation.None)
-            {
-                AddActivation(activation);
-            }
-
-            return transConv;
         }
 
         public SerialDense AddDense(int outputUnits, IWeightInitializer initializer = null, bool useBias = true, IWeightInitializer biasInitializer = null, Activation activation = Activation.None)
@@ -176,7 +158,7 @@ namespace ConvolutionalNeuralNetwork
                 _serializedLayers.Add(layer);
             }
 
-            _layerIndeces.Add(_serializedLayers.IndexOf(layer));
+            _layerIndices.Add(_serializedLayers.IndexOf(layer));
         }
 
         public SerialOut AddSkipOut(SerialFork fork)
@@ -194,6 +176,25 @@ namespace ConvolutionalNeuralNetwork
             return summation;
         }
 
+        public SerialTransConv AddTransConv(int outputDimensions, int filterSize, int stride = 1, IWeightInitializer initializer = null, bool useBias = true, IWeightInitializer biasInitializer = null, Activation activation = Activation.None)
+        {
+            Weights weights = new(initializer);
+            Weights bias = null;
+            if (useBias)
+            {
+                bias = new Weights(biasInitializer ?? new Constant(0));
+            }
+
+            SerialTransConv transConv = new(outputDimensions, filterSize, stride, weights, bias);
+            AddSerialLayer(transConv);
+
+            if (activation != Activation.None)
+            {
+                AddActivation(activation);
+            }
+
+            return transConv;
+        }
         public SerialUp AddUpsampling(int scale)
         {
             SerialUp upsampling = _serializedLayers.FirstOrDefault(x => x is SerialUp up && up.Scale == scale) as SerialUp;
@@ -201,14 +202,6 @@ namespace ConvolutionalNeuralNetwork
             AddSerialLayer(upsampling);
             return upsampling;
         }
-
-        public SerialBatchNorm AddBatchNormalization()
-        {
-            SerialBatchNorm norm = new();
-            AddSerialLayer(norm);
-            return norm;
-        }
-
         public SerialWarp AddWarp()
         {
             SerialWarp warp = _serializedLayers.FirstOrDefault(x => x is SerialWarp) as SerialWarp;
@@ -216,6 +209,39 @@ namespace ConvolutionalNeuralNetwork
             AddSerialLayer(warp);
             return warp;
         }
+        public void Generate(List<Tensor[]> inputs, bool saveOutput)
+        {
+            if (inputs.Count != _inputLayers.Count)
+            {
+                throw new ArgumentException("Incorrect input count.");
+            }
+
+            int batchSize = inputs[0].Length;
+
+            for (int i = 0; i < inputs.Count; i++)
+            {
+                _inputLayers[i].SetInput(inputs[i]);
+            }
+
+            for (int i = 0; i < Depth; i++)
+            {
+                _layers[i].Forward(batchSize);
+            }
+
+            if (saveOutput)
+            {
+                for (int i = 0; i < _outputs.GetLength(0); i++)
+                {
+                    _outputs[i].SyncCPU(Output.SubView(i * _outputShape.Volume, _outputShape.Volume));
+                }
+            }
+        }
+
+        public override (float, float) GetLoss(Vector[] groundTruth)
+        {
+            return Train(groundTruth, true, false);
+        }
+
         public void Initialize()
         {
             if (_initialized)
@@ -223,7 +249,7 @@ namespace ConvolutionalNeuralNetwork
 
             TensorShape shape = new();
 
-            foreach (var index in _layerIndeces)
+            foreach (var index in _layerIndices)
             {
                 shape = _serializedLayers[index].Initialize(shape);
             }
@@ -260,6 +286,11 @@ namespace ConvolutionalNeuralNetwork
             }
         }
 
+        public override void Startup(PairedBuffers buffers, TensorShape outputShape, int maxBatchSize)
+        {
+            Buffers = buffers.Compliment;
+        }
+
         /// <summary>
         /// Sets up the <see cref="Network"/> so that it is ready for the specified inputs.
         /// </summary>
@@ -287,14 +318,7 @@ namespace ConvolutionalNeuralNetwork
             InitializeLayers(ref shape, maxBatchSize);
 
             _adamHyperParameters ??= hyperParameters;
-            _ready = true;
         }
-
-        public override void Startup(PairedBuffers buffers, TensorShape outputShape, int maxBatchSize)
-        {
-            Buffers = buffers.Compliment;
-        }
-
         public (float, float) Test(List<Tensor[]> inputs, Vector[] expected, bool saveOutput)
         {
             int batchSize = inputs[0].Length;
@@ -305,7 +329,7 @@ namespace ConvolutionalNeuralNetwork
 
             for (int i = 0; i < Depth; i++)
             {
-                Utility.StopWatch(() => _layers[i].Forward(batchSize), $"Forwards {i} {_layers[i].Name}", PRINTSTOPWATCH);
+                _layers[i].Forward(batchSize);
             }
 
             if (saveOutput)
@@ -318,12 +342,6 @@ namespace ConvolutionalNeuralNetwork
 
             return Loss.GetLoss(expected);
         }
-
-        protected Tensor[] _outputs;
-
-        [Newtonsoft.Json.JsonIgnore]
-        public Tensor[] GetOutputs => _outputs;
-
         public (float, float) Train(List<Tensor[]> inputs, Vector[] expected, bool update = true)
         {
 
@@ -339,23 +357,20 @@ namespace ConvolutionalNeuralNetwork
 
             return Train(expected, false, update);
         }
-
-        [JsonProperty] private float _gradientClip;
-
         public (float, float) Train(Vector[] expected, bool skipInputLayers, bool update)
         {
             int batchSize = expected.Length;
             for (int i = 0; i < Depth; i++)
             {
                 if (!skipInputLayers || _layers[i] is not InputLayer)
-                    Utility.StopWatch(() => _layers[i].Forward(batchSize), $"Forwards {i} {_layers[i].Name}", PRINTSTOPWATCH);
+                    _layers[i].Forward(batchSize);
             }
 
             (float, float) loss = Loss.GetLoss(expected);
 
             for (int j = Depth - 1; j >= 0; j--)
             {
-                Utility.StopWatch(() => _layers[j].Backwards(batchSize, update), $"Backwards {j} {_layers[j].Name}", PRINTSTOPWATCH);
+                _layers[j].Backwards(batchSize, update);
             }
 
             if (update)
@@ -368,36 +383,25 @@ namespace ConvolutionalNeuralNetwork
             }
             return loss;
         }
-
-        public void Generate(List<Tensor[]> inputs, bool saveOutput)
+        private void Construct()
         {
-            if (inputs.Count != _inputLayers.Count)
+            if (!_initialized)
             {
-                throw new ArgumentException("Incorrect input count.");
+                throw new InvalidOperationException("Network has not been initialized.");
             }
 
-            int batchSize = inputs[0].Length;
-
-            for (int i = 0; i < inputs.Count; i++)
+            foreach (var index in _layerIndices)
             {
-                _inputLayers[i].SetInput(inputs[i]);
-            }
-
-            for (int i = 0; i < Depth; i++)
-            {
-                Utility.StopWatch(() => _layers[i].Forward(batchSize), $"Forwards {i} {_layers[i].Name}", PRINTSTOPWATCH);
-            }
-
-            if (saveOutput)
-            {
-                for (int i = 0; i < _outputs.GetLength(0); i++)
+                var layer = _serializedLayers[index].Construct();
+                if (layer is InputLayer input)
                 {
-                    _outputs[i].SyncCPU(Output.SubView(i * _outputShape.Volume, _outputShape.Volume));
+                    _inputLayers.Add(input);
                 }
+                _layers.Add(layer);
             }
         }
 
-        protected void InitializeLayers(ref TensorShape current, int maxBatchSize)
+        private void InitializeLayers(ref TensorShape current, int maxBatchSize)
         {
             Buffers ??= new();
 
@@ -425,29 +429,6 @@ namespace ConvolutionalNeuralNetwork
             {
                 _outputs[i] = new Tensor(current);
             }
-        }
-
-        private void Construct()
-        {
-            if (!_initialized)
-            {
-                throw new InvalidOperationException("Network has not been initialized.");
-            }
-
-            foreach (var index in _layerIndeces)
-            {
-                var layer = _serializedLayers[index].Construct();
-                if (layer is InputLayer input)
-                {
-                    _inputLayers.Add(input);
-                }
-                _layers.Add(layer);
-            }
-        }
-
-        public override (float, float) GetLoss(Vector[] groundTruth)
-        {
-            return Train(groundTruth, true, false);
         }
     }
 }
