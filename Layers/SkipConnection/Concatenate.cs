@@ -44,11 +44,11 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         /// <inheritdoc/>
         public override void Backwards(int batchSize, bool update)
         {
-            Index3D index = new(_inputShape.Area, _inputShape.Dimensions, batchSize);
-            s_backwardsAction(index, _buffers.InGradient, _buffers.OutGradient, _outputShape, _inputShape, 0);
+            Index3D index = new(InputShape.Area, InputShape.Dimensions, batchSize);
+            s_backwardsAction(index, Buffers.InGradient, Buffers.OutGradient, OutputShape, InputShape, 0);
 
             index = new(_skipShape.Area, _skipShape.Dimensions, batchSize);
-            s_backwardsAction(index, _buffers.InGradient, _skipConnection.GetArrayView(), _outputShape, _skipShape, _inputShape.Dimensions);
+            s_backwardsAction(index, Buffers.InGradient, _skipConnection.GetArrayView(), OutputShape, _skipShape, InputShape.Dimensions);
 
             Synchronize();
             _skipConnection.Release();
@@ -70,10 +70,10 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         /// <inheritdoc/>
         public override void Forward(int batchSize)
         {
-            Index3D index = new(_inputShape.Area, _inputShape.Dimensions, batchSize);
-            s_forwardAction(index, _buffers.Input, _buffers.Output, _inputShape, _outputShape, 0);
+            Index3D index = new(InputShape.Area, InputShape.Dimensions, batchSize);
+            s_forwardAction(index, Buffers.Input, Buffers.Output, InputShape, OutputShape, 0);
             index = new(_skipShape.Area, _skipShape.Dimensions, batchSize);
-            s_forwardAction(index, _skipConnection.GetArrayView(), _buffers.Output, _skipShape, _outputShape, _inputShape.Dimensions);
+            s_forwardAction(index, _skipConnection.GetArrayView(), Buffers.Output, _skipShape, OutputShape, InputShape.Dimensions);
 
             Synchronize();
             _skipConnection.Release();
@@ -98,23 +98,23 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         /// <inheritdoc/>
         public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int batchSize)
         {
-            if (_ready)
-                return _outputShape;
-            _ready = true;
+            if (Ready)
+                return OutputShape;
+            Ready = true;
 
             if (inputShape.Area != _skipShape.Area)
             {
                 throw new ArgumentException("Input shapes do not match.");
             }
 
-            _outputShape = new TensorShape(inputShape.Width, inputShape.Length, inputShape.Dimensions + _skipShape.Dimensions);
+            OutputShape = new TensorShape(inputShape.Width, inputShape.Length, inputShape.Dimensions + _skipShape.Dimensions);
 
-            _buffers = buffers;
-            _inputShape = inputShape;
+            Buffers = buffers;
+            InputShape = inputShape;
 
-            buffers.OutputDimensionArea(_outputShape.Volume);
+            buffers.OutputDimensionArea(OutputShape.Volume);
 
-            return _outputShape;
+            return OutputShape;
         }
     }
 }

@@ -23,15 +23,15 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         public Summation(int outputDimensions) : base(1, 1)
         {
-            _outputShape = new TensorShape(0, 0, outputDimensions);
+            OutputShape = new TensorShape(0, 0, outputDimensions);
         }
         /// <inheritdoc/>
         public override string Name => "Summation Layer";
         /// <inheritdoc/>
         public override void Backwards(int batchSize, bool update)
         {
-            Index3D index = new(batchSize, _inputShape.Dimensions, _inputShape.Area);
-            s_backwardsAction(index, _buffers.Input, _buffers.Output, _inputShape, _outputShape.Dimensions);
+            Index3D index = new(batchSize, InputShape.Dimensions, InputShape.Area);
+            s_backwardsAction(index, Buffers.Input, Buffers.Output, InputShape, OutputShape.Dimensions);
 
             Synchronize();
         }
@@ -39,10 +39,10 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override void Forward(int batchSize)
         {
-            _buffers.Output.SubView(0, batchSize * _outputShape.Dimensions * _inputShape.Area).MemSetToZero();
+            Buffers.Output.SubView(0, batchSize * OutputShape.Dimensions * InputShape.Area).MemSetToZero();
 
-            Index3D index = new(batchSize, _inputShape.Dimensions, _inputShape.Area);
-            s_forwardAction(index, _buffers.Input, _buffers.Output, _inputShape, _outputShape.Dimensions);
+            Index3D index = new(batchSize, InputShape.Dimensions, InputShape.Area);
+            s_forwardAction(index, Buffers.Input, Buffers.Output, InputShape, OutputShape.Dimensions);
 
             Synchronize();
         }
@@ -50,13 +50,13 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override TensorShape Startup(TensorShape inputShapes, PairedBuffers buffers, int maxBatchSize)
         {
-            if (_ready)
-                return _outputShape;
-            _ready = true;
+            if (Ready)
+                return OutputShape;
+            Ready = true;
 
-            BaseStartup(inputShapes, buffers, _outputShape.Dimensions);
+            BaseStartup(inputShapes, buffers, OutputShape.Dimensions);
 
-            return _outputShape;
+            return OutputShape;
         }
 
         private static void SummationGradientKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, TensorShape shape, int outputDimensions)

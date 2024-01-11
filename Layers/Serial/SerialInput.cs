@@ -16,7 +16,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
 
         public Layer Construct()
         {
-            return new InputLayer(_inputShape);
+            return new Input(_inputShape);
         }
 
         public TensorShape Initialize(TensorShape inputShape)

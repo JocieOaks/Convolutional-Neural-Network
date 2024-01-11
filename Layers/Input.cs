@@ -1,16 +1,17 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
+using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
-    public class InputLayer : Layer, IReflexiveLayer
+    public class Input : Layer
     {
         public override string Name => "Input Layer";
 
         private Tensor[] _input;
 
-        public InputLayer(TensorShape inputShape)
+        public Input(TensorShape inputShape)
         {
-            _inputShape = inputShape;
+            InputShape = inputShape;
         }
 
         public override void Backwards(int batchSize, bool update)
@@ -21,9 +22,12 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
             for(int i = 0; i < batchSize; i++)
             {
-                _input[i].CopyToView(_buffers.Input.SubView(i * _inputShape.Volume, _inputShape.Volume));
+                _input[i].CopyToView(Buffers.Input.SubView(i * InputShape.Volume, InputShape.Volume));
             }
         }
+
+        /// <inheritdoc />
+        [JsonIgnore] public override bool Reflexive => true;
 
         public void SetInput(Tensor[] input)
         {
@@ -32,10 +36,10 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
-            _outputShape = _inputShape;
-            _buffers = buffers;
-            _buffers.OutputDimensionArea(_inputShape.Volume);
-            return _inputShape;
+            OutputShape = InputShape;
+            Buffers = buffers;
+            Buffers.OutputDimensionArea(InputShape.Volume);
+            return InputShape;
         }
     }
 }

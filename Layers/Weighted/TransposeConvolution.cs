@@ -35,29 +35,29 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         /// <inheritdoc/>
         public override string Name => "Transpose Convolutional Layer";
 
-        private LayerInfo Info => (LayerInfo)_layerInfo;
+        private LayerInfo Info => (LayerInfo)LayerInfo;
 
-        protected override int WeightLength => _filterSize * _filterSize * _outputShape.Dimensions * _inputShape.Dimensions;
+        protected override int WeightLength => FilterSize * FilterSize * OutputShape.Dimensions * InputShape.Dimensions;
 
         /// <inheritdoc/>
         protected override void ForwardChild(int batchSize)
         {
 
-            Index1D copyIndex = new(batchSize * _inputShape.Volume);
-            GPUManager.CopyAction(copyIndex, _buffers.Input, _inputCopy.GetArrayViewEmpty());
+            Index1D copyIndex = new(batchSize * InputShape.Volume);
+            GPUManager.CopyAction(copyIndex, Buffers.Input, _inputCopy.GetArrayViewEmpty());
 
-            _buffers.Output.SubView(0, batchSize * _outputShape.Volume).MemSetToZero();
+            Buffers.Output.SubView(0, batchSize * OutputShape.Volume).MemSetToZero();
 
-            Index3D index = new(_outputShape.Volume, _inputShape.Dimensions, batchSize);
-            ForwardAction(index, _buffers.Input, _buffers.Output, _weights.WeightsView(), Info);
+            Index3D index = new(OutputShape.Volume, InputShape.Dimensions, batchSize);
+            ForwardAction(index, Buffers.Input, Buffers.Output, _weights.WeightsView(), Info);
         }
 
         /// <inheritdoc/>
         public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
-            if (_ready)
-                return _outputShape;
-            _ready = true;
+            if (Ready)
+                return OutputShape;
+            Ready = true;
 
             if (_weights == null)
             {
@@ -65,12 +65,12 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             }
             else
             {
-                BaseStartup(inputShape, buffers, _weights.Length / _filterSize / _filterSize / inputShape.Dimensions);
+                BaseStartup(inputShape, buffers, _weights.Length / FilterSize / FilterSize / inputShape.Dimensions);
             }
 
-            _inputCopy = new Vector(_inputShape.Dimensions * maxBatchSize * _inputShape.Area);
+            _inputCopy = new Vector(InputShape.Dimensions * maxBatchSize * InputShape.Area);
 
-            return _outputShape;
+            return OutputShape;
         }
 
         /// <summary>
@@ -82,13 +82,13 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         /// <exception cref="ArgumentException">Thrown if the ratio of input layers and output layers is not an integer.</exception>
         protected new void BaseStartup(TensorShape inputShape, PairedBuffers buffers, int outputDimensions = 1)
         {
-            _inputShape = inputShape;
-            _outputShape = new TensorShape(inputShape.Width * _stride, inputShape.Length * _stride, outputDimensions);
+            InputShape = inputShape;
+            OutputShape = new TensorShape(inputShape.Width * Stride, inputShape.Length * Stride, outputDimensions);
 
-            _layerInfo = new LayerInfo(_outputShape, inputShape, _filterSize, _stride);
+            LayerInfo = new LayerInfo(OutputShape, inputShape, FilterSize, Stride);
 
-            _buffers = buffers;
-            buffers.OutputDimensionArea(_outputShape.Volume);
+            Buffers = buffers;
+            buffers.OutputDimensionArea(OutputShape.Volume);
         }
 
         /// <summary>
@@ -219,10 +219,10 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         /// </summary>
         protected override void BackwardsNoUpdate(int batchSize)
         {
-            _buffers.OutGradient.SubView(0, batchSize * _inputShape.Volume).MemSetToZero();
+            Buffers.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
 
-            Index3D index = new(_inputShape.Volume, _outputShape.Dimensions, batchSize);
-            BackwardsOutGradientAction(index, _buffers.InGradient, _buffers.OutGradient, _weights.WeightsView(), Info);
+            Index3D index = new(InputShape.Volume, OutputShape.Dimensions, batchSize);
+            BackwardsOutGradientAction(index, Buffers.InGradient, Buffers.OutGradient, _weights.WeightsView(), Info);
         }
 
 
@@ -235,12 +235,12 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         protected override void BackwardsUpdate(int batchSize)
         {
 
-            _buffers.OutGradient.SubView(0, batchSize * _inputShape.Volume).MemSetToZero();
+            Buffers.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
 
-            Index3D index = new(_inputShape.Volume, _outputShape.Dimensions, batchSize);
-            BackwardsOutGradientAction(index, _buffers.InGradient, _buffers.OutGradient, _weights.WeightsView(), Info);
-            KernelConfig config = new(new Index3D(Info.FilterArea, _outputShape.Dimensions, batchSize), new Index3D(_inputShape.Dimensions, 1, 1));
-            BackwardsFilterAction(config, _buffers.InGradient, _inputCopy.GetArrayView(), _weights.GradientView(), Info);
+            Index3D index = new(InputShape.Volume, OutputShape.Dimensions, batchSize);
+            BackwardsOutGradientAction(index, Buffers.InGradient, Buffers.OutGradient, _weights.WeightsView(), Info);
+            KernelConfig config = new(new Index3D(Info.FilterArea, OutputShape.Dimensions, batchSize), new Index3D(InputShape.Dimensions, 1, 1));
+            BackwardsFilterAction(config, Buffers.InGradient, _inputCopy.GetArrayView(), _weights.GradientView(), Info);
         }
     }
 }

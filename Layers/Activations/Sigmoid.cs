@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 
 namespace ConvolutionalNeuralNetwork.Layers.Activations
 {
-    public class Sigmoid : Layer, IReflexiveLayer
+    public class Sigmoid : Layer
     {
         private Vector _inputCopy;
 
@@ -17,9 +17,9 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
 
         public override void Forward(int batchSize)
         {
-            Index1D index = new(batchSize * _inputShape.Volume);
-            GPUManager.CopyAction(index, _buffers.Input, _inputCopy.GetArrayViewEmpty());
-            ForwardAction(index, _buffers.Input);
+            Index1D index = new(batchSize * InputShape.Volume);
+            GPUManager.CopyAction(index, Buffers.Input, _inputCopy.GetArrayViewEmpty());
+            ForwardAction(index, Buffers.Input);
 
             Synchronize();
 
@@ -28,12 +28,15 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
 
         public override void Backwards(int batchSize, bool update)
         {
-            Index1D index = new(batchSize * _inputShape.Volume);
-            BackwardsAction(index, _inputCopy.GetArrayView(), _buffers.Gradient);
+            Index1D index = new(batchSize * InputShape.Volume);
+            BackwardsAction(index, _inputCopy.GetArrayView(), Buffers.Gradient);
             Synchronize();
 
             _inputCopy.Release();
         }
+
+        /// <inheritdoc />
+        [JsonIgnore] public override bool Reflexive => true;
 
         private static readonly Action<Index1D, ArrayView<float>> ForwardAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>>(SigmoidKernel);
         private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>> BackwardsAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(SigmoidGradientKernel);
@@ -52,13 +55,13 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
 
         public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
-            if (_ready)
-                return _outputShape;
-            _ready = true;
+            if (Ready)
+                return OutputShape;
+            Ready = true;
 
             BaseStartup(inputShape, buffers);
             _inputCopy = new Vector(maxBatchSize * inputShape.Volume);
-            return _outputShape;
+            return OutputShape;
         }
     }
 }

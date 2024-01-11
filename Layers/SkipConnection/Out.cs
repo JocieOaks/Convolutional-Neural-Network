@@ -44,7 +44,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         public override void Backwards(int batchSize, bool update)
         {
             Index1D index = new(batchSize * _skipShape.Volume);
-            GPUManager.CopyAction(index, _buffers.InGradient, _skipConnection.GetArrayViewEmpty());
+            GPUManager.CopyAction(index, Buffers.InGradient, _skipConnection.GetArrayViewEmpty());
 
             Synchronize();
             _skipConnection.Release();
@@ -67,7 +67,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         public override void Forward(int batchSize)
         {
             Index1D index = new(batchSize * _skipShape.Volume);
-            GPUManager.CopyAction(index, _skipConnection.GetArrayViewEmpty(), _buffers.Output);
+            GPUManager.CopyAction(index, _skipConnection.GetArrayViewEmpty(), Buffers.Output);
 
             Synchronize();
             _skipConnection.Release();
@@ -76,16 +76,16 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         /// <inheritdoc/>
         public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int batchSize)
         {
-            if (_ready)
-                return _outputShape;
-            _ready = true;
+            if (Ready)
+                return OutputShape;
+            Ready = true;
 
-            _outputShape = _skipShape;
+            OutputShape = _skipShape;
 
-            _buffers = buffers;
+            Buffers = buffers;
 
-            buffers.OutputDimensionArea(_outputShape.Volume);
-            return _outputShape;
+            buffers.OutputDimensionArea(OutputShape.Volume);
+            return OutputShape;
         }
     }
 }

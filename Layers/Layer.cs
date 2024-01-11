@@ -9,28 +9,24 @@ namespace ConvolutionalNeuralNetwork.Layers
     /// The <see cref="Layer"/> is an abstract base class for all the layer's in a <see cref="Network"/>.
     /// </summary>
     [Serializable]
-    public abstract class Layer : ILayer
+    public abstract class Layer
     {
-        protected PairedBuffers _buffers;
-        [JsonProperty] protected int _filterSize;
-        protected TensorShape _inputShape;
-        protected LayerInfo _layerInfo;
-        protected TensorShape _outputShape;
-        [JsonProperty] protected int _stride;
-
-        protected bool _ready = false;
-
-        [JsonIgnore] public TensorShape OutputShape => _outputShape;
-
+        [JsonIgnore] protected PairedBuffers Buffers { get; set; }
+        protected int FilterSize { get; set; }
+        [JsonIgnore] protected TensorShape InputShape { get; set; }
+        [JsonIgnore] protected LayerInfo LayerInfo { get; set; }
+        [JsonIgnore] protected TensorShape OutputShape { get; set; }
+        [JsonIgnore] protected bool Ready { get; set; } = false;
+        protected int Stride { get; set; }
         /// <summary>
         /// Initializes a new instance of the <see cref="Layer"/> class.
         /// </summary>
         /// <param name="filterSize">The width and height of a filter.</param>
         /// <param name="stride">The amount of movement over the image for each filter pass.</param>
-        public Layer(int filterSize, int stride)
+        protected Layer(int filterSize, int stride)
         {
-            _filterSize = filterSize;
-            _stride = stride;
+            FilterSize = filterSize;
+            Stride = stride;
         }
 
         /// <summary>
@@ -41,20 +37,39 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
         }
 
-        [JsonIgnore] public ArrayView<float> InGradient => this is IReflexiveLayer ? _buffers.OutGradient : _buffers.InGradient;
-        [JsonIgnore] public ArrayView<float> Input => _buffers.Input;
-        /// <inheritdoc/>
+        /// <value>The <see cref="ArrayView{T}"/> of the input of the <see cref="Layer"/>.</value>
+        [JsonIgnore] public ArrayView<float> Input => Buffers.Input;
+        /// <value>The name of the <see cref="Layer"/>, used for logging.</value>
         [JsonIgnore] public abstract string Name { get; }
 
-        [JsonIgnore] public ArrayView<float> OutGradient => _buffers.OutGradient;
-        [JsonIgnore] public ArrayView<float> Output => this is IReflexiveLayer ? _buffers.Input : _buffers.Output;
-        /// <inheritdoc/>
+        /// <value>The <see cref="ArrayView{T}"/> of the output of the <see cref="Layer"/>.</value>
+        [JsonIgnore] public ArrayView<float> Output => Reflexive ? Buffers.Input : Buffers.Output;
+
+        /// <value>Indicates whether the layer is reflexive. Reflexive layers only modify the input view, instead of modifying the output view.</value>
+        [JsonIgnore] public virtual bool Reflexive => false;
+
+        /// <summary>
+        /// Back-propagates through the <see cref="Layer"/> updating any layer weights, and calculating the outgoing gradient that is
+        /// shared with the previous layer.
+        /// </summary>
+        /// <param name="batchSize">The size of the current batch of training images.</param>
+        /// <param name="update">Whether weights should be updated during back-propagation.</param>
         public abstract void Backwards(int batchSize, bool update);
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Forward propagates through the <see cref="Layer"/> calculating the output <see cref="FeatureMap"/> that is shared with
+        /// the next layer.
+        /// </summary>
+        /// <param name="batchSize">The size of the current batch of training images.</param>
         public abstract void Forward(int batchSize);
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Initializes the <see cref="Layer"/> for the data set being used.
+        /// </summary>
+        /// <param name="inputShape">The <see cref="TensorShape"/> of the previous <see cref="Layer"/>'s output.</param>
+        /// <param name="buffers">The <see cref="PairedBuffers"/> containing the input and output buffers.</param>
+        /// <param name="maxBatchSize">The maximum size of training batches.</param>
+        /// <returns>Returns the output and inGradient to share with the next <see cref="Layer"/>.</returns>
         public abstract TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize);
 
         protected static void Synchronize()
@@ -65,33 +80,33 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <summary>
         /// Initializes the <see cref="Layer"/> and many of its fields.
         /// </summary>
-        /// <param name="inputs">The previous <see cref="Layer"/>'s output.</param>
-        /// <param name="outGradients">The previous <see cref="Layer"/>'s inGradient.</param>
+        /// <param name="inputShape">The <see cref="TensorShape"/> of the previous <see cref="Layer"/>'s output.</param>
+        /// <param name="buffers">The <see cref="PairedBuffers"/> containing the input and output buffers.</param>
         /// <param name="outputDimensions">A factor relating the number of input layers to the number of output layers.
         /// A positive number multiplies the number of input dimensions. A negative number divides the number of dimensions.</param>
         /// <exception cref="ArgumentException">Thrown if the ratio of input layers and output layers is not an integer.</exception>
         protected void BaseStartup(TensorShape inputShape, PairedBuffers buffers, int outputDimensions = -1)
         {
-            _inputShape = inputShape;
+            InputShape = inputShape;
             if(outputDimensions == -1)
             { 
-                outputDimensions = _inputShape.Dimensions;
+                outputDimensions = InputShape.Dimensions;
             }
 
-            if (_stride == 1 && _filterSize == 1 && Name != "Convolutional Layer")
+            if (Stride == 1 && FilterSize == 1 && Name != "Convolutional Layer")
             {
-                _outputShape = new TensorShape(inputShape.Width, inputShape.Length, outputDimensions);
+                OutputShape = new TensorShape(inputShape.Width, inputShape.Length, outputDimensions);
             }
             else
             {
-                int outputWidth = (int)MathF.Ceiling(inputShape.Width / (float)_stride);
-                int outputLength = (int)MathF.Ceiling(inputShape.Length / (float)_stride);
-                _outputShape = new TensorShape(outputWidth, outputLength, outputDimensions);
-                _layerInfo = new LayerInfo(inputShape, _outputShape, _filterSize, _stride);
+                int outputWidth = (int)MathF.Ceiling(inputShape.Width / (float)Stride);
+                int outputLength = (int)MathF.Ceiling(inputShape.Length / (float)Stride);
+                OutputShape = new TensorShape(outputWidth, outputLength, outputDimensions);
+                LayerInfo = new LayerInfo(inputShape, OutputShape, FilterSize, Stride);
             }
 
-            _buffers = buffers;
-            buffers.OutputDimensionArea(_outputShape.Volume);
+            Buffers = buffers;
+            buffers.OutputDimensionArea(OutputShape.Volume);
         }
     }
 }

@@ -6,7 +6,7 @@ using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers.Augmentations
 {
-    public class Cutout : Layer, IReflexiveLayer
+    public class Cutout : Layer
     {
         private int _halfWidth;
         private int _halfLength;
@@ -26,15 +26,15 @@ namespace ConvolutionalNeuralNetwork.Layers.Augmentations
         /// <inheritdoc />
         public override void Backwards(int batchSize, bool update)
         {
-            s_cutoutAction(_index, _buffers.Gradient, _inputShape, _offsetX, _offsetY);
+            s_cutoutAction(_index, Buffers.Gradient, InputShape, _offsetX, _offsetY);
             Synchronize();
         }
 
         /// <inheritdoc />
         public override void Forward(int batchSize)
         {
-            int baseOffsetX = Utility.Random.Next(0, _inputShape.Width);
-            int baseOffsetY = Utility.Random.Next(0, _inputShape.Length);
+            int baseOffsetX = Utility.Random.Next(0, InputShape.Width);
+            int baseOffsetY = Utility.Random.Next(0, InputShape.Length);
 
             _offsetX = baseOffsetX - _fourthWidth;
             int width = _halfWidth;
@@ -43,9 +43,9 @@ namespace ConvolutionalNeuralNetwork.Layers.Augmentations
                 width += _offsetX;
                 _offsetX = 0;
             }
-            else if (_offsetX + width > _inputShape.Width)
+            else if (_offsetX + width > InputShape.Width)
             {
-                width = _inputShape.Width - _offsetX;
+                width = InputShape.Width - _offsetX;
             }
 
             _offsetY = baseOffsetY - _fourthLength;
@@ -55,24 +55,27 @@ namespace ConvolutionalNeuralNetwork.Layers.Augmentations
                 length += _offsetY;
                 _offsetY = 0;
             }
-            else if (_offsetY + length > _inputShape.Length)
+            else if (_offsetY + length > InputShape.Length)
             {
-                length = _inputShape.Length - _offsetY;
+                length = InputShape.Length - _offsetY;
             }
 
-            _index = new Index3D(width, length, batchSize * _inputShape.Dimensions);
+            _index = new Index3D(width, length, batchSize * InputShape.Dimensions);
 
 
-            s_cutoutAction(_index, _buffers.Input, _inputShape, _offsetX, _offsetY);
+            s_cutoutAction(_index, Buffers.Input, InputShape, _offsetX, _offsetY);
             Synchronize();
         }
 
         /// <inheritdoc />
+        [JsonIgnore] public override bool Reflexive => true;
+
+        /// <inheritdoc />
         public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
-            if (_ready)
-                return _outputShape;
-            _ready = true;
+            if (Ready)
+                return OutputShape;
+            Ready = true;
 
             BaseStartup(inputShape, buffers);
             _halfWidth = inputShape.Width / 2;
@@ -81,7 +84,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Augmentations
             _halfLength = inputShape.Length / 2;
             _fourthLength = inputShape.Length / 4;
 
-            return _outputShape;
+            return OutputShape;
         }
 
         private static readonly Action<Index3D, ArrayView<float>, TensorShape, int, int> s_cutoutAction =

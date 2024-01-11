@@ -72,8 +72,8 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             ForwardChild(batchSize);
             if (UseBias)
             {
-                Index3D biasIndex = new(_outputShape.Area, _outputShape.Dimensions, batchSize);
-                s_biasAction(biasIndex, _buffers.Output, _bias.WeightsView(), _outputShape.Dimensions, _outputShape.Area);
+                Index3D biasIndex = new(OutputShape.Area, OutputShape.Dimensions, batchSize);
+                s_biasAction(biasIndex, Buffers.Output, _bias.WeightsView(), OutputShape.Dimensions, OutputShape.Area);
             }
 
             Synchronize();
@@ -94,8 +94,8 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
                 if (UseBias)
                 {
-                    Index2D biasIndex = new(_outputShape.Dimensions, batchSize);
-                    s_biasGradientAction(biasIndex, _bias.GradientView(), _buffers.InGradient, _outputShape.Dimensions, _outputShape.Area);
+                    Index2D biasIndex = new(OutputShape.Dimensions, batchSize);
+                    s_biasGradientAction(biasIndex, _bias.GradientView(), Buffers.InGradient, OutputShape.Dimensions, OutputShape.Area);
                 }
 
                 Synchronize();
@@ -131,9 +131,9 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
         protected abstract int WeightLength { get; }
 
-        public int FanIn => _inputShape.Volume;
+        public int FanIn => InputShape.Volume;
 
-        public int FanOut => _outputShape.Volume;
+        public int FanOut => OutputShape.Volume;
 
         protected (TensorShape, TensorShape) FilterTestSetup(int inputDimensions, int batchSize, int inputSize)
         {

@@ -38,8 +38,8 @@ namespace ConvolutionalNeuralNetwork.Layers
         public override void Backwards(int batchSize, bool update)
         {
 
-            Index3D index = new(_outputShape.Area, _inputShape.Dimensions, batchSize);
-            s_backwardsAction(index, _buffers.InGradient, _buffers.OutGradient, Info);
+            Index3D index = new(OutputShape.Area, InputShape.Dimensions, batchSize);
+            s_backwardsAction(index, Buffers.InGradient, Buffers.OutGradient, Info);
 
             Synchronize();
         }
@@ -48,8 +48,8 @@ namespace ConvolutionalNeuralNetwork.Layers
         public override void Forward(int batchSize)
         {
 
-            Index3D index = new(_outputShape.Area, _inputShape.Dimensions, batchSize);
-            s_forwardAction(index, _buffers.Input, _buffers.Output, Info);
+            Index3D index = new(OutputShape.Area, InputShape.Dimensions, batchSize);
+            s_forwardAction(index, Buffers.Input, Buffers.Output, Info);
 
             Synchronize();
         }
@@ -57,13 +57,13 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <inheritdoc/>
         public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
-            if (_ready)
-                return _outputShape;
-            _ready = true;
+            if (Ready)
+                return OutputShape;
+            Ready = true;
 
             BaseStartup(inputShape, buffers);
             
-            return _outputShape;
+            return OutputShape;
         }
 
         /// <summary>
@@ -127,6 +127,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// </summary>
         /// <param name="index">The dimension who <see cref="LayerInfo"/> is needed.</param>
         /// <returns>Return the <see cref="LayerInfo"/> corresponding to an input dimension.</returns>
-        private LayerInfo Info => (LayerInfo)_layerInfo;
+        private LayerInfo Info => (LayerInfo)LayerInfo;
     }
 }

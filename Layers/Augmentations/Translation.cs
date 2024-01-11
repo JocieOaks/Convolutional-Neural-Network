@@ -26,8 +26,8 @@ namespace ConvolutionalNeuralNetwork.Layers.Augmentations
         /// <inheritdoc />
         public override void Backwards(int batchSize, bool update)
         {
-            Index3D index = new(_inputShape.Area, _inputShape.Dimensions, batchSize);
-            s_translateAction(index, _buffers.InGradient, _buffers.OutGradient, _inputShape, -_translation.x, -_translation.y);
+            Index3D index = new(InputShape.Area, InputShape.Dimensions, batchSize);
+            s_translateAction(index, Buffers.InGradient, Buffers.OutGradient, InputShape, -_translation.x, -_translation.y);
             Synchronize();
         }
 
@@ -36,23 +36,23 @@ namespace ConvolutionalNeuralNetwork.Layers.Augmentations
         {
             _translation = (Utility.Random.Next(-_maxTranslationX, _maxTranslationX),
                 Utility.Random.Next(-_maxTranslationY, _maxTranslationY));
-            Index3D index = new(_inputShape.Area, _inputShape.Dimensions, batchSize);
-            s_translateAction(index, _buffers.Input, _buffers.Output, _inputShape, _translation.x, _translation.y);
+            Index3D index = new(InputShape.Area, InputShape.Dimensions, batchSize);
+            s_translateAction(index, Buffers.Input, Buffers.Output, InputShape, _translation.x, _translation.y);
             Synchronize();
         }
 
         /// <inheritdoc />
         public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
-            if (_ready)
-                return _outputShape;
-            _ready = true;
+            if (Ready)
+                return OutputShape;
+            Ready = true;
 
             BaseStartup(inputShape, buffers);
             _maxTranslationX = inputShape.Width / 8;
             _maxTranslationY = inputShape.Length / 8;
 
-            return _outputShape;
+            return OutputShape;
         }
 
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, TensorShape, int, int> s_translateAction =

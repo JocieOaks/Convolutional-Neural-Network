@@ -42,34 +42,34 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         /// <inheritdoc/>
         public override string Name => "Dense Layer";
 
-        private LayerInfo Info => (LayerInfo)_layerInfo;
+        private LayerInfo Info => (LayerInfo)LayerInfo;
 
-        protected override int WeightLength => _inputShape.Dimensions * _inputShape.Area * _outputUnits;
+        protected override int WeightLength => InputShape.Dimensions * InputShape.Area * _outputUnits;
 
         /// <inheritdoc/>
         protected override void ForwardChild(int batchSize)
         {
-            Index1D copyIndex = new(_inputShape.Volume * batchSize);
-            GPUManager.CopyAction(copyIndex, _buffers.Input, _inputCopy.GetArrayViewEmpty());
+            Index1D copyIndex = new(InputShape.Volume * batchSize);
+            GPUManager.CopyAction(copyIndex, Buffers.Input, _inputCopy.GetArrayViewEmpty());
 
-            _buffers.Output.SubView(0, _outputUnits * batchSize).MemSetToZero();
+            Buffers.Output.SubView(0, _outputUnits * batchSize).MemSetToZero();
 
-            Index3D index = new(_inputShape.Volume, batchSize, _outputUnits);
-            s_forwardAction(index, _buffers.Input, _buffers.Output, _weights.WeightsView(), Info);
+            Index3D index = new(InputShape.Volume, batchSize, _outputUnits);
+            s_forwardAction(index, Buffers.Input, Buffers.Output, _weights.WeightsView(), Info);
         }
 
         /// <inheritdoc/>
         public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
-            if (_ready)
-                return _outputShape;
-            _ready = true;
+            if (Ready)
+                return OutputShape;
+            Ready = true;
 
             BaseStartup(inputShape, buffers);
 
-            _inputCopy = new Vector(_inputShape.Volume * maxBatchSize);
+            _inputCopy = new Vector(InputShape.Volume * maxBatchSize);
 
-            return _outputShape;
+            return OutputShape;
         }
 
         private static void DenseFilterKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> input, ArrayView<float> filterGradient, LayerInfo info)
@@ -95,30 +95,30 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
         protected override void BackwardsNoUpdate(int batchSize)
         {
-            _buffers.OutGradient.SubView(0, batchSize * _inputShape.Volume).MemSetToZero();
+            Buffers.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
 
-            Index3D index = new(_inputShape.Volume, batchSize, _outputUnits);
-            s_backwardsOutAction(index, _buffers.InGradient, _buffers.OutGradient, _weights.WeightsView(), Info);
+            Index3D index = new(InputShape.Volume, batchSize, _outputUnits);
+            s_backwardsOutAction(index, Buffers.InGradient, Buffers.OutGradient, _weights.WeightsView(), Info);
         }
 
         protected override void BackwardsUpdate(int batchSize)
         {
-            _buffers.OutGradient.SubView(0, batchSize * _inputShape.Volume).MemSetToZero();
+            Buffers.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
 
-            Index3D index = new(_inputShape.Volume, batchSize, _outputUnits);
+            Index3D index = new(InputShape.Volume, batchSize, _outputUnits);
 
-            s_backwardsOutAction(index, _buffers.InGradient, _buffers.OutGradient, _weights.WeightsView(), Info);
-            s_backwardsFilterAction(index, _buffers.InGradient, _inputCopy.GetArrayView(), _weights.GradientView(), Info);
+            s_backwardsOutAction(index, Buffers.InGradient, Buffers.OutGradient, _weights.WeightsView(), Info);
+            s_backwardsFilterAction(index, Buffers.InGradient, _inputCopy.GetArrayView(), _weights.GradientView(), Info);
         }
 
         private void BaseStartup(TensorShape inputShapes, PairedBuffers buffers)
         {
-            _inputShape = inputShapes;
-            _outputShape = new TensorShape(_outputUnits, 1, 1);
+            InputShape = inputShapes;
+            OutputShape = new TensorShape(_outputUnits, 1, 1);
 
-            _layerInfo = new LayerInfo(inputShapes, _outputShape, 1, 1);
+            LayerInfo = new LayerInfo(inputShapes, OutputShape, 1, 1);
 
-            _buffers = buffers;
+            Buffers = buffers;
             buffers.OutputDimensionArea(_outputUnits);
         }
     }

@@ -14,17 +14,17 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         public override void Backwards(int batchSize, bool update)
         {
-            _buffers.OutGradient.SubView(0, batchSize * _inputShape.Volume).MemSetToZero();
-            Index3D index = new(_outputShape.Area, _inputShape.Dimensions, batchSize);
-            s_backwardsAction(index, _buffers.InGradient, _buffers.OutGradient, Info);
+            Buffers.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
+            Index3D index = new(OutputShape.Area, InputShape.Dimensions, batchSize);
+            s_backwardsAction(index, Buffers.InGradient, Buffers.OutGradient, Info);
 
             Synchronize();
         }
 
         public override void Forward(int batchSize)
         {
-            Index3D index = new(_outputShape.Area, _inputShape.Dimensions, batchSize);
-            s_forwardAction(index, _buffers.Input, _buffers.Output, Info);
+            Index3D index = new(OutputShape.Area, InputShape.Dimensions, batchSize);
+            s_forwardAction(index, Buffers.Input, Buffers.Output, Info);
 
             Synchronize();
         }
@@ -121,20 +121,20 @@ namespace ConvolutionalNeuralNetwork.Layers
 
         public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
-            if (_ready)
-                return _outputShape;
-            _ready = true;
+            if (Ready)
+                return OutputShape;
+            Ready = true;
 
             BaseStartup(inputShape, buffers, maxBatchSize);
 
 
-            _outputShape = new TensorShape(_stride * inputShape.Width, _stride * inputShape.Length, inputShape.Dimensions);
-            _layerInfo = new LayerInfo(inputShape, _outputShape, _filterSize, _stride);
-            buffers.OutputDimensionArea(_outputShape.Volume);
+            OutputShape = new TensorShape(Stride * inputShape.Width, Stride * inputShape.Length, inputShape.Dimensions);
+            LayerInfo = new LayerInfo(inputShape, OutputShape, FilterSize, Stride);
+            buffers.OutputDimensionArea(OutputShape.Volume);
 
-            return _outputShape;
+            return OutputShape;
         }
 
-        private LayerInfo Info => (LayerInfo)_layerInfo;
+        private LayerInfo Info => (LayerInfo)LayerInfo;
     }
 }

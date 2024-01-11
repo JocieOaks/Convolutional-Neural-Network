@@ -1,12 +1,13 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
+using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
-    public class Reshape : Layer, IReflexiveLayer
+    public class Reshape : Layer
     { 
         public Reshape(TensorShape outputShape)
         {
-            _outputShape = outputShape;
+            OutputShape = outputShape;
         }
 
         public override string Name => "Reshape Layer";
@@ -19,22 +20,25 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
         }
 
+        /// <inheritdoc />
+        [JsonIgnore] public override bool Reflexive => true;
+
         public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
-            if (_ready)
-                return _outputShape;
-            _ready = true;
+            if (Ready)
+                return OutputShape;
+            Ready = true;
 
             int inputLength = inputShape.Volume;
 
-            int outputLength = _outputShape.Volume;
+            int outputLength = OutputShape.Volume;
 
             if(inputLength != outputLength)
             {
                 throw new ArgumentException("Input and output shapes have different lengths.");
             }
 
-            return _outputShape;
+            return OutputShape;
         }
     }
 }

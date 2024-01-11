@@ -10,7 +10,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
     /// The <see cref="Fork"/> class is a <see cref="Layer"/> that creates two sets of the same <see cref="FeatureMap"/>s, sending
     /// one as input to the next <see cref="Layer"/> and sending one to a <see cref="Concatenate"/> later in the <see cref="Network"/>.
     /// </summary>
-    public class Fork : Layer, IReflexiveLayer
+    public class Fork : Layer
     {
         private static int s_nextID = 1;
         public static Dictionary<int, Fork> Splits { get; } = new Dictionary<int, Fork>();
@@ -32,6 +32,8 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
             Splits[ID] = this;
         }
 
+        /// <inheritdoc />
+        [JsonIgnore] public override bool Reflexive => true;
         [JsonConstructor] private Fork(int id)
         {
             ID = id;
@@ -47,10 +49,10 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         {
             var concat = new Concatenate();
             _outputLayers.Add(concat);
-            if (_ready)
+            if (Ready)
             {
-                var skipConnection = new Vector(_maxBatchSize * _inputShape.Volume);
-                concat.Connect(skipConnection, _inputShape, ID);
+                var skipConnection = new Vector(_maxBatchSize * InputShape.Volume);
+                concat.Connect(skipConnection, InputShape, ID);
             }
 
             return concat;
@@ -59,10 +61,10 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         public void Connect(IEndpoint endpoint)
         {
             _outputLayers.Add(endpoint);
-            if (_ready)
+            if (Ready)
             {
-                var skipConnection = new Vector(_maxBatchSize * _inputShape.Volume);
-                endpoint.Connect(skipConnection, _inputShape, ID);
+                var skipConnection = new Vector(_maxBatchSize * InputShape.Volume);
+                endpoint.Connect(skipConnection, InputShape, ID);
             }
         }
 
@@ -70,10 +72,10 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         {
             var skipOut = new Out();
             _outputLayers.Add(skipOut);
-            if (_ready)
+            if (Ready)
             {
-                var skipConnection = new Vector(_maxBatchSize * _inputShape.Volume);
-                skipOut.Connect(skipConnection, _inputShape, ID);
+                var skipConnection = new Vector(_maxBatchSize * InputShape.Volume);
+                skipOut.Connect(skipConnection, InputShape, ID);
             }
 
             return skipOut;
@@ -87,10 +89,10 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         public override void Backwards(int batchSize, bool update)
         {
 
-            Index1D index = new(batchSize * _outputShape.Volume);
+            Index1D index = new(batchSize * OutputShape.Volume);
             foreach (var skipConnection in _skipConnections)
             {
-                s_backwardsAction(index, _buffers.Gradient, skipConnection.GetArrayView());
+                s_backwardsAction(index, Buffers.Gradient, skipConnection.GetArrayView());
             }
 
             Synchronize();
@@ -104,10 +106,10 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         /// <inheritdoc/>
         public override void Forward(int batchSize)
         {
-            Index1D index = new(batchSize * _outputShape.Volume);
+            Index1D index = new(batchSize * OutputShape.Volume);
             foreach (var skipConnection in _skipConnections)
             {
-                GPUManager.CopyAction(index, _buffers.Input, skipConnection.GetArrayViewEmpty());
+                GPUManager.CopyAction(index, Buffers.Input, skipConnection.GetArrayViewEmpty());
             }
 
             Synchronize();
@@ -121,13 +123,13 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         /// <inheritdoc/>
         public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
-            if (_ready)
-                return _outputShape;
-            _ready = true;
+            if (Ready)
+                return OutputShape;
+            Ready = true;
 
-            _buffers = buffers;
-            _inputShape = inputShape;
-            _outputShape = inputShape;
+            Buffers = buffers;
+            InputShape = inputShape;
+            OutputShape = inputShape;
             _maxBatchSize = maxBatchSize;
 
             foreach (var outputLayer in _outputLayers)

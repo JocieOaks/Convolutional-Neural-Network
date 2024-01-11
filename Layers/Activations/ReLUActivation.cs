@@ -9,7 +9,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
     /// The <see cref="ReLUActivation"/> class is a <see cref="Layer"/> is an activation to add non-linearity to the <see cref="Network"/>.
     /// </summary>
     [Serializable]
-    public class ReLUActivation : Layer, IReflexiveLayer
+    public class ReLUActivation : Layer
     {
         private static readonly Action<Index1D, ArrayView<int>, ArrayView<float>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<int>, ArrayView<float>>(BackwardsKernel);
         private static readonly Action<Index1D, ArrayView<float>, ArrayView<int>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<int>>(ForwardReLUKernel);
@@ -30,34 +30,37 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
         /// <inheritdoc/>
         public override void Backwards(int batchSize, bool update)
         {
-            Index1D index = new(_inputShape.Area * batchSize * _inputShape.Dimensions);
-            s_backwardsAction(index, _deviceZeroed, _buffers.Gradient);
+            Index1D index = new(InputShape.Area * batchSize * InputShape.Dimensions);
+            s_backwardsAction(index, _deviceZeroed, Buffers.Gradient);
 
             Synchronize();
         }
         /// <inheritdoc/>
         public override void Forward(int batchSize)
         {
-            Index1D index = new(_inputShape.Area * batchSize * _inputShape.Dimensions);
-            s_forwardAction(index, _buffers.Input, _deviceZeroed);
+            Index1D index = new(InputShape.Area * batchSize * InputShape.Dimensions);
+            s_forwardAction(index, Buffers.Input, _deviceZeroed);
             Synchronize();
         }
+
+        /// <inheritdoc />
+        [JsonIgnore] public override bool Reflexive => true;
 
         /// <inheritdoc/>
         public override TensorShape Startup(TensorShape inputShapes, PairedBuffers buffers, int maxBatchSize)
         {
-            if (_ready)
-                return _outputShape;
-            _ready = true;
+            if (Ready)
+                return OutputShape;
+            Ready = true;
 
             BaseStartup(inputShapes, buffers);
 
             int zeroArea = inputShapes.Area / 32 + (inputShapes.Area % 32 > 0 ? 1 : 0);
-            zeroArea *= _inputShape.Dimensions;
+            zeroArea *= InputShape.Dimensions;
             zeroArea *= maxBatchSize;
 
             _deviceZeroed = GPU.GPUManager.Accelerator.Allocate1D<int>(zeroArea).View;
-            return _outputShape;
+            return OutputShape;
         }
 
         private static void BackwardsKernel(Index1D index, ArrayView<int> zeroed, ArrayView<float> inGradient)

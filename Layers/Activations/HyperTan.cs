@@ -7,7 +7,7 @@ using ILGPU.Runtime;
 
 namespace ConvolutionalNeuralNetwork.Layers.Activations
 {
-    public class HyperTan : Layer, IReflexiveLayer
+    public class HyperTan : Layer
     {
         private Vector _outputCopy;
 
@@ -17,8 +17,8 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
 
         public override void Backwards(int batchSize, bool update)
         {
-            Index1D index = new(batchSize * _inputShape.Volume);
-            BackwardsAction(index, _outputCopy.GetArrayView(), _buffers.Gradient);
+            Index1D index = new(batchSize * InputShape.Volume);
+            BackwardsAction(index, _outputCopy.GetArrayView(), Buffers.Gradient);
             Synchronize();
 
             _outputCopy.Release();
@@ -26,15 +26,18 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
 
         public override void Forward(int batchSize)
         {
-            Index1D index = new(batchSize * _inputShape.Volume);
-            ForwardAction(index, _buffers.Input);
+            Index1D index = new(batchSize * InputShape.Volume);
+            ForwardAction(index, Buffers.Input);
             Synchronize();
 
-            GPUManager.CopyAction(index, _buffers.Input, _outputCopy.GetArrayViewEmpty());
+            GPUManager.CopyAction(index, Buffers.Input, _outputCopy.GetArrayViewEmpty());
             Synchronize();
 
             _outputCopy.Release();
         }
+
+        /// <inheritdoc />
+        [JsonIgnore] public override bool Reflexive => true;
 
         private static readonly Action<Index1D, ArrayView<float>> ForwardAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>>(HyperTanKernel);
 
@@ -52,14 +55,14 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
 
         public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
         {
-            if (_ready)
-                return _outputShape;
-            _ready = true;
+            if (Ready)
+                return OutputShape;
+            Ready = true;
 
             BaseStartup(inputShape, buffers);
-            _outputCopy = new Vector(maxBatchSize * _outputShape.Volume);
+            _outputCopy = new Vector(maxBatchSize * OutputShape.Volume);
 
-            return _outputShape;
+            return OutputShape;
         }
     }
 }
