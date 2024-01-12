@@ -45,12 +45,12 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         public override void Backwards(int batchSize, bool update)
         {
             Index3D index = new(InputShape.Area, InputShape.Dimensions, batchSize);
-            s_backwardsAction(index, Buffers.InGradient, Buffers.OutGradient, OutputShape, InputShape, 0);
+            s_backwardsAction(index, Views.InGradient, Views.OutGradient, OutputShape, InputShape, 0);
 
             index = new(_skipShape.Area, _skipShape.Dimensions, batchSize);
-            s_backwardsAction(index, Buffers.InGradient, _skipConnection.GetArrayView(), OutputShape, _skipShape, InputShape.Dimensions);
+            s_backwardsAction(index, Views.InGradient, _skipConnection.GetArrayView(), OutputShape, _skipShape, InputShape.Dimensions);
 
-            Synchronize();
+            GPUManager.Accelerator.Synchronize();
             _skipConnection.Release();
         }
 
@@ -71,11 +71,11 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         public override void Forward(int batchSize)
         {
             Index3D index = new(InputShape.Area, InputShape.Dimensions, batchSize);
-            s_forwardAction(index, Buffers.Input, Buffers.Output, InputShape, OutputShape, 0);
+            s_forwardAction(index, Views.Input, Views.Output, InputShape, OutputShape, 0);
             index = new(_skipShape.Area, _skipShape.Dimensions, batchSize);
-            s_forwardAction(index, _skipConnection.GetArrayView(), Buffers.Output, _skipShape, OutputShape, InputShape.Dimensions);
+            s_forwardAction(index, _skipConnection.GetArrayView(), Views.Output, _skipShape, OutputShape, InputShape.Dimensions);
 
-            Synchronize();
+            GPUManager.Accelerator.Synchronize();
             _skipConnection.Release();
         }
 
@@ -96,11 +96,11 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         }
 
         /// <inheritdoc/>
-        public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int batchSize)
+        public override TensorShape Startup(TensorShape inputShape, PairedGPUViews views, int batchSize)
         {
-            if (Ready)
+            if (Initialized)
                 return OutputShape;
-            Ready = true;
+            Initialized = true;
 
             if (inputShape.Area != _skipShape.Area)
             {
@@ -109,10 +109,10 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
 
             OutputShape = new TensorShape(inputShape.Width, inputShape.Length, inputShape.Dimensions + _skipShape.Dimensions);
 
-            Buffers = buffers;
+            Views = views;
             InputShape = inputShape;
 
-            buffers.OutputDimensionArea(OutputShape.Volume);
+            views.OutputDimensionArea(OutputShape.Volume);
 
             return OutputShape;
         }

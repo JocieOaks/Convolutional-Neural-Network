@@ -2,8 +2,8 @@
 using ConvolutionalNeuralNetwork.Layers;
 using Newtonsoft.Json;
 using ConvolutionalNeuralNetwork.Layers.Serial;
-using ConvolutionalNeuralNetwork.Layers.Initializers;
 using ConvolutionalNeuralNetwork.Layers.Loss;
+using ConvolutionalNeuralNetwork.DataTypes.Initializers;
 
 namespace ConvolutionalNeuralNetwork
 {
@@ -430,9 +430,9 @@ namespace ConvolutionalNeuralNetwork
         }
 
         /// <inheritdoc />
-        public override void Startup(PairedBuffers buffers, TensorShape outputShape, int maxBatchSize)
+        public override void Startup(PairedGPUViews views, TensorShape outputShape, int maxBatchSize)
         {
-            Buffers = buffers.Compliment;
+            base.views = views.Compliment;
         }
 
         /// <summary>
@@ -551,30 +551,30 @@ namespace ConvolutionalNeuralNetwork
 
         private void InitializeLayers(ref TensorShape current, int maxBatchSize)
         {
-            Buffers ??= new();
+            views ??= new();
 
-            PairedBuffers inputBuffers = Buffers;
-            PairedBuffers outputBuffers = Buffers.Compliment ?? new();
-            PairedBuffers.SetCompliment(inputBuffers, outputBuffers);
-            outputBuffers.OutputDimensionArea(current.Volume);
+            PairedGPUViews inputViews = views;
+            PairedGPUViews outputViews = views.Compliment ?? new();
+            PairedGPUViews.SetCompliment(inputViews, outputViews);
+            outputViews.OutputDimensionArea(current.Volume);
 
             foreach (var layer in _layers)
             {
-                current = layer.Startup(current, inputBuffers, maxBatchSize);
+                current = layer.Startup(current, inputViews, maxBatchSize);
                 //Each layer uses the output of the previous layer as its input, so output and input are swapped between layers.
                 //The exception is reflexive layers modify their input layer without copying it to the output, so the input for the following layer
                 //will be the same as the input for the reflexive layer.
                 if (!layer.Reflexive)                                       
                 {
-                    (inputBuffers, outputBuffers) = (outputBuffers, inputBuffers);
+                    (inputViews, outputViews) = (outputViews, inputViews);
                 }
             }
 
-            Loss?.Startup(outputBuffers, current, maxBatchSize);
+            Loss?.Startup(outputViews, current, maxBatchSize);
 
             //Allocate the required space on the GPU for the memory buffers.
-            inputBuffers.Allocate(maxBatchSize);
-            outputBuffers.Allocate(maxBatchSize);
+            inputViews.Allocate(maxBatchSize);
+            outputViews.Allocate(maxBatchSize);
 
             _outputShape = current;
             _outputs = new Tensor[maxBatchSize];

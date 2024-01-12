@@ -62,18 +62,18 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             ArrayView<float> input = _inputCopy.GetArrayView();
 
             Index3D index = new(InputShape.Area, InputShape.Dimensions, batchSize);
-            s_gradientAction(index, input, Buffers.Gradient, views, InputShape);
+            s_gradientAction(index, input, base.Views.Gradient, views, InputShape);
 
-            Synchronize();
+            GPUManager.Accelerator.Synchronize();
 
 
             Index1D dimensionIndex = new(InputShape.Dimensions);
             s_meanSigmaGradientAction(dimensionIndex, views, 1f / (batchSize * InputShape.Area));
 
-            Synchronize();
+            GPUManager.Accelerator.Synchronize();
 
 
-            s_backwardsAction(index, input, Buffers.Gradient, views, InputShape);
+            s_backwardsAction(index, input, base.Views.Gradient, views, InputShape);
         }
 
         protected override void BackwardsUpdateFinish()
@@ -98,7 +98,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         protected override void ForwardChild(int batchSize)
         {
             Index1D copyIndex = new(batchSize * InputShape.Volume);
-            GPUManager.CopyAction(copyIndex, Buffers.Input, _inputCopy.GetArrayViewEmpty());
+            GPUManager.CopyAction(copyIndex, base.Views.Input, _inputCopy.GetArrayViewEmpty());
 
 
             Views views = new()
@@ -111,29 +111,29 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
             Index3D index = new(InputShape.Area, InputShape.Dimensions, batchSize);
 
-            s_sumAction(index, Buffers.Input, views, InputShape);
+            s_sumAction(index, base.Views.Input, views, InputShape);
 
-            Synchronize();
+            GPUManager.Accelerator.Synchronize();
 
 
             Index1D dimensionIndex = new(InputShape.Dimensions);
             float inverseArea = 1f / (batchSize * InputShape.Area);
             s_meanAction(dimensionIndex, views, inverseArea);
 
-            Synchronize();
+            GPUManager.Accelerator.Synchronize();
 
 
-            s_varianceAction(index, Buffers.Input, views, InputShape);
+            s_varianceAction(index, base.Views.Input, views, InputShape);
 
-            Synchronize();
+            GPUManager.Accelerator.Synchronize();
 
 
             s_sigmaAction(dimensionIndex, views, inverseArea);
 
-            Synchronize();
+            GPUManager.Accelerator.Synchronize();
 
 
-            s_normalizeAction(index, Buffers.Input, views, InputShape);
+            s_normalizeAction(index, base.Views.Input, views, InputShape);
         }
 
         protected override void ForwardFinish()
@@ -146,13 +146,13 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         }
 
         /// <inheritdoc/>
-        public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
+        public override TensorShape Startup(TensorShape inputShape, PairedGPUViews views, int maxBatchSize)
         {
-            if (Ready)
+            if (Initialized)
                 return OutputShape;
-            Ready = true;
+            Initialized = true;
 
-            BaseStartup(inputShape, buffers);
+            BaseStartup(inputShape, views);
 
             _mean = new Vector(InputShape.Dimensions);
             _meanGradient = new Vector(InputShape.Dimensions);

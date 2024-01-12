@@ -49,7 +49,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         {
             var concat = new Concatenate();
             _outputLayers.Add(concat);
-            if (Ready)
+            if (Initialized)
             {
                 var skipConnection = new Vector(_maxBatchSize * InputShape.Volume);
                 concat.Connect(skipConnection, InputShape, ID);
@@ -61,7 +61,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         public void Connect(IEndpoint endpoint)
         {
             _outputLayers.Add(endpoint);
-            if (Ready)
+            if (Initialized)
             {
                 var skipConnection = new Vector(_maxBatchSize * InputShape.Volume);
                 endpoint.Connect(skipConnection, InputShape, ID);
@@ -72,7 +72,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         {
             var skipOut = new Out();
             _outputLayers.Add(skipOut);
-            if (Ready)
+            if (Initialized)
             {
                 var skipConnection = new Vector(_maxBatchSize * InputShape.Volume);
                 skipOut.Connect(skipConnection, InputShape, ID);
@@ -92,10 +92,10 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
             Index1D index = new(batchSize * OutputShape.Volume);
             foreach (var skipConnection in _skipConnections)
             {
-                s_backwardsAction(index, Buffers.Gradient, skipConnection.GetArrayView());
+                s_backwardsAction(index, Views.Gradient, skipConnection.GetArrayView());
             }
 
-            Synchronize();
+            GPUManager.Accelerator.Synchronize();
 
             foreach (var skipConnection in _skipConnections)
             {
@@ -109,10 +109,10 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
             Index1D index = new(batchSize * OutputShape.Volume);
             foreach (var skipConnection in _skipConnections)
             {
-                GPUManager.CopyAction(index, Buffers.Input, skipConnection.GetArrayViewEmpty());
+                GPUManager.CopyAction(index, Views.Input, skipConnection.GetArrayViewEmpty());
             }
 
-            Synchronize();
+            GPUManager.Accelerator.Synchronize();
 
             foreach (var skipConnection in _skipConnections)
             {
@@ -121,13 +121,13 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
         }
 
         /// <inheritdoc/>
-        public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
+        public override TensorShape Startup(TensorShape inputShape, PairedGPUViews views, int maxBatchSize)
         {
-            if (Ready)
+            if (Initialized)
                 return OutputShape;
-            Ready = true;
+            Initialized = true;
 
-            Buffers = buffers;
+            Views = views;
             InputShape = inputShape;
             OutputShape = inputShape;
             _maxBatchSize = maxBatchSize;

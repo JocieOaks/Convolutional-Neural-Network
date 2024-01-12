@@ -1,5 +1,4 @@
 ﻿using ConvolutionalNeuralNetwork.GPU;
-using ConvolutionalNeuralNetwork.Layers.Initializers;
 using ILGPU;
 using ILGPU.Algorithms;
 using ILGPU.Runtime;
@@ -7,6 +6,7 @@ using Newtonsoft.Json;
 using System.Runtime.Serialization;
 using ConvolutionalNeuralNetwork.Layers;
 using ConvolutionalNeuralNetwork.Layers.Serial;
+using ConvolutionalNeuralNetwork.DataTypes.Initializers;
 
 namespace ConvolutionalNeuralNetwork.DataTypes
 {

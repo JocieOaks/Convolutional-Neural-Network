@@ -12,7 +12,6 @@ namespace ConvolutionalNeuralNetwork.Layers
     /// Note: When summing <see cref="Tensor"/>s that have been batch normalized to have a mean of 0, the mean will remain the same, but the standard deviation
     /// will change.
     /// </summary>
-    [Serializable]
     public class Summation : Layer
     {
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, TensorShape, int> s_backwardsAction =
@@ -21,40 +20,46 @@ namespace ConvolutionalNeuralNetwork.Layers
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, TensorShape, int> s_forwardAction =
             GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, TensorShape, int>(SummationKernel);
 
-        public Summation(int outputDimensions) : base(1, 1)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Summation"/> class.
+        /// </summary>
+        /// <param name="outputDimensions">The number of dimensions in the summed output.</param>
+        public Summation(int outputDimensions)
         {
             OutputShape = new TensorShape(0, 0, outputDimensions);
         }
+
         /// <inheritdoc/>
         public override string Name => "Summation Layer";
+
         /// <inheritdoc/>
         public override void Backwards(int batchSize, bool update)
         {
             Index3D index = new(batchSize, InputShape.Dimensions, InputShape.Area);
-            s_backwardsAction(index, Buffers.Input, Buffers.Output, InputShape, OutputShape.Dimensions);
+            s_backwardsAction(index, Views.Input, Views.Output, InputShape, OutputShape.Dimensions);
 
-            Synchronize();
+            GPUManager.Accelerator.Synchronize();
         }
 
         /// <inheritdoc/>
         public override void Forward(int batchSize)
         {
-            Buffers.Output.SubView(0, batchSize * OutputShape.Dimensions * InputShape.Area).MemSetToZero();
+            Views.Output.SubView(0, batchSize * OutputShape.Dimensions * InputShape.Area).MemSetToZero();
 
             Index3D index = new(batchSize, InputShape.Dimensions, InputShape.Area);
-            s_forwardAction(index, Buffers.Input, Buffers.Output, InputShape, OutputShape.Dimensions);
+            s_forwardAction(index, Views.Input, Views.Output, InputShape, OutputShape.Dimensions);
 
-            Synchronize();
+            GPUManager.Accelerator.Synchronize();
         }
 
         /// <inheritdoc/>
-        public override TensorShape Startup(TensorShape inputShapes, PairedBuffers buffers, int maxBatchSize)
+        public override TensorShape Startup(TensorShape inputShapes, PairedGPUViews views, int maxBatchSize)
         {
-            if (Ready)
+            if (Initialized)
                 return OutputShape;
-            Ready = true;
+            Initialized = true;
 
-            BaseStartup(inputShapes, buffers, OutputShape.Dimensions);
+            BaseStartup(inputShapes, views, OutputShape.Dimensions);
 
             return OutputShape;
         }

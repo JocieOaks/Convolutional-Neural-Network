@@ -73,10 +73,10 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             if (UseBias)
             {
                 Index3D biasIndex = new(OutputShape.Area, OutputShape.Dimensions, batchSize);
-                s_biasAction(biasIndex, Buffers.Output, _bias.WeightsView(), OutputShape.Dimensions, OutputShape.Area);
+                s_biasAction(biasIndex, Views.Output, _bias.WeightsView(), OutputShape.Dimensions, OutputShape.Area);
             }
 
-            Synchronize();
+            GPUManager.Accelerator.Synchronize();
 
             ForwardFinish();
 
@@ -95,10 +95,10 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
                 if (UseBias)
                 {
                     Index2D biasIndex = new(OutputShape.Dimensions, batchSize);
-                    s_biasGradientAction(biasIndex, _bias.GradientView(), Buffers.InGradient, OutputShape.Dimensions, OutputShape.Area);
+                    s_biasGradientAction(biasIndex, _bias.GradientView(), Views.InGradient, OutputShape.Dimensions, OutputShape.Area);
                 }
 
-                Synchronize();
+                GPUManager.Accelerator.Synchronize();
                 BackwardsUpdateFinish();
                 if (UseBias)
                 {
@@ -108,7 +108,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             else
             {
                 BackwardsNoUpdate(batchSize);
-                Synchronize();
+                GPUManager.Accelerator.Synchronize();
                 BackwardsNoUpdateFinish();
             }
         }
@@ -140,20 +140,20 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             TensorShape inputShape = new TensorShape(inputSize, inputSize, inputDimensions);
 
 
-            PairedBuffers buffer = new();
-            PairedBuffers complimentBuffer = new();
-            complimentBuffer.OutputDimensionArea(inputDimensions * inputSize * inputSize);
+            PairedGPUViews views = new();
+            PairedGPUViews complimentView = new();
+            complimentView.OutputDimensionArea(inputDimensions * inputSize * inputSize);
 
-            TensorShape outputShape = Startup(inputShape, buffer, batchSize);
+            TensorShape outputShape = Startup(inputShape, views, batchSize);
             var adam = new AdamHyperParameters()
             {
                 LearningRate = 0
             };
             adam.Update();
 
-            buffer.Allocate(batchSize);
-            complimentBuffer.Allocate(batchSize);
-            PairedBuffers.SetCompliment(buffer, complimentBuffer);
+            views.Allocate(batchSize);
+            complimentView.Allocate(batchSize);
+            PairedGPUViews.SetCompliment(views, complimentView);
 
 
             inputShape = new TensorShape(inputSize, inputSize, inputDimensions);

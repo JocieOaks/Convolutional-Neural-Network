@@ -21,7 +21,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Loss
             }
 
             Index1D index = new(groundTruth.Length);
-            s_lossAction(index, Buffers.Output, truth, Losses.GetArrayViewZeroed().VariableView(0), Accuracy.GetArrayViewZeroed().VariableView(0), OutputShape.Volume);
+            s_lossAction(index, views.Output, truth, Losses.GetArrayViewZeroed().VariableView(0), Accuracy.GetArrayViewZeroed().VariableView(0), OutputShape.Volume);
 
             GPUManager.Accelerator.Synchronize();
 

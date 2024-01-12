@@ -26,8 +26,8 @@ namespace ConvolutionalNeuralNetwork.Layers.Augmentations
         /// <inheritdoc />
         public override void Backwards(int batchSize, bool update)
         {
-            s_cutoutAction(_index, Buffers.Gradient, InputShape, _offsetX, _offsetY);
-            Synchronize();
+            s_cutoutAction(_index, Views.Gradient, InputShape, _offsetX, _offsetY);
+            GPUManager.Accelerator.Synchronize();
         }
 
         /// <inheritdoc />
@@ -63,21 +63,21 @@ namespace ConvolutionalNeuralNetwork.Layers.Augmentations
             _index = new Index3D(width, length, batchSize * InputShape.Dimensions);
 
 
-            s_cutoutAction(_index, Buffers.Input, InputShape, _offsetX, _offsetY);
-            Synchronize();
+            s_cutoutAction(_index, Views.Input, InputShape, _offsetX, _offsetY);
+            GPUManager.Accelerator.Synchronize();
         }
 
         /// <inheritdoc />
         [JsonIgnore] public override bool Reflexive => true;
 
         /// <inheritdoc />
-        public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
+        public override TensorShape Startup(TensorShape inputShape, PairedGPUViews views, int maxBatchSize)
         {
-            if (Ready)
+            if (Initialized)
                 return OutputShape;
-            Ready = true;
+            Initialized = true;
 
-            BaseStartup(inputShape, buffers);
+            BaseStartup(inputShape, views);
             _halfWidth = inputShape.Width / 2;
             _fourthWidth = inputShape.Width / 4;
 

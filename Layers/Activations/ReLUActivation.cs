@@ -1,4 +1,5 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
+using ConvolutionalNeuralNetwork.GPU;
 using ILGPU;
 using ILGPU.Runtime;
 using Newtonsoft.Json;
@@ -31,29 +32,29 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
         public override void Backwards(int batchSize, bool update)
         {
             Index1D index = new(InputShape.Area * batchSize * InputShape.Dimensions);
-            s_backwardsAction(index, _deviceZeroed, Buffers.Gradient);
+            s_backwardsAction(index, _deviceZeroed, Views.Gradient);
 
-            Synchronize();
+            GPUManager.Accelerator.Synchronize();
         }
         /// <inheritdoc/>
         public override void Forward(int batchSize)
         {
             Index1D index = new(InputShape.Area * batchSize * InputShape.Dimensions);
-            s_forwardAction(index, Buffers.Input, _deviceZeroed);
-            Synchronize();
+            s_forwardAction(index, Views.Input, _deviceZeroed);
+            GPUManager.Accelerator.Synchronize();
         }
 
         /// <inheritdoc />
         [JsonIgnore] public override bool Reflexive => true;
 
         /// <inheritdoc/>
-        public override TensorShape Startup(TensorShape inputShapes, PairedBuffers buffers, int maxBatchSize)
+        public override TensorShape Startup(TensorShape inputShapes, PairedGPUViews views, int maxBatchSize)
         {
-            if (Ready)
+            if (Initialized)
                 return OutputShape;
-            Ready = true;
+            Initialized = true;
 
-            BaseStartup(inputShapes, buffers);
+            BaseStartup(inputShapes, views);
 
             int zeroArea = inputShapes.Area / 32 + (inputShapes.Area % 32 > 0 ? 1 : 0);
             zeroArea *= InputShape.Dimensions;

@@ -1,6 +1,6 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
-using ConvolutionalNeuralNetwork.Layers.Initializers;
 using ConvolutionalNeuralNetwork.Layers.Weighted;
+using ConvolutionalNeuralNetwork.DataTypes.Initializers;
 
 namespace ConvolutionalNeuralNetwork.Layers.Serial
 {

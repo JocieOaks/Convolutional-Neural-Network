@@ -2,31 +2,40 @@
 using ConvolutionalNeuralNetwork.GPU;
 using ILGPU;
 using ILGPU.Runtime;
-using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
+    /// <summary>
+    /// The <see cref="Upsampling"/> class is a <see cref="Layer"/> that increases the scale of the input <see cref="Tensor"/>.
+    /// </summary>
     public class Upsampling : Layer
     {
-        [JsonConstructor] public Upsampling(int ratio) : base(1, ratio) { }
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Upsampling"/> class.
+        /// </summary>
+        /// <param name="ratio">The amount to scale the input by.</param>
+        public Upsampling(int ratio) : base(1, ratio) { }
 
+        /// <inheritdoc />
         public override string Name => "Upsampling Layer";
 
+        /// <inheritdoc />
         public override void Backwards(int batchSize, bool update)
         {
-            Buffers.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
+            Views.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
             Index3D index = new(OutputShape.Area, InputShape.Dimensions, batchSize);
-            s_backwardsAction(index, Buffers.InGradient, Buffers.OutGradient, Info);
+            s_backwardsAction(index, Views.InGradient, Views.OutGradient, LayerInfo);
 
-            Synchronize();
+            GPUManager.Accelerator.Synchronize();
         }
 
+        /// <inheritdoc />
         public override void Forward(int batchSize)
         {
             Index3D index = new(OutputShape.Area, InputShape.Dimensions, batchSize);
-            s_forwardAction(index, Buffers.Input, Buffers.Output, Info);
+            s_forwardAction(index, Views.Input, Views.Output, LayerInfo);
 
-            Synchronize();
+            GPUManager.Accelerator.Synchronize();
         }
 
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo> s_forwardAction
@@ -44,7 +53,7 @@ namespace ConvolutionalNeuralNetwork.Layers
             int y2 = y1 + 1;
 
             info.TryGetContractionIndex(index.X, 0, 0, out int baseIndex);
-            float x0y0 = input[baseIndex + inputOffset];
+            float origin = input[baseIndex + inputOffset];
 
 
 
@@ -62,7 +71,7 @@ namespace ConvolutionalNeuralNetwork.Layers
                     }
                     else
                     {
-                        sum += width * length * x0y0;
+                        sum += width * length * origin;
                     }
                 }
             }
@@ -119,22 +128,21 @@ namespace ConvolutionalNeuralNetwork.Layers
             return (x, y);
         }
 
-        public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
+        /// <inheritdoc />
+        public override TensorShape Startup(TensorShape inputShape, PairedGPUViews views, int maxBatchSize)
         {
-            if (Ready)
+            if (Initialized)
                 return OutputShape;
-            Ready = true;
+            Initialized = true;
 
-            BaseStartup(inputShape, buffers, maxBatchSize);
+            BaseStartup(inputShape, views, maxBatchSize);
 
 
             OutputShape = new TensorShape(Stride * inputShape.Width, Stride * inputShape.Length, inputShape.Dimensions);
             LayerInfo = new LayerInfo(inputShape, OutputShape, FilterSize, Stride);
-            buffers.OutputDimensionArea(OutputShape.Volume);
+            views.OutputDimensionArea(OutputShape.Volume);
 
             return OutputShape;
         }
-
-        private LayerInfo Info => (LayerInfo)LayerInfo;
     }
 }

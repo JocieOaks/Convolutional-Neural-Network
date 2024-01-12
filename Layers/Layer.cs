@@ -1,23 +1,34 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
-using ConvolutionalNeuralNetwork.GPU;
 using ILGPU;
-using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {
     /// <summary>
     /// The <see cref="Layer"/> is an abstract base class for all the layer's in a <see cref="Network"/>.
     /// </summary>
-    [Serializable]
     public abstract class Layer
     {
-        [JsonIgnore] protected PairedBuffers Buffers { get; set; }
+        /// <value>The <see cref="PairedGPUViews"/> containing the input and output for the <see cref="Layer"/>.</value>
+        protected PairedGPUViews Views { get; set; }
+
+        /// <value>The length and width of the filter used by the <see cref="Layer"/>, if it uses a filter.</value>
         protected int FilterSize { get; set; }
-        [JsonIgnore] protected TensorShape InputShape { get; set; }
-        [JsonIgnore] protected LayerInfo LayerInfo { get; set; }
-        [JsonIgnore] protected TensorShape OutputShape { get; set; }
-        [JsonIgnore] protected bool Ready { get; set; } = false;
+
+        /// <value>The <see cref="TensorShape"/> of the <see cref="Layer"/>'s input.</value>
+        protected TensorShape InputShape { get; set; }
+
+        /// <value>The <see cref="DataTypes.LayerInfo"/> containing the <see cref="Layer"/>'s specifications.</value>
+        protected LayerInfo LayerInfo { get; set; }
+
+        /// <value>The <see cref="TensorShape"/> of the <see cref="Layer"/>'s output.</value>
+        protected TensorShape OutputShape { get; set; }
+
+        /// <value>Indicates whether the <see cref="Layer"/> has already been initialized.</value>
+        protected bool Initialized { get; set; } = false;
+
+        /// <value>The stride of the filter used by the <see cref="Layer"/>, if it uses a filter.</value>
         protected int Stride { get; set; }
+
         /// <summary>
         /// Initializes a new instance of the <see cref="Layer"/> class.
         /// </summary>
@@ -30,23 +41,22 @@ namespace ConvolutionalNeuralNetwork.Layers
         }
 
         /// <summary>
-        /// A default constructor to be used when deserializing.
+        /// Default constructor of <see cref="Layer"/> class.
         /// </summary>
-        [JsonConstructor]
         protected Layer()
         {
         }
 
         /// <value>The <see cref="ArrayView{T}"/> of the input of the <see cref="Layer"/>.</value>
-        [JsonIgnore] public ArrayView<float> Input => Buffers.Input;
+        public ArrayView<float> Input => Views.Input;
         /// <value>The name of the <see cref="Layer"/>, used for logging.</value>
-        [JsonIgnore] public abstract string Name { get; }
+        public abstract string Name { get; }
 
         /// <value>The <see cref="ArrayView{T}"/> of the output of the <see cref="Layer"/>.</value>
-        [JsonIgnore] public ArrayView<float> Output => Reflexive ? Buffers.Input : Buffers.Output;
+        public ArrayView<float> Output => Reflexive ? Views.Input : Views.Output;
 
         /// <value>Indicates whether the layer is reflexive. Reflexive layers only modify the input view, instead of modifying the output view.</value>
-        [JsonIgnore] public virtual bool Reflexive => false;
+        public virtual bool Reflexive => false;
 
         /// <summary>
         /// Back-propagates through the <see cref="Layer"/> updating any layer weights, and calculating the outgoing gradient that is
@@ -57,7 +67,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         public abstract void Backwards(int batchSize, bool update);
 
         /// <summary>
-        /// Forward propagates through the <see cref="Layer"/> calculating the output <see cref="FeatureMap"/> that is shared with
+        /// Forward propagates through the <see cref="Layer"/> calculating the output <see cref="Tensor"/> that is shared with
         /// the next layer.
         /// </summary>
         /// <param name="batchSize">The size of the current batch of training images.</param>
@@ -67,25 +77,21 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// Initializes the <see cref="Layer"/> for the data set being used.
         /// </summary>
         /// <param name="inputShape">The <see cref="TensorShape"/> of the previous <see cref="Layer"/>'s output.</param>
-        /// <param name="buffers">The <see cref="PairedBuffers"/> containing the input and output buffers.</param>
+        /// <param name="views">The <see cref="PairedGPUViews"/> containing the input and output views.</param>
         /// <param name="maxBatchSize">The maximum size of training batches.</param>
         /// <returns>Returns the output and inGradient to share with the next <see cref="Layer"/>.</returns>
-        public abstract TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize);
+        public abstract TensorShape Startup(TensorShape inputShape, PairedGPUViews views, int maxBatchSize);
 
-        protected static void Synchronize()
-        {
-            GPUManager.Accelerator.Synchronize();
-        }
 
         /// <summary>
         /// Initializes the <see cref="Layer"/> and many of its fields.
         /// </summary>
         /// <param name="inputShape">The <see cref="TensorShape"/> of the previous <see cref="Layer"/>'s output.</param>
-        /// <param name="buffers">The <see cref="PairedBuffers"/> containing the input and output buffers.</param>
+        /// <param name="views">The <see cref="PairedGPUViews"/> containing the input and output views.</param>
         /// <param name="outputDimensions">A factor relating the number of input layers to the number of output layers.
         /// A positive number multiplies the number of input dimensions. A negative number divides the number of dimensions.</param>
         /// <exception cref="ArgumentException">Thrown if the ratio of input layers and output layers is not an integer.</exception>
-        protected void BaseStartup(TensorShape inputShape, PairedBuffers buffers, int outputDimensions = -1)
+        protected void BaseStartup(TensorShape inputShape, PairedGPUViews views, int outputDimensions = -1)
         {
             InputShape = inputShape;
             if(outputDimensions == -1)
@@ -105,8 +111,8 @@ namespace ConvolutionalNeuralNetwork.Layers
                 LayerInfo = new LayerInfo(inputShape, OutputShape, FilterSize, Stride);
             }
 
-            Buffers = buffers;
-            buffers.OutputDimensionArea(OutputShape.Volume);
+            this.Views = views;
+            views.OutputDimensionArea(OutputShape.Volume);
         }
     }
 }

@@ -50,22 +50,22 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         protected override void ForwardChild(int batchSize)
         {
             Index1D copyIndex = new(InputShape.Volume * batchSize);
-            GPUManager.CopyAction(copyIndex, Buffers.Input, _inputCopy.GetArrayViewEmpty());
+            GPUManager.CopyAction(copyIndex, Views.Input, _inputCopy.GetArrayViewEmpty());
 
-            Buffers.Output.SubView(0, _outputUnits * batchSize).MemSetToZero();
+            Views.Output.SubView(0, _outputUnits * batchSize).MemSetToZero();
 
             Index3D index = new(InputShape.Volume, batchSize, _outputUnits);
-            s_forwardAction(index, Buffers.Input, Buffers.Output, _weights.WeightsView(), Info);
+            s_forwardAction(index, Views.Input, Views.Output, _weights.WeightsView(), Info);
         }
 
         /// <inheritdoc/>
-        public override TensorShape Startup(TensorShape inputShape, PairedBuffers buffers, int maxBatchSize)
+        public override TensorShape Startup(TensorShape inputShape, PairedGPUViews views, int maxBatchSize)
         {
-            if (Ready)
+            if (Initialized)
                 return OutputShape;
-            Ready = true;
+            Initialized = true;
 
-            BaseStartup(inputShape, buffers);
+            BaseStartup(inputShape, views);
 
             _inputCopy = new Vector(InputShape.Volume * maxBatchSize);
 
@@ -95,31 +95,31 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
         protected override void BackwardsNoUpdate(int batchSize)
         {
-            Buffers.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
+            Views.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
 
             Index3D index = new(InputShape.Volume, batchSize, _outputUnits);
-            s_backwardsOutAction(index, Buffers.InGradient, Buffers.OutGradient, _weights.WeightsView(), Info);
+            s_backwardsOutAction(index, Views.InGradient, Views.OutGradient, _weights.WeightsView(), Info);
         }
 
         protected override void BackwardsUpdate(int batchSize)
         {
-            Buffers.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
+            Views.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
 
             Index3D index = new(InputShape.Volume, batchSize, _outputUnits);
 
-            s_backwardsOutAction(index, Buffers.InGradient, Buffers.OutGradient, _weights.WeightsView(), Info);
-            s_backwardsFilterAction(index, Buffers.InGradient, _inputCopy.GetArrayView(), _weights.GradientView(), Info);
+            s_backwardsOutAction(index, Views.InGradient, Views.OutGradient, _weights.WeightsView(), Info);
+            s_backwardsFilterAction(index, Views.InGradient, _inputCopy.GetArrayView(), _weights.GradientView(), Info);
         }
 
-        private void BaseStartup(TensorShape inputShapes, PairedBuffers buffers)
+        private void BaseStartup(TensorShape inputShapes, PairedGPUViews views)
         {
             InputShape = inputShapes;
             OutputShape = new TensorShape(_outputUnits, 1, 1);
 
             LayerInfo = new LayerInfo(inputShapes, OutputShape, 1, 1);
 
-            Buffers = buffers;
-            buffers.OutputDimensionArea(_outputUnits);
+            Views = views;
+            views.OutputDimensionArea(_outputUnits);
         }
     }
 }

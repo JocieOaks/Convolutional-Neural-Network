@@ -1,6 +1,6 @@
 ﻿using ConvolutionalNeuralNetwork.Layers.Serial;
 
-namespace ConvolutionalNeuralNetwork.Layers.Initializers
+namespace ConvolutionalNeuralNetwork.DataTypes.Initializers
 {
     public class GlorotNormal : IWeightInitializer
     {

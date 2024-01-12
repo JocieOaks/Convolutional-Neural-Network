@@ -6,20 +6,20 @@ using ILGPU.Runtime;
 namespace ConvolutionalNeuralNetwork.DataTypes
 {
     /// <summary>
-    /// The <see cref="PairedBuffers"/> class contains a set of <see cref="MemoryBuffer"/>s for use with an <see cref="ILGPU"/> kernel.
+    /// The <see cref="PairedGPUViews"/> class contains a set of <see cref="MemoryBuffer"/>s for use with an <see cref="ILGPU"/> kernel.
     /// Because the output of one <see cref="Layer"/> is the input of another layer, two set of these can be used such that the device inputs of one
     /// is the device outputs of another. This saves a significant amount of time instead of allocating and then de-allocating <see cref="MemoryBuffer"/>s.
     /// </summary>
-    public class PairedBuffers
+    public class PairedGPUViews
     {
         private bool _allocated;
         private MemoryBuffer1D<float, Stride1D.Dense> _buffer;
         private int _maxLength;
 
-        /// <value>The complimentary <see cref="PairedBuffers"/> that shares two <see cref="ArrayView{T}"/>s.</value>
-        public PairedBuffers Compliment { get; private set; }
+        /// <value>The complimentary <see cref="PairedGPUViews"/> that shares two <see cref="ArrayView{T}"/>s.</value>
+        public PairedGPUViews Compliment { get; private set; }
 
-        /// <value>The <see cref="ArrayView{T}"/> of both the incoming and outgoing gradient, for <see cref="IReflexiveLayer"/>s.</value>
+        /// <value>The <see cref="ArrayView{T}"/> of both the incoming and outgoing gradient, for reflexive layers.</value>
         public ArrayView<float> Gradient => Compliment.View;
 
         /// <value>The <see cref="ArrayView{T}"/> of the incoming gradient.</value>
@@ -37,11 +37,11 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         private ArrayView<float> View { get; set; }
 
         /// <summary>
-        /// Sets to <see cref="PairedBuffers"/> to be reflections of each other. Aka, the input of one is the output of the other.
+        /// Sets to <see cref="PairedGPUViews"/> to be reflections of each other. Aka, the input of one is the output of the other.
         /// </summary>
-        /// <param name="buffers1">The first <see cref="PairedBuffers"/>.</param>
-        /// <param name="buffers2">The second <see cref="PairedBuffers"/>.</param>
-        public static void SetCompliment(PairedBuffers buffers1, PairedBuffers buffers2)
+        /// <param name="buffers1">The first <see cref="PairedGPUViews"/>.</param>
+        /// <param name="buffers2">The second <see cref="PairedGPUViews"/>.</param>
+        public static void SetCompliment(PairedGPUViews buffers1, PairedGPUViews buffers2)
         {
             buffers1.Compliment = buffers2;
             buffers2.Compliment = buffers1;
@@ -66,7 +66,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <summary>
         /// Sets the maximum space needed to be allocated for an operation.
         /// </summary>
-        /// <param name="length">The required length of the <see cref="PairedBuffers"/>.</param>
+        /// <param name="length">The required length of the <see cref="PairedGPUViews"/>.</param>
         public void OutputDimensionArea(int length)
         {
             if (length > _maxLength)
