@@ -2,32 +2,33 @@
 using ConvolutionalNeuralNetwork.GPU;
 using ILGPU;
 using ILGPU.Runtime;
-using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers.Activations
 {
     /// <summary>
-    /// The <see cref="ReLUActivation"/> class is a <see cref="Layer"/> is an activation to add non-linearity to the <see cref="Network"/>.
+    /// The <see cref="LeakyReLU"/> class is an activation <see cref="Layer"/> that multiplies every element in a <see cref="Tensor"/> that is
+    /// less than 0 by a value less than 1, in order to add non-linearity to the <see cref="Network"/>.
     /// </summary>
     [Serializable]
-    public class ReLUActivation : Layer
+    public class LeakyReLU : Layer
     {
-        private static readonly Action<Index1D, ArrayView<int>, ArrayView<float>> s_backwardsAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<int>, ArrayView<float>>(BackwardsKernel);
-        private static readonly Action<Index1D, ArrayView<float>, ArrayView<int>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<int>>(ForwardReLUKernel);
-        private ArrayView<int> _deviceZeroed;
-
         private const float NEGATIVE_SCALING = 0.2f;
-
+        private static readonly Action<Index1D, ArrayView<int>, ArrayView<float>> s_backwardsAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<int>, ArrayView<float>>(BackwardsKernel);
+        private static readonly Action<Index1D, ArrayView<float>, ArrayView<int>> s_forwardAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<int>>(ForwardReLUKernel);
+        private ArrayView<int> _deviceZeroed;
         /// <summary>
-        /// Initializes a new instance of the <see cref="ReLUActivation"/> class.
+        /// Initializes a new instance of the <see cref="LeakyReLU"/> class.
         /// </summary>
-        [JsonConstructor]
-        public ReLUActivation() : base(1, 1)
+        public LeakyReLU() : base(1, 1)
         {
         }
 
         /// <inheritdoc/>
         public override string Name => "Activation Layer";
+
+        /// <inheritdoc />
+        public override bool Reflexive => true;
+
         /// <inheritdoc/>
         public override void Backwards(int batchSize, bool update)
         {
@@ -36,6 +37,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
 
             GPUManager.Accelerator.Synchronize();
         }
+
         /// <inheritdoc/>
         public override void Forward(int batchSize)
         {
@@ -43,9 +45,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             s_forwardAction(index, Views.Input, _deviceZeroed);
             GPUManager.Accelerator.Synchronize();
         }
-
-        /// <inheritdoc />
-        [JsonIgnore] public override bool Reflexive => true;
 
         /// <inheritdoc/>
         public override TensorShape Startup(TensorShape inputShapes, PairedGPUViews views, int maxBatchSize)
@@ -60,7 +59,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             zeroArea *= InputShape.Dimensions;
             zeroArea *= maxBatchSize;
 
-            _deviceZeroed = GPU.GPUManager.Accelerator.Allocate1D<int>(zeroArea).View;
+            _deviceZeroed = GPUManager.Accelerator.Allocate1D<int>(zeroArea).View;
             return OutputShape;
         }
 

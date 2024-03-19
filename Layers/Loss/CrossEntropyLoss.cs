@@ -6,22 +6,24 @@ using ILGPU.Algorithms;
 
 namespace ConvolutionalNeuralNetwork.Layers.Loss
 {
+    /// <summary>
+    /// The <see cref="CrossEntropyLoss"/> class determines the loss of the <see cref="Network"/> using cross entropy loss.
+    /// </summary>
     public class CrossEntropyLoss : Loss
     {
-
-
         private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>, VariableView<float>, VariableView<float>, int> s_lossAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, VariableView<float>, VariableView<float>, int>(LossKernel);
 
+        /// <inheritdoc />
         public override (float, float) GetLoss(Vector[] groundTruth)
         {
-            var truth = Truth.GetArrayViewEmpty();
+            ArrayView<float> truth = Truth.GetArrayViewEmpty();
             for (int i = 0; i < groundTruth.Length; i++)
             {
                 groundTruth[i].CopyToBuffer(truth.SubView(i * OutputShape.Volume, OutputShape.Volume));
             }
 
             Index1D index = new(groundTruth.Length);
-            s_lossAction(index, views.Output, truth, Losses.GetArrayViewZeroed().VariableView(0), Accuracy.GetArrayViewZeroed().VariableView(0), OutputShape.Volume);
+            s_lossAction(index, Views.Output, truth, Losses.GetArrayViewZeroed().VariableView(0), Accuracy.GetArrayViewZeroed().VariableView(0), OutputShape.Volume);
 
             GPUManager.Accelerator.Synchronize();
 

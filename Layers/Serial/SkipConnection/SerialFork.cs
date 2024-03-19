@@ -2,9 +2,9 @@
 using ConvolutionalNeuralNetwork.Layers.SkipConnection;
 using Newtonsoft.Json;
 
-namespace ConvolutionalNeuralNetwork.Layers.Serial
+namespace ConvolutionalNeuralNetwork.Layers.Serial.SkipConnection
 {
-    public class SerialFork : ISerial
+    public class SerialFork : ISerialLayer
     {
         private static int s_nextID = 0;
 
@@ -16,7 +16,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
         }
 
         public int ID { get; init; }
-        
+
         [JsonIgnore] public TensorShape OutputShape { get; private set; }
 
         public Layer Construct()

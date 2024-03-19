@@ -10,6 +10,12 @@ namespace ConvolutionalNeuralNetwork.Layers
     /// </summary>
     public class Upsampling : Layer
     {
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo> s_backwardsAction
+                    = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo>(BackwardsKernel);
+
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo> s_forwardAction
+                    = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo>(ForwardUpKernel);
+
         /// <summary>
         /// Initializes a new instance of the <see cref="Upsampling"/> class.
         /// </summary>
@@ -38,10 +44,54 @@ namespace ConvolutionalNeuralNetwork.Layers
             GPUManager.Accelerator.Synchronize();
         }
 
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo> s_forwardAction
-            = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo>(ForwardUpKernel);
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo> s_backwardsAction
-            = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, LayerInfo>(BackwardsKernel);
+        /// <inheritdoc />
+        public override TensorShape Startup(TensorShape inputShape, PairedGPUViews views, int maxBatchSize)
+        {
+            if (Initialized)
+                return OutputShape;
+            Initialized = true;
+
+            BaseStartup(inputShape, views, maxBatchSize);
+
+
+            OutputShape = new TensorShape(Stride * inputShape.Width, Stride * inputShape.Length, inputShape.Dimensions);
+            LayerInfo = new LayerInfo(inputShape, OutputShape, FilterSize, Stride);
+            views.OutputDimensionArea(OutputShape.Volume);
+
+            return OutputShape;
+        }
+
+        private static void BackwardsKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, LayerInfo info)
+        {
+            (int outGradientOffset, int inGradientOffset) = info.GetOffset(index.Z, index.Y);
+
+            (int x1, int y1) = GetInputCoordinates(info, index.X, out float x, out float y);
+
+            int x2 = x1 + 1;
+            int y2 = y1 + 1;
+
+            info.TryGetContractionIndex(index.X, 0, 0, out int baseIndex);
+
+            float dL = inGradient[index.X + inGradientOffset];
+
+            for (int i = 0; i < 2; i++)
+            {
+                for (int j = 0; j < 2; j++)
+                {
+                    float width = i == 0 ? x2 - x : x - x1;
+                    float length = j == 0 ? y2 - y : y - y1;
+
+                    if (info.TryGetContractionIndex(index.X, i, j, out int inputIndex))
+                    {
+                        Atomic.Add(ref outGradient[inputIndex + outGradientOffset], width * length * dL);
+                    }
+                    else
+                    {
+                        Atomic.Add(ref outGradient[baseIndex + outGradientOffset], width * length * dL);
+                    }
+                }
+            }
+        }
 
         private static void ForwardUpKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, LayerInfo info)
         {
@@ -78,39 +128,6 @@ namespace ConvolutionalNeuralNetwork.Layers
 
             output[index.X + outputOffset] = sum;
         }
-
-        private static void BackwardsKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, LayerInfo info)
-        {
-            (int outGradientOffset, int inGradientOffset) = info.GetOffset(index.Z, index.Y);
-
-            (int x1, int y1) = GetInputCoordinates(info, index.X, out float x, out float y);
-
-            int x2 = x1 + 1;
-            int y2 = y1 + 1;
-
-            info.TryGetContractionIndex(index.X, 0, 0, out int baseIndex);
-
-            float dL = inGradient[index.X + inGradientOffset];
-
-            for (int i = 0; i < 2; i++)
-            {
-                for (int j = 0; j < 2; j++)
-                {
-                    float width = i == 0 ? x2 - x : x - x1;
-                    float length = j == 0 ? y2 - y : y - y1;
-
-                    if (info.TryGetContractionIndex(index.X, i, j, out int inputIndex))
-                    {
-                        Atomic.Add(ref outGradient[inputIndex + outGradientOffset], width * length * dL);
-                    }
-                    else
-                    {
-                        Atomic.Add(ref outGradient[baseIndex + outGradientOffset], width * length * dL);
-                    }
-                }
-            }
-        }
-
         private static (int, int) GetInputCoordinates(LayerInfo info, int outputIndex, out float xFloat, out float yFloat)
         {
             int x = outputIndex % info.ExpansionWidth;
@@ -126,23 +143,6 @@ namespace ConvolutionalNeuralNetwork.Layers
             y /= info.Stride;
 
             return (x, y);
-        }
-
-        /// <inheritdoc />
-        public override TensorShape Startup(TensorShape inputShape, PairedGPUViews views, int maxBatchSize)
-        {
-            if (Initialized)
-                return OutputShape;
-            Initialized = true;
-
-            BaseStartup(inputShape, views, maxBatchSize);
-
-
-            OutputShape = new TensorShape(Stride * inputShape.Width, Stride * inputShape.Length, inputShape.Dimensions);
-            LayerInfo = new LayerInfo(inputShape, OutputShape, FilterSize, Stride);
-            views.OutputDimensionArea(OutputShape.Volume);
-
-            return OutputShape;
         }
     }
 }

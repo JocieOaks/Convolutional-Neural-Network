@@ -2,90 +2,43 @@
 using ConvolutionalNeuralNetwork.GPU;
 using ILGPU;
 using ILGPU.Runtime;
-using Newtonsoft.Json;
 
 
 namespace ConvolutionalNeuralNetwork.Layers.Weighted
 {
+    /// <summary>
+    /// The <see cref="WeightedLayer"/> class is a <see cref="Layer"/> that filters a <see cref="Tensor"/>
+    /// using <see cref="DataTypes.Weights"/>.
+    /// </summary>
     public abstract class WeightedLayer : Layer
     {
-        private bool UseBias => _bias != null;
-        private readonly Weights _bias;
-        protected readonly Weights _weights;
-        protected Vector _inputCopy;
-
-        public Weights Weights => _weights;
-
-        public WeightedLayer(int filterSize, int stride, Weights weights, Weights bias) : base (filterSize, stride)
-        {
-            _weights = weights;
-            _bias = bias;
-        }
-
-
-        private static void BiasKernel(Index3D index, ArrayView<float> value, ArrayView<float> bias, int dimensions, int length)
-        {
-            Atomic.Add(ref value[(index.Z * dimensions + index.Y) * length + index.X], bias[index.Y]);
-        }
-
-        private static void BiasGradientKernel(Index2D index, ArrayView<float> biasGradient, ArrayView<float> inGradient, int dimensions, int length)
-        {
-            float sum = 0;
-            for (int i = 0; i < length; i++)
-            {
-                 sum += inGradient[(index.Y * dimensions + index.X) * length + i];
-            }
-            Atomic.Add(ref biasGradient[index.X], sum);
-        }
-
-
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, int, int> s_biasAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, int, int>(BiasKernel);
 
         private static readonly Action<Index2D, ArrayView<float>, ArrayView<float>, int, int> s_biasGradientAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<float>, ArrayView<float>, int, int>(BiasGradientKernel);
-        
-        [JsonConstructor] protected WeightedLayer() { }
 
-        protected abstract void ForwardChild(int batchSize);
-        protected abstract void BackwardsUpdate(int batchSize);
-        protected abstract void BackwardsNoUpdate(int batchSize);
+        private readonly Weights _bias;
 
-        protected virtual void ForwardFinish()
+        /// <summary>
+        /// Initializes a new instance of the <see cref="WeightedLayer"/> class.
+        /// </summary>
+        /// <param name="filterSize">The width and height of a filter.</param>
+        /// <param name="stride">The amount of movement over the image for each filter pass.</param>
+        /// <param name="weights">The initial weights for the <see cref="Layer"/>'s filters.</param>
+        /// <param name="bias">The initial weights for the <see cref="Layer"/>'s bias.</param>
+        protected WeightedLayer(int filterSize, int stride, Weights weights, Weights bias) : base(filterSize, stride)
         {
-            _inputCopy.Release();
-            _weights.ReleaseWeights();
+            Weights = weights;
+            _bias = bias;
         }
 
-        protected virtual void BackwardsUpdateFinish()
-        {
-            _inputCopy.Release();
-            _weights.ReleaseGradient();
-            _weights.ReleaseWeights();
-        }
+        /// <value> A <see cref="Vector"/> for copying the initial input <see cref="Tensor"/> to the <see cref="Layer"/> for back-propagation.</value>
+        protected Vector InputCopy { get; set; }
 
-        protected virtual void BackwardsNoUpdateFinish()
-        {
-            _weights.ReleaseWeights();
-        }
+        /// <value>The primary <see cref="DataTypes.Weights"/> used for this <see cref="Layer"/>.</value>
+        protected Weights Weights { get; }
+        private bool UseBias => _bias != null;
 
-        public sealed override void Forward(int batchSize)
-        {
-            ForwardChild(batchSize);
-            if (UseBias)
-            {
-                Index3D biasIndex = new(OutputShape.Area, OutputShape.Dimensions, batchSize);
-                s_biasAction(biasIndex, Views.Output, _bias.WeightsView(), OutputShape.Dimensions, OutputShape.Area);
-            }
-
-            GPUManager.Accelerator.Synchronize();
-
-            ForwardFinish();
-
-            if(UseBias)
-            {
-                _bias.ReleaseWeights();
-            }
-        }
-
+        /// <inheritdoc />
         public sealed override void Backwards(int batchSize, bool update)
         {
             if (update)
@@ -113,52 +66,83 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             }
         }
 
-        /*public void FilterTest(int inputDimensions, int batchSize, int inputSize)
+        /// <inheritdoc />
+        public sealed override void Forward(int batchSize)
         {
-            (TensorShape input, TensorShape output) = FilterTestSetup(inputDimensions, batchSize, inputSize);
-
-            _weights.TestFilterGradient(this, input, output, _buffers, batchSize);
-            BiasTest(input, output, batchSize);
-        }
-
-        protected virtual void BiasTest(TensorShape input, TensorShape output, int batchSize)
-        {
+            ForwardChild(batchSize);
             if (UseBias)
             {
-                _bias.TestFilterGradient(this, input, output, _buffers, batchSize);
+                Index3D biasIndex = new(OutputShape.Area, OutputShape.Dimensions, batchSize);
+                s_biasAction(biasIndex, Views.Output, _bias.WeightsView(), OutputShape.Dimensions, OutputShape.Area);
             }
-        }*/
 
-        protected abstract int WeightLength { get; }
+            GPUManager.Accelerator.Synchronize();
 
-        public int FanIn => InputShape.Volume;
+            ForwardFinish();
 
-        public int FanOut => OutputShape.Volume;
-
-        protected (TensorShape, TensorShape) FilterTestSetup(int inputDimensions, int batchSize, int inputSize)
-        {
-            TensorShape inputShape = new TensorShape(inputSize, inputSize, inputDimensions);
-
-
-            PairedGPUViews views = new();
-            PairedGPUViews complimentView = new();
-            complimentView.OutputDimensionArea(inputDimensions * inputSize * inputSize);
-
-            TensorShape outputShape = Startup(inputShape, views, batchSize);
-            var adam = new AdamHyperParameters()
+            if (UseBias)
             {
-                LearningRate = 0
-            };
-            adam.Update();
+                _bias.ReleaseWeights();
+            }
+        }
 
-            views.Allocate(batchSize);
-            complimentView.Allocate(batchSize);
-            PairedGPUViews.SetCompliment(views, complimentView);
+        /// <summary>
+        /// Perform back-propagation through the <see cref="Layer"/> without updating <see cref="Weights"/>.
+        /// </summary>
+        protected abstract void BackwardsNoUpdate(int batchSize);
 
+        /// <summary>
+        /// Called after back-propagation has completed.
+        /// </summary>
+        protected virtual void BackwardsNoUpdateFinish()
+        {
+            Weights.ReleaseWeights();
+        }
 
-            inputShape = new TensorShape(inputSize, inputSize, inputDimensions);
+        /// <summary>
+        /// Perform back-propagation through the <see cref="Layer"/>, updating <see cref="Weights"/>.
+        /// </summary>
+        protected abstract void BackwardsUpdate(int batchSize);
 
-            return (inputShape, outputShape);
+        /// <summary>
+        /// Called after back-propagation has completed.
+        /// </summary>
+        protected virtual void BackwardsUpdateFinish()
+        {
+            InputCopy.Release();
+            Weights.ReleaseGradient();
+            Weights.ReleaseWeights();
+        }
+
+        /// <summary>
+        /// Forward propagate through the <see cref="Layer"/> using <see cref="Weights"/> to filter the input <see cref="Tensor"/>.
+        /// Called before bias is applied.
+        /// </summary>
+        /// <param name="batchSize"></param>
+        protected abstract void ForwardChild(int batchSize);
+
+        /// <summary>
+        /// Called after forward propagation has completed.
+        /// </summary>
+        protected virtual void ForwardFinish()
+        {
+            InputCopy.Release();
+            Weights.ReleaseWeights();
+        }
+
+        private static void BiasGradientKernel(Index2D index, ArrayView<float> biasGradient, ArrayView<float> inGradient, int dimensions, int length)
+        {
+            float sum = 0;
+            for (int i = 0; i < length; i++)
+            {
+                sum += inGradient[(index.Y * dimensions + index.X) * length + i];
+            }
+            Atomic.Add(ref biasGradient[index.X], sum);
+        }
+
+        private static void BiasKernel(Index3D index, ArrayView<float> value, ArrayView<float> bias, int dimensions, int length)
+        {
+            Atomic.Add(ref value[(index.Z * dimensions + index.Y) * length + index.X], bias[index.Y]);
         }
     }
 }

@@ -1,26 +1,26 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
 using Newtonsoft.Json;
 
-namespace ConvolutionalNeuralNetwork.Layers.Serial
+namespace ConvolutionalNeuralNetwork.Layers.Serial.SkipConnection
 {
-    public class SerialConcat : ISerial
+    public class SerialOut : ISerialLayer
     {
         [JsonProperty] private readonly int _id;
         private readonly SerialFork _source;
 
-        public SerialConcat(SerialFork source)
+        public SerialOut(SerialFork source)
         {
             _source = source;
             _id = source.ID;
         }
 
-        [JsonConstructor] SerialConcat() { }
+        [JsonConstructor] private SerialOut() { }
 
         public Layer Construct()
         {
             if (SerialFork.Forks.TryGetValue(_id, out var split))
             {
-                return split.GetConcatenationLayer();
+                return split.GetOutLayer();
             }
             else
             {
@@ -30,12 +30,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
 
         public TensorShape Initialize(TensorShape inputShape)
         {
-            if (inputShape.Area != _source.OutputShape.Area)
-            {
-                throw new ArgumentException("Input shapes do not match.");
-            }
-
-            return new TensorShape(inputShape.Width, inputShape.Length, inputShape.Dimensions + _source.OutputShape.Dimensions);
+            return _source.OutputShape;
         }
     }
 }

@@ -5,8 +5,10 @@ using ILGPU.Runtime;
 using Newtonsoft.Json;
 using System.Runtime.Serialization;
 using ConvolutionalNeuralNetwork.Layers;
-using ConvolutionalNeuralNetwork.Layers.Serial;
 using ConvolutionalNeuralNetwork.DataTypes.Initializers;
+using ConvolutionalNeuralNetwork.Layers.Serial.Weighted;
+
+#pragma warning disable IDE0044
 
 namespace ConvolutionalNeuralNetwork.DataTypes
 {
@@ -69,7 +71,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// </summary>
         /// <param name="length">The number of weights.</param>
         /// <param name="layer">The <see cref="SerialWeighted"/> whose <see cref="Weights"/> are being initialized.</param>
-        /// <exception cref="ArgumentException">Thrown when <see cref="Weights"/> is already initialized and the <param name="length"/> is not the same
+        /// <exception cref="ArgumentException">Thrown when <see cref="Weights"/> is already initialized and the <paramref name="length"/> is not the same
         /// as the already established length.</exception>
         public void InitializeWeights(int length, SerialWeighted layer)
         {

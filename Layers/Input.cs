@@ -1,5 +1,4 @@
 ﻿using ConvolutionalNeuralNetwork.DataTypes;
-using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers
 {

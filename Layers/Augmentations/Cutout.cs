@@ -2,26 +2,36 @@
 using ConvolutionalNeuralNetwork.GPU;
 using ILGPU;
 using ILGPU.Runtime;
-using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers.Augmentations
 {
+    /// <summary>
+    /// The <see cref="Cutout"/> layer is an augmentation used on input images that sets a square of
+    /// 1/4th the size of the image to be black.
+    /// </summary>
     public class Cutout : Layer
     {
-        private int _halfWidth;
-        private int _halfLength;
-        private int _fourthWidth;
-        private int _fourthLength;
+        private static readonly Action<Index3D, ArrayView<float>, TensorShape, int, int> s_cutoutAction =
+            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, TensorShape, int, int>(CutoutKernel);
 
+        private int _fourthLength;
+        private int _fourthWidth;
+        private int _halfLength;
+        private int _halfWidth;
         private Index3D _index;
         private int _offsetX;
         private int _offsetY;
 
-        [JsonConstructor]
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Cutout"/> class.
+        /// </summary>
         public Cutout() : base(1, 1) { }
 
         /// <inheritdoc />
         public override string Name => "Cutout Augmentation";
+
+        /// <inheritdoc />
+        public override bool Reflexive => true;
 
         /// <inheritdoc />
         public override void Backwards(int batchSize, bool update)
@@ -68,9 +78,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Augmentations
         }
 
         /// <inheritdoc />
-        [JsonIgnore] public override bool Reflexive => true;
-
-        /// <inheritdoc />
         public override TensorShape Startup(TensorShape inputShape, PairedGPUViews views, int maxBatchSize)
         {
             if (Initialized)
@@ -86,9 +93,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Augmentations
 
             return OutputShape;
         }
-
-        private static readonly Action<Index3D, ArrayView<float>, TensorShape, int, int> s_cutoutAction =
-            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, TensorShape, int, int>(CutoutKernel);
 
         private static void CutoutKernel(Index3D index, ArrayView<float> input, TensorShape shape, int x, int y)
         {

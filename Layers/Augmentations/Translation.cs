@@ -2,7 +2,6 @@
 using ILGPU;
 using ConvolutionalNeuralNetwork.GPU;
 using ILGPU.Runtime;
-using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers.Augmentations
 {
@@ -12,16 +11,21 @@ namespace ConvolutionalNeuralNetwork.Layers.Augmentations
     /// </summary>
     public class Translation : Layer
     {
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, TensorShape, int, int> s_translateAction =
+            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, TensorShape, int, int>(TranslateKernel);
+
         private int _maxTranslationX;
         private int _maxTranslationY;
 
         private (int x, int y) _translation;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Translation"/> class.
+        /// </summary>
+        public Translation() : base(1, 1) { }
+
         /// <inheritdoc />
         public override string Name => "Translation Augment";
-
-        [JsonConstructor]
-        public Translation() : base(1, 1) { }
 
         /// <inheritdoc />
         public override void Backwards(int batchSize, bool update)
@@ -54,10 +58,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Augmentations
 
             return OutputShape;
         }
-
-        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, TensorShape, int, int> s_translateAction =
-            GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, TensorShape, int, int>(TranslateKernel);
-
         private static void TranslateKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, TensorShape shape, int x, int y)
         {
             int offset = shape.GetOffset(index.Z, index.Y);

@@ -2,7 +2,6 @@
 using ConvolutionalNeuralNetwork.GPU;
 using ILGPU;
 using ILGPU.Runtime;
-using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers.Weighted
 {
@@ -21,7 +20,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
         private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo> s_forwardAction =
             GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo>(DenseKernel);
 
-        [JsonProperty] private int _outputUnits;
+        private readonly int _outputUnits;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Dense"/> class.
@@ -34,29 +33,10 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             _outputUnits = outputUnits;
         }
 
-        /// <summary>
-        /// A default constructor to be used when deserializing.
-        /// </summary>
-        [JsonConstructor] private Dense() { }
-
         /// <inheritdoc/>
         public override string Name => "Dense Layer";
 
-        private LayerInfo Info => (LayerInfo)LayerInfo;
-
-        protected override int WeightLength => InputShape.Dimensions * InputShape.Area * _outputUnits;
-
-        /// <inheritdoc/>
-        protected override void ForwardChild(int batchSize)
-        {
-            Index1D copyIndex = new(InputShape.Volume * batchSize);
-            GPUManager.CopyAction(copyIndex, Views.Input, _inputCopy.GetArrayViewEmpty());
-
-            Views.Output.SubView(0, _outputUnits * batchSize).MemSetToZero();
-
-            Index3D index = new(InputShape.Volume, batchSize, _outputUnits);
-            s_forwardAction(index, Views.Input, Views.Output, _weights.WeightsView(), Info);
-        }
+        private LayerInfo Info => LayerInfo;
 
         /// <inheritdoc/>
         public override TensorShape Startup(TensorShape inputShape, PairedGPUViews views, int maxBatchSize)
@@ -67,11 +47,42 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
 
             BaseStartup(inputShape, views);
 
-            _inputCopy = new Vector(InputShape.Volume * maxBatchSize);
+            InputCopy = new Vector(InputShape.Volume * maxBatchSize);
 
             return OutputShape;
         }
 
+        /// <inheritdoc />
+        protected override void BackwardsNoUpdate(int batchSize)
+        {
+            Views.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
+
+            Index3D index = new(InputShape.Volume, batchSize, _outputUnits);
+            s_backwardsOutAction(index, Views.InGradient, Views.OutGradient, Weights.WeightsView(), Info);
+        }
+
+        /// <inheritdoc />
+        protected override void BackwardsUpdate(int batchSize)
+        {
+            Views.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
+
+            Index3D index = new(InputShape.Volume, batchSize, _outputUnits);
+
+            s_backwardsOutAction(index, Views.InGradient, Views.OutGradient, Weights.WeightsView(), Info);
+            s_backwardsFilterAction(index, Views.InGradient, InputCopy.GetArrayView(), Weights.GradientView(), Info);
+        }
+
+        /// <inheritdoc/>
+        protected override void ForwardChild(int batchSize)
+        {
+            Index1D copyIndex = new(InputShape.Volume * batchSize);
+            GPUManager.CopyAction(copyIndex, Views.Input, InputCopy.GetArrayViewEmpty());
+
+            Views.Output.SubView(0, _outputUnits * batchSize).MemSetToZero();
+
+            Index3D index = new(InputShape.Volume, batchSize, _outputUnits);
+            s_forwardAction(index, Views.Input, Views.Output, Weights.WeightsView(), Info);
+        }
         private static void DenseFilterKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> input, ArrayView<float> filterGradient, LayerInfo info)
         {
             int inputArea = info.ExpansionArea * info.ExpansionDimensions;
@@ -91,24 +102,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             int inputArea = info.ExpansionArea * info.ExpansionDimensions;
 
             Atomic.Add(ref output[index.Z + info.ContractionArea * index.Y], input[index.X + inputArea * index.Y] * filter[index.X + inputArea * index.Z]);
-        }
-
-        protected override void BackwardsNoUpdate(int batchSize)
-        {
-            Views.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
-
-            Index3D index = new(InputShape.Volume, batchSize, _outputUnits);
-            s_backwardsOutAction(index, Views.InGradient, Views.OutGradient, _weights.WeightsView(), Info);
-        }
-
-        protected override void BackwardsUpdate(int batchSize)
-        {
-            Views.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
-
-            Index3D index = new(InputShape.Volume, batchSize, _outputUnits);
-
-            s_backwardsOutAction(index, Views.InGradient, Views.OutGradient, _weights.WeightsView(), Info);
-            s_backwardsFilterAction(index, Views.InGradient, _inputCopy.GetArrayView(), _weights.GradientView(), Info);
         }
 
         private void BaseStartup(TensorShape inputShapes, PairedGPUViews views)

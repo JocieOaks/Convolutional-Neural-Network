@@ -2,88 +2,36 @@
 using ConvolutionalNeuralNetwork.GPU;
 using ILGPU;
 using ILGPU.Runtime;
-using Newtonsoft.Json;
 
 namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
 {
     /// <summary>
-    /// The <see cref="Fork"/> class is a <see cref="Layer"/> that creates two sets of the same <see cref="FeatureMap"/>s, sending
-    /// one as input to the next <see cref="Layer"/> and sending one to a <see cref="Concatenate"/> later in the <see cref="Network"/>.
+    /// The <see cref="Fork"/> class is a <see cref="Layer"/> that creates two sets of the same <see cref="Tensor"/>s, sending
+    /// one as input to the next <see cref="Layer"/> and sending one to an <see cref="IEndpoint"/> later in the <see cref="Network"/>.
     /// </summary>
     public class Fork : Layer
     {
-        private static int s_nextID = 1;
-        public static Dictionary<int, Fork> Splits { get; } = new Dictionary<int, Fork>();
+        private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>> s_backwardsAction
+                    = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(BackwardsKernel);
 
-        /// <inheritdoc/>
-        public override string Name => "Skip Fork Layer";
+        private readonly List<IEndpoint> _outputLayers = new();
 
-        private List<IEndpoint> _outputLayers = new();
-        private List<Vector> _skipConnections = new();
+        private readonly List<Vector> _skipConnections = new();
+
         private int _maxBatchSize;
-        [JsonProperty] public int ID { get; }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Fork"/> class.
         /// </summary>
         public Fork() : base(1, 1)
         {
-            ID = s_nextID++;
-            Splits[ID] = this;
         }
+
+        /// <inheritdoc/>
+        public override string Name => "Skip Fork Layer";
 
         /// <inheritdoc />
-        [JsonIgnore] public override bool Reflexive => true;
-        [JsonConstructor] private Fork(int id)
-        {
-            ID = id;
-            Splits[id] = this;
-        }
-
-        /// <summary>
-        /// Gives the corresponding <see cref="Concatenate"/> layer that connects to this <see cref="Fork"/>, creating
-        /// it if it does not already exist.
-        /// </summary>
-        /// <returns>Returns the <see cref="Concatenate"/>.</returns>
-        public Concatenate GetConcatenationLayer()
-        {
-            var concat = new Concatenate();
-            _outputLayers.Add(concat);
-            if (Initialized)
-            {
-                var skipConnection = new Vector(_maxBatchSize * InputShape.Volume);
-                concat.Connect(skipConnection, InputShape, ID);
-            }
-
-            return concat;
-        }
-
-        public void Connect(IEndpoint endpoint)
-        {
-            _outputLayers.Add(endpoint);
-            if (Initialized)
-            {
-                var skipConnection = new Vector(_maxBatchSize * InputShape.Volume);
-                endpoint.Connect(skipConnection, InputShape, ID);
-            }
-        }
-
-        public Out GetOutLayer()
-        {
-            var skipOut = new Out();
-            _outputLayers.Add(skipOut);
-            if (Initialized)
-            {
-                var skipConnection = new Vector(_maxBatchSize * InputShape.Volume);
-                skipOut.Connect(skipConnection, InputShape, ID);
-            }
-
-            return skipOut;
-        }
-
-
-        private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>> s_backwardsAction
-            = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(BackwardsKernel);
+        public override bool Reflexive => true;
 
         /// <inheritdoc/>
         public override void Backwards(int batchSize, bool update)
@@ -120,6 +68,40 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
             }
         }
 
+        /// <summary>
+        /// Creates a new <see cref="Concatenate"/> layer that will take the copied <see cref="Tensor"/>
+        /// from this <see cref="Fork"/> as one of its inputs.
+        /// </summary>
+        public Concatenate GetConcatenationLayer()
+        {
+            var concat = new Concatenate();
+            _outputLayers.Add(concat);
+            
+            if (!Initialized) return concat;
+
+            var skipConnection = new Vector(_maxBatchSize * InputShape.Volume);
+            concat.Connect(skipConnection, InputShape);
+
+            return concat;
+        }
+
+        /// <summary>
+        /// Creates a new <see cref="Out"/> layer that will take the copied <see cref="Tensor"/>
+        /// from this <see cref="Fork"/> as its input.
+        /// </summary>
+        public Out GetOutLayer()
+        {
+            var skipOut = new Out();
+            _outputLayers.Add(skipOut);
+            
+            if (!Initialized) return skipOut;
+
+            var skipConnection = new Vector(_maxBatchSize * InputShape.Volume);
+            skipOut.Connect(skipConnection, InputShape);
+
+            return skipOut;
+        }
+
         /// <inheritdoc/>
         public override TensorShape Startup(TensorShape inputShape, PairedGPUViews views, int maxBatchSize)
         {
@@ -136,7 +118,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
             {
                 var skipConnection = new Vector(maxBatchSize * inputShape.Volume);
                 _skipConnections.Add(skipConnection);
-                outputLayer.Connect(skipConnection, inputShape, ID);
+                outputLayer.Connect(skipConnection, inputShape);
             }
 
             return inputShape;

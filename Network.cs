@@ -4,6 +4,8 @@ using Newtonsoft.Json;
 using ConvolutionalNeuralNetwork.Layers.Serial;
 using ConvolutionalNeuralNetwork.Layers.Loss;
 using ConvolutionalNeuralNetwork.DataTypes.Initializers;
+using ConvolutionalNeuralNetwork.Layers.Serial.SkipConnection;
+using ConvolutionalNeuralNetwork.Layers.Serial.Weighted;
 
 namespace ConvolutionalNeuralNetwork
 {
@@ -17,9 +19,10 @@ namespace ConvolutionalNeuralNetwork
         [JsonProperty] private AdamHyperParameters _adamHyperParameters;
         [JsonProperty] private bool _initialized;
         [JsonProperty] private List<int> _layerIndices = new();
+        private Loss _loss;
         private Tensor[] _outputs;
-        [JsonIgnore] private TensorShape _outputShape;
-        [JsonProperty] private List<ISerial> _serializedLayers = new();
+        private TensorShape _outputShape;
+        [JsonProperty] private List<ISerialLayer> _serializedLayers = new();
         private List<Weights> _weights;
 
         /// <summary>
@@ -43,7 +46,12 @@ namespace ConvolutionalNeuralNetwork
         private int Depth => _layers.Count;
 
         /// <value>The <see cref="Network"/>'s loss function that determines the loss value and <see cref="Layer"/> gradients.</value>
-        [JsonIgnore] public Loss Loss { get; private set; }
+        [JsonIgnore]
+        public Loss Loss
+        {
+            get => _loss;
+            private set => _loss ??= value;
+        }
 
         /// <summary>
         /// Appends an activation <see cref="Layer"/> to the end of the <see cref="Network"/>.
@@ -213,11 +221,11 @@ namespace ConvolutionalNeuralNetwork
         }
 
         /// <summary>
-        /// Appends a layer to the end of the <see cref="Network"/> from the given <see cref="ISerial"/>.
+        /// Appends a layer to the end of the <see cref="Network"/> from the given <see cref="ISerialLayer"/>.
         /// Allows for a <see cref="Layer"/> to be used multiple times in a <see cref="Network"/>.
         /// </summary>
-        /// <param name="layer">The <see cref="ISerial"/> corresponding to the <see cref="Layer"/> being added.</param>
-        public void AddSerialLayer(ISerial layer)
+        /// <param name="layer">The <see cref="ISerialLayer"/> corresponding to the <see cref="Layer"/> being added.</param>
+        public void AddSerialLayer(ISerialLayer layer)
         {
             if (!_serializedLayers.Contains(layer))
             {
@@ -345,7 +353,7 @@ namespace ConvolutionalNeuralNetwork
         }
 
         /// <summary>
-        /// Initializes the <see cref="ISerial"/> layers and their <see cref="Weights"/>.
+        /// Initializes the <see cref="ISerialLayer"/> layers and their <see cref="Weights"/>.
         /// </summary>
         public void Initialize()
         {
@@ -379,10 +387,8 @@ namespace ConvolutionalNeuralNetwork
                     string dataToLoad;
                     using (FileStream stream = new(file, FileMode.Open))
                     {
-                        using (StreamReader read = new(stream))
-                        {
-                            dataToLoad = read.ReadToEnd();
-                        }
+                        using StreamReader read = new(stream);
+                        dataToLoad = read.ReadToEnd();
                     }
                     network = JsonConvert.DeserializeObject<Network>(dataToLoad, new JsonSerializerSettings
                     {
@@ -432,7 +438,7 @@ namespace ConvolutionalNeuralNetwork
         /// <inheritdoc />
         public override void Startup(PairedGPUViews views, TensorShape outputShape, int maxBatchSize)
         {
-            base.views = views.Compliment;
+            Views = views.Compliment;
         }
 
         /// <summary>
@@ -551,10 +557,10 @@ namespace ConvolutionalNeuralNetwork
 
         private void InitializeLayers(ref TensorShape current, int maxBatchSize)
         {
-            views ??= new();
+            Views ??= new();
 
-            PairedGPUViews inputViews = views;
-            PairedGPUViews outputViews = views.Compliment ?? new();
+            PairedGPUViews inputViews = Views;
+            PairedGPUViews outputViews = Views.Compliment ?? new();
             PairedGPUViews.SetCompliment(inputViews, outputViews);
             outputViews.OutputDimensionArea(current.Volume);
 

@@ -6,17 +6,26 @@ using ILGPU.Algorithms;
 
 namespace ConvolutionalNeuralNetwork.Layers.Weighted
 {
+    /// <summary>
+    /// The <see cref="TransposeConvolution"/> class is a <see cref="Layer"/> that performs a 2D Convolution,
+    /// by passing a 2D filter over a <see cref="Tensor"/>, performing the inverse action of a <see cref="Convolution"/> layer.
+    /// </summary>
     public class TransposeConvolution : WeightedLayer
     {
+        private static readonly Action<KernelConfig, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo> s_backwardsFilterAction = GPUManager.Accelerator.LoadStreamKernel<ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo>(TransConvFilterKernel);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo> s_backwardsOutGradientAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo>(TransConvGradientKernel);
+        private static readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo> s_forwardAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo>(TransConvKernel);
         private readonly int _outputDimensions;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="Convolution"/> layer.
+        /// Initializes a new instance of the <see cref="TransposeConvolution"/> layer.
         /// </summary>
         /// <param name="filterSize">The width and height of a filter.</param>
         /// <param name="stride">The amount of movement over the image for each filter pass.</param>
         /// <param name="outputDimensions">A factor relating the number of input layers to the number of output layers.
         /// Must be positive. To reduce the number of output dimensions, use a <see cref="Summation"/> layer afterwards.</param>
+        /// <param name="weights">The initial weights for the <see cref="Layer"/>'s filters.</param>
+        /// <param name="bias">The initial weights for the <see cref="Layer"/>'s bias.</param>
         public TransposeConvolution(int filterSize, int stride, int outputDimensions, Weights weights, Weights bias) : base(filterSize, stride, weights, bias)
         {
             if (outputDimensions < 1)
@@ -26,32 +35,10 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             _outputDimensions = outputDimensions;
         }
 
-        public static Action<KernelConfig, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo> BackwardsFilterAction { get; } = GPUManager.Accelerator.LoadStreamKernel<ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo>(TransConvFilterKernel);
-
-        public static Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo> BackwardsOutGradientAction { get; } = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo>(TransConvGradientKernel);
-
-        public static Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo> ForwardAction { get; } = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LayerInfo>(TransConvKernel);
-
         /// <inheritdoc/>
         public override string Name => "Transpose Convolutional Layer";
 
-        private LayerInfo Info => (LayerInfo)LayerInfo;
-
-        protected override int WeightLength => FilterSize * FilterSize * OutputShape.Dimensions * InputShape.Dimensions;
-
-        /// <inheritdoc/>
-        protected override void ForwardChild(int batchSize)
-        {
-
-            Index1D copyIndex = new(batchSize * InputShape.Volume);
-            GPUManager.CopyAction(copyIndex, Views.Input, _inputCopy.GetArrayViewEmpty());
-
-            Views.Output.SubView(0, batchSize * OutputShape.Volume).MemSetToZero();
-
-            Index3D index = new(OutputShape.Volume, InputShape.Dimensions, batchSize);
-            ForwardAction(index, Views.Input, Views.Output, _weights.WeightsView(), Info);
-        }
-
+        private LayerInfo Info => LayerInfo;
         /// <inheritdoc/>
         public override TensorShape Startup(TensorShape inputShape, PairedGPUViews views, int maxBatchSize)
         {
@@ -59,24 +46,46 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
                 return OutputShape;
             Initialized = true;
 
-            if (_weights == null)
+            if (Weights == null)
             {
                 BaseStartup(inputShape, views, _outputDimensions);
             }
             else
             {
-                BaseStartup(inputShape, views, _weights.Length / FilterSize / FilterSize / inputShape.Dimensions);
+                BaseStartup(inputShape, views, Weights.Length / FilterSize / FilterSize / inputShape.Dimensions);
             }
 
-            _inputCopy = new Vector(InputShape.Dimensions * maxBatchSize * InputShape.Area);
+            InputCopy = new Vector(InputShape.Dimensions * maxBatchSize * InputShape.Area);
 
             return OutputShape;
+        }
+
+        /// <inheritdoc />
+        protected override void BackwardsNoUpdate(int batchSize)
+        {
+            Views.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
+
+            Index3D index = new(InputShape.Volume, OutputShape.Dimensions, batchSize);
+            s_backwardsOutGradientAction(index, Views.InGradient, Views.OutGradient, Weights.WeightsView(), Info);
+        }
+
+        /// <inheritdoc />
+        protected override void BackwardsUpdate(int batchSize)
+        {
+
+            Views.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
+
+            Index3D index = new(InputShape.Volume, OutputShape.Dimensions, batchSize);
+            s_backwardsOutGradientAction(index, Views.InGradient, Views.OutGradient, Weights.WeightsView(), Info);
+            KernelConfig config = new(new Index3D(Info.FilterArea, OutputShape.Dimensions, batchSize), new Index3D(InputShape.Dimensions, 1, 1));
+            s_backwardsFilterAction(config, Views.InGradient, InputCopy.GetArrayView(), Weights.GradientView(), Info);
         }
 
         /// <summary>
         /// Initializes the <see cref="Layer"/> and many of its fields.
         /// </summary>
-        /// <param name="inputShape">The previous <see cref="Layer"/>'s output.</param>
+        /// <param name="inputShape">The <see cref="TensorShape"/> of the previous <see cref="Layer"/>'s output.</param>
+        /// <param name="views">The <see cref="PairedGPUViews"/> containing the input and output views.</param>
         /// <param name="outputDimensions">A factor relating the number of input layers to the number of output layers.
         /// A positive number multiplies the number of input dimensions. A negative number divides the number of dimensions.</param>
         /// <exception cref="ArgumentException">Thrown if the ratio of input layers and output layers is not an integer.</exception>
@@ -91,18 +100,18 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             views.OutputDimensionArea(OutputShape.Volume);
         }
 
-        /// <summary>
-        /// An ILGPU kernel to update the <see cref="Convolution"/>'s filters.
-        /// </summary>
-        /// <param name="index">The index of the current kernel calculation to be made.</param>
-        /// <param name="inGradient">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the incoming
-        /// gradient from the following <see cref="Layer"/>.</param>
-        /// <param name="input">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the input from the
-        /// previous <see cref="Layer"/>.</param>
-        /// <param name="filterGradient">An <see cref="ArrayView1D{T, TStride}"/> of floats to sum the gradient of the filters.
-        /// Because <see cref="Color"/> cannot be summed atomically, every three floats represents a single
-        /// <see cref="Color"/> in the gradient.</param>
-        /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
+        /// <inheritdoc/>
+        protected override void ForwardChild(int batchSize)
+        {
+
+            Index1D copyIndex = new(batchSize * InputShape.Volume);
+            GPUManager.CopyAction(copyIndex, Views.Input, InputCopy.GetArrayViewEmpty());
+
+            Views.Output.SubView(0, batchSize * OutputShape.Volume).MemSetToZero();
+
+            Index3D index = new(OutputShape.Volume, InputShape.Dimensions, batchSize);
+            s_forwardAction(index, Views.Input, Views.Output, Weights.WeightsView(), Info);
+        }
         private static void TransConvFilterKernel(ArrayView<float> inGradient, ArrayView<float> input, ArrayView<float> filterGradient, LayerInfo info)
         {
 
@@ -127,17 +136,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             Atomic.Add(ref filterGradient[filterIndex], dK);
         }
 
-        /// <summary>
-        /// An ILGPU kernel for convoluting a <see cref="FeatureMap"/>.
-        /// </summary>
-        /// <param name="index">The index of the current kernel calculation to be made.</param>
-        /// <param name="inGradient">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the input from the
-        /// previous <see cref="Layer"/>.</param>
-        /// <param name="outGradient">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s to set for the outgoing
-        /// convoluted <see cref="FeatureMap"/>.</param>
-        /// <param name="filter">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing one of the
-        /// <see cref="Convolution"/>'s filters.</param>
-        /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
         private static void TransConvGradientKernel(Index3D index, ArrayView<float> inGradient, ArrayView<float> outGradient, ArrayView<float> filter, LayerInfo info)
         {
             info.DeconstructContraction(index, out int mapIndex, out int inGradientOffset, out int outGradientIndex, out int dimension);
@@ -166,18 +164,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             Atomic.Add(ref outGradient[outGradientIndex], sum);
         }
 
-        /// <summary>
-        /// An ILGPU kernel to calculate the gradients for backpropagating the previous layer.
-        /// </summary>
-        /// <param name="index">The index of the current kernel calculation to be made.</param>
-        /// <param name="input">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing the incoming
-        /// gradient from the following <see cref="Layer"/>.</param>
-        /// <param name="filter">An <see cref="ArrayView1D{T, TStride}"/> of <see cref="Color"/>s containing one of the
-        /// <see cref="Convolution"/>'s filters.</param>
-        /// <param name="output">An <see cref="ArrayView1D{T, TStride}"/> of floats to sum the outgoing gradient.
-        /// Because <see cref="Color"/> cannot be summed atomically, every three floats represents a single
-        /// <see cref="Color"/> in the gradient.</param>
-        /// <param name="info">The <see cref="LayerInfo"/> for the current dimension at the first index of an <see cref="ArrayView1D{T, TStride}"/>.</param>
         private static void TransConvKernel(Index3D index, ArrayView<float> input, ArrayView<float> output, ArrayView<float> filter, LayerInfo info)
         {
             info.DeconstructExpansion(index, out int mapIndex, out int inputOffset, out int outputIndex, out int dimension);
@@ -213,34 +199,6 @@ namespace ConvolutionalNeuralNetwork.Layers.Weighted
             }
 
             Atomic.Add(ref output[outputIndex], sum);
-        }
-        /// <summary>
-        /// Backpropagates through the layer without updating any of the filter weights. Called when learning rate is zero.
-        /// </summary>
-        protected override void BackwardsNoUpdate(int batchSize)
-        {
-            Views.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
-
-            Index3D index = new(InputShape.Volume, OutputShape.Dimensions, batchSize);
-            BackwardsOutGradientAction(index, Views.InGradient, Views.OutGradient, _weights.WeightsView(), Info);
-        }
-
-
-        /// <summary>
-        /// Perform standard backpropagation through the layer, updating it's weights. Called when learning rate is greater than 0.
-        /// </summary>
-        /// <param name="learningRate">The overall learning rate for the layer updates, corrected for the influence of bias in the first and second moments.</param>
-        /// <param name="firstMomentDecay">The exponential decay rate for the first moment.</param>
-        /// <param name="secondMomentDecay">The exponential decay rate for the second moment.</param>
-        protected override void BackwardsUpdate(int batchSize)
-        {
-
-            Views.OutGradient.SubView(0, batchSize * InputShape.Volume).MemSetToZero();
-
-            Index3D index = new(InputShape.Volume, OutputShape.Dimensions, batchSize);
-            BackwardsOutGradientAction(index, Views.InGradient, Views.OutGradient, _weights.WeightsView(), Info);
-            KernelConfig config = new(new Index3D(Info.FilterArea, OutputShape.Dimensions, batchSize), new Index3D(InputShape.Dimensions, 1, 1));
-            BackwardsFilterAction(config, Views.InGradient, _inputCopy.GetArrayView(), _weights.GradientView(), Info);
         }
     }
 }
