@@ -9,7 +9,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
     /// The <see cref="Concatenate"/> class is a <see cref="Layer"/> for concatenating a set of <see cref="Tensor"/>s from the previous
     /// <see cref="Layer"/> with the <see cref="Tensor"/>s from its corresponding <see cref="Fork"/>.
     /// </summary>
-    public class Concatenate : Layer, IEndpoint
+    public class Concatenate : Layer, IForkEndpoint
     {
         private Vector _skipConnection;
         private TensorShape _skipShape;

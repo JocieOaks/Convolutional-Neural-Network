@@ -70,7 +70,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="x">The x coordinate of the desired value.</param>
         /// <param name="y">The y coordinate of the desired value.</param>
         /// <param name="dimension">The dimension of the desired value.</param>
-        /// <returns>Returns the value at (<paramref name="x"/>, <paramref name="y"/>, <param name="dimension"/>).</returns>
+        /// <returns>Returns the value at (<paramref name="x"/>, <paramref name="y"/>, <paramref name="dimension"/>).</returns>
         public float this[int x, int y, int dimension]
         {
             get => Values[dimension * Area + y * Width + x];

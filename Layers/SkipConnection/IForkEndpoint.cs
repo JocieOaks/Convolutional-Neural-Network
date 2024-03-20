@@ -3,13 +3,13 @@
 namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
 {
     /// <summary>
-    /// The <see cref="IEndpoint"/> interface is for <see cref="Layer"/>s that receive a copy of a <see cref="Tensor"/>
+    /// The <see cref="IForkEndpoint"/> interface is for <see cref="Layer"/>s that receive a copy of a <see cref="Tensor"/>
     /// from a <see cref="Fork"/> for forming skip connections.
     /// </summary>
-    public interface IEndpoint
+    public interface IForkEndpoint
     {
         /// <summary>
-        /// Connects the <see cref="IEndpoint"/> with its <see cref="Fork"/> sharing the <see cref="Tensor"/>s
+        /// Connects the <see cref="IForkEndpoint"/> with its <see cref="Fork"/> sharing the <see cref="Tensor"/>s
         /// between them.
         /// </summary>
         /// <param name="skipConnection">A <see cref="Vector"/> that will be used to store a copy of the

@@ -24,7 +24,7 @@ namespace ConvolutionalNeuralNetwork.GPU
         /// </summary>
         /// <param name="maxMemory">The maximum amount of GPU memory available.</param>
         /// <param name="memoryCap">The fraction of the total memory available to the <see cref="LRU"/>, between 0 and 1 inclusive.</param>
-        /// <exception cref="Exception">Thrown if <param name="memoryCap"/> is not between 0 and 1.</exception>
+        /// <exception cref="Exception">Thrown if <paramref name="memoryCap"/> is not between 0 and 1.</exception>
         public LRU(long maxMemory, float memoryCap)
         {
             if (memoryCap <= 0f || memoryCap >= 1f)

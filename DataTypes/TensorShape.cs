@@ -50,7 +50,7 @@
         /// <param name="shiftX">The shift of the x-axis to the desired element.</param>
         /// <param name="shiftY">The shift of the y-axis to the desired element.</param>
         /// <param name="outIndex">The presumed index of the desired element in the flattened array.</param>
-        /// <returns>Returns false if the desired index is bounds of the 2D array and thus <param name="outIndex"/> is invalid.</returns>
+        /// <returns>Returns false if the desired index is bounds of the 2D array and thus <paramref name="outIndex"/> is invalid.</returns>
         public bool TryGetIndex(int inputIndex, int shiftX, int shiftY, out int outIndex)
         {
 

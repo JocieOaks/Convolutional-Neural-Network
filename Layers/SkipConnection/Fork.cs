@@ -7,14 +7,14 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
 {
     /// <summary>
     /// The <see cref="Fork"/> class is a <see cref="Layer"/> that creates two sets of the same <see cref="Tensor"/>s, sending
-    /// one as input to the next <see cref="Layer"/> and sending one to an <see cref="IEndpoint"/> later in the <see cref="Network"/>.
+    /// one as input to the next <see cref="Layer"/> and sending one to an <see cref="IForkEndpoint"/> later in the <see cref="Network"/>.
     /// </summary>
     public class Fork : Layer
     {
         private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>> s_backwardsAction
                     = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(BackwardsKernel);
 
-        private readonly List<IEndpoint> _outputLayers = new();
+        private readonly List<IForkEndpoint> _outputLayers = new();
 
         private readonly List<Vector> _skipConnections = new();
 

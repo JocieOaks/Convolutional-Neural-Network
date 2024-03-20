@@ -8,7 +8,7 @@ namespace ConvolutionalNeuralNetwork.Layers.SkipConnection
     /// The <see cref="Out"/> class is a <see cref="Layer"/> for taking the output from its corresponding <see cref="Fork"/>
     /// and putting it into the correct memory in the GPU.
     /// </summary>
-    public class Out : Layer, IEndpoint
+    public class Out : Layer, IForkEndpoint
     {
         private Vector _skipConnection;
         private TensorShape _skipShape;

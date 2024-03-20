@@ -82,15 +82,15 @@ namespace ConvolutionalNeuralNetwork.GPU
     }
 
     /// <summary>
-    /// The <see cref="Cacheable{T}"/> class is an extension of <see cref="Cacheable"/> where data entries are structured as an array of type <see cref="T"/>.
+    /// The <see cref="Cacheable{T}"/> class is an extension of <see cref="Cacheable"/> where data entries are structured as an array of type <typeparamref name="T"/>.
     /// </summary>
     /// <typeparam name="T">The data type of the <see cref="Cacheable"/>'s data entries.</typeparam>
     public abstract class Cacheable<T> : Cacheable where T : unmanaged
     {
         /// <summary>
-        /// Access the list of data entries stored as an array of <see cref="T"/>.
+        /// Access the list of data entries stored as an array of <typeparamref name="T"/>.
         /// </summary>
-        /// <returns>Returns an array of <see cref="T"/>.</returns>
+        /// <returns>Returns an array of <typeparamref name="T"/>.</returns>
         public abstract T[] GetValues();
     }
 }

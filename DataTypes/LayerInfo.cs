@@ -123,7 +123,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="x">The x coordinate of the desired index.</param>
         /// <param name="y">The y coordinate of the desired index.</param>
         /// <param name="dimension">The dimension of the filter.</param>
-        /// <returns>Returns the index corresponding to (<paramref name="x"/>, <paramref name="y"/>, <param name="dimension"/>).</returns>
+        /// <returns>Returns the index corresponding to (<paramref name="x"/>, <paramref name="y"/>, <paramref name="dimension"/>).</returns>
         public int FilterIndex(int x, int y, int dimension)
         {
             return dimension * FilterArea + y * FilterSize + x;
@@ -216,7 +216,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="shiftX">The shift in the x-axis.</param>
         /// <param name="shiftY">The shift in the y-axis.</param>
         /// <param name="index">The index in the Contraction <see cref="Tensor"/>.</param>
-        /// <returns>Returns false if the desired index is bounds of the 2D array and thus <param name="index"/> is invalid.</returns>
+        /// <returns>Returns false if the desired index is bounds of the 2D array and thus <paramref name="index"/> is invalid.</returns>
         public bool TryGetContractionIndex(int expansionIndex, int shiftX, int shiftY, out int index)
         {
             int x = expansionIndex % ExpansionWidth;
@@ -245,7 +245,7 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <param name="shiftX">The shift in the x-axis.</param>
         /// <param name="shiftY">The shift in the y-axis.</param>
         /// <param name="index">The index in the Expansion <see cref="Tensor"/>.</param>
-        /// <returns>Returns false if the desired index is bounds of the 2D array and thus <param name="index"/> is invalid.</returns>
+        /// <returns>Returns false if the desired index is bounds of the 2D array and thus <paramref name="index"/> is invalid.</returns>
         public bool TryGetExpansionIndex(int contractionIndex, int shiftX, int shiftY, out int index)
         {
             int strideY = contractionIndex / ContractionWidth;
