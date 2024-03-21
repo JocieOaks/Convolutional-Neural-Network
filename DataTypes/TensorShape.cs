@@ -32,6 +32,34 @@
 
         /// <value>The width of a <see cref="Tensor"/>.</value>
         public int Width { get; }
+
+        public static bool operator !=(TensorShape left, TensorShape right)
+        {
+            return !(left == right);
+        }
+
+        public static bool operator ==(TensorShape left, TensorShape right)
+        {
+            return left.Equals(right);
+        }
+
+        public bool Equals(TensorShape other)
+        {
+            return Dimensions == other.Dimensions && Length == other.Length && Width == other.Width;
+        }
+
+        /// <inheritdoc />
+        public override bool Equals(object obj)
+        {
+            return obj is TensorShape other && Equals(other);
+        }
+
+        /// <inheritdoc />
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(Dimensions, Length, Width);
+        }
+
         /// <summary>
         /// Finds the starting index for a single 2D element of multiple <see cref="Tensor"/>s concatenated into a single 1D array.
         /// </summary>

@@ -43,6 +43,10 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// </summary>
         public void SetInput(Tensor[] input)
         {
+            if (input[0].Shape != InputShape)
+            {
+                throw new ArgumentException("Tensor is incorrect shape.");
+            }
             _input = input;
         }
 
