@@ -29,9 +29,11 @@ namespace ConvolutionalNeuralNetwork
         /// Initializes a new instance of the <see cref="Network"/> class.
         /// </summary>
         /// <param name="loss">The <see cref="Layers.Loss.Loss"/> layer used to determine the loss and gradient of the <see cref="Network"/>.</param>
-        public Network(Loss loss)
+        /// <param name="hyperParameters">The <see cref="AdamHyperParameters"/> specifying how <see cref="Weights"/> are updated.</param>
+        public Network(Loss loss, AdamHyperParameters hyperParameters)
         {
             Loss = loss;
+            _adamHyperParameters = hyperParameters;
         }
 
         /// <summary>
@@ -368,6 +370,11 @@ namespace ConvolutionalNeuralNetwork
             }
 
             _initialized = true;
+
+            if (Loss is Network lossNetwork)
+            {
+                lossNetwork.Initialize();
+            }
         }
 
         /// <summary>
@@ -413,7 +420,7 @@ namespace ConvolutionalNeuralNetwork
         /// Serializes the <see cref="Network"/> and saves it to a json file.
         /// </summary>
         /// <param name="file">The path of the json file.</param>
-        public virtual void SaveToFile(string file)
+        public void SaveToFile(string file)
         {
             try
             {
@@ -445,8 +452,7 @@ namespace ConvolutionalNeuralNetwork
         /// Sets up the <see cref="Network"/> so that it is ready for initial use.
         /// </summary>
         /// <param name="maxBatchSize">The maximum number of images processed in each batch.</param>
-        /// <param name="hyperParameters">The <see cref="AdamHyperParameters"/> specifying how <see cref="Weights"/> are updated.</param>
-        public virtual void StartUp(int maxBatchSize, AdamHyperParameters hyperParameters)
+        public void StartUp(int maxBatchSize)
         {
             Construct();
 
@@ -458,11 +464,10 @@ namespace ConvolutionalNeuralNetwork
                     weightedLayer.GetWeights(_weights);
                 }
             }
-
             TensorShape shape = new();
             InitializeLayers(ref shape, maxBatchSize);
 
-            _adamHyperParameters ??= hyperParameters;
+            
         }
 
         /// <summary>
@@ -540,7 +545,7 @@ namespace ConvolutionalNeuralNetwork
         {
             if (!_initialized)
             {
-                throw new InvalidOperationException("Network has not been initialized.");
+                Initialize();
             }
 
             //Construct usable layers from the serialized layers
@@ -557,6 +562,11 @@ namespace ConvolutionalNeuralNetwork
 
         private void InitializeLayers(ref TensorShape current, int maxBatchSize)
         {
+            if (Loss is Network { Views: not null })
+            {
+                throw new Exception("Discriminator Networks cannot be setup before the Generator Network.");
+            }
+
             Views ??= new();
 
             PairedGPUViews inputViews = Views;
@@ -577,6 +587,10 @@ namespace ConvolutionalNeuralNetwork
             }
 
             Loss?.Startup(outputViews, current, maxBatchSize);
+            if (Loss is Network network)
+            {
+                network.StartUp(maxBatchSize);
+            }
 
             //Allocate the required space on the GPU for the memory buffers.
             inputViews.Allocate(maxBatchSize);
