@@ -12,15 +12,17 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
     [Serializable]
     public class LeakyReLU : Layer
     {
-        private const float NEGATIVE_SCALING = 0.2f;
-        private static readonly Action<Index1D, ArrayView<int>, ArrayView<float>> s_backwardsAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<int>, ArrayView<float>>(BackwardsKernel);
-        private static readonly Action<Index1D, ArrayView<float>, ArrayView<int>> s_forwardAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<int>>(ForwardReLUKernel);
+        private readonly float _negativeScaling;
+        private static readonly Action<Index1D, ArrayView<int>, ArrayView<float>, float> s_backwardsAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<int>, ArrayView<float>, float>(BackwardsKernel);
+        private static readonly Action<Index1D, ArrayView<float>, ArrayView<int>, float> s_forwardAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<int>, float>(ForwardReLUKernel);
         private ArrayView<int> _deviceZeroed;
         /// <summary>
         /// Initializes a new instance of the <see cref="LeakyReLU"/> class.
         /// </summary>
-        public LeakyReLU() : base(1, 1)
+        /// <param name="negativeScaling">Scaler to multiply <see cref="Tensor"/> values that are less than 0 by.</param>
+        public LeakyReLU(float negativeScaling) : base(1, 1)
         {
+            _negativeScaling = negativeScaling > 0 ? negativeScaling : 0.2f;
         }
 
         /// <inheritdoc/>
@@ -33,7 +35,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
         public override void Backwards(int batchSize, bool update)
         {
             Index1D index = new(InputShape.Area * batchSize * InputShape.Dimensions);
-            s_backwardsAction(index, _deviceZeroed, Views.Gradient);
+            s_backwardsAction(index, _deviceZeroed, Views.Gradient, _negativeScaling);
 
             GPUManager.Accelerator.Synchronize();
         }
@@ -42,7 +44,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
         public override void Forward(int batchSize)
         {
             Index1D index = new(InputShape.Area * batchSize * InputShape.Dimensions);
-            s_forwardAction(index, Views.Input, _deviceZeroed);
+            s_forwardAction(index, Views.Input, _deviceZeroed, _negativeScaling);
             GPUManager.Accelerator.Synchronize();
         }
 
@@ -63,18 +65,18 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             return OutputShape;
         }
 
-        private static void BackwardsKernel(Index1D index, ArrayView<int> zeroed, ArrayView<float> inGradient)
+        private static void BackwardsKernel(Index1D index, ArrayView<int> zeroed, ArrayView<float> inGradient, float negativeScaling)
         {
             int byteIndex = index.X / 32;
             int bit = index.X - 32 * byteIndex;
             int mask = 1 << bit;
             if ((zeroed[byteIndex] & mask) == 0)
             {
-                inGradient[index.X] = NEGATIVE_SCALING * inGradient[index.X];
+                inGradient[index.X] = negativeScaling * inGradient[index.X];
             }
         }
 
-        private static void ForwardReLUKernel(Index1D index, ArrayView<float> input, ArrayView<int> zeroed)
+        private static void ForwardReLUKernel(Index1D index, ArrayView<float> input, ArrayView<int> zeroed, float negativeScaling)
         {
             int byteIndex = index.X / 32;
             int bit = index.X - 32 * byteIndex;
@@ -82,7 +84,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             if (input[index.X] < 0)
             {
                 Atomic.And(ref zeroed[byteIndex], ~mask);
-                input[index.X] = NEGATIVE_SCALING * input[index.X];
+                input[index.X] = negativeScaling * input[index.X];
             }
             else
             {

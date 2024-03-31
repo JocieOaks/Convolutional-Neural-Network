@@ -191,9 +191,9 @@ namespace ConvolutionalNeuralNetwork.DataTypes
         /// <summary>
         /// Copies the <see cref="Vector"/> to an <see cref="ArrayView{T}"/>
         /// </summary>
-        public void CopyToBuffer(ArrayView<float> arrayView)
+        public void CopyToView(ArrayView<float> view)
         {
-            arrayView.SubView(0, Length).CopyFromCPU(_values);
+            view.SubView(0, Length).CopyFromCPU(_values);
         }
 
         /// <summary>

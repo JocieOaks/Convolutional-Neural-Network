@@ -17,7 +17,11 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
         /// <value>Indicates <see cref="Activations.Sigmoid"/>.</value>
         Sigmoid,
         /// <value>Indicates <see cref="HyperTan"/>.</value>
-        HyperbolicTangent
+        HyperbolicTangent,
+        /// <value>Indicates <see cref="Activations.Proportion"/>.</value>
+        Proportion,
+        /// <value>Indicates <see cref="Activations.Dropout"/>.</value>
+        Dropout
     }
 
     /// <summary>
@@ -28,6 +32,8 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
         /// <value>The activation <see cref="Layer"/> this <see cref="SerialActivation"/> is used for.</value>
         public Activation Activation { get; init; } = Activation.ReLU;
 
+        public float ActivationValues { get; init; }
+
         /// <inheritdoc />
         public Layer Construct()
         {
@@ -35,7 +41,9 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
             {
                 Activation.Sigmoid => new Sigmoid(),
                 Activation.HyperbolicTangent => new HyperTan(),
-                Activation.LeakyReLU => new LeakyReLU(),
+                Activation.LeakyReLU => new LeakyReLU(ActivationValues),
+                Activation.Proportion => new Proportion(),
+                Activation.Dropout => new Dropout(ActivationValues),
                 _ => new ReLU()
             };
         }

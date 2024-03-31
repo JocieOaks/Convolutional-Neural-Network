@@ -23,7 +23,9 @@ namespace ConvolutionalNeuralNetwork.Layers.Loss
         /// <summary>
         /// A <see cref="Vector"/> used to store the ground truth for determining loss calculations.
         /// </summary>
-        protected Vector Truth;
+        protected Vector Labels;
+
+        protected Vector Classifications;
 
         /// <summary>
         /// A single dimensional <see cref="Vector"/> for storing the total loss of the <see cref="Network"/>.
@@ -46,15 +48,17 @@ namespace ConvolutionalNeuralNetwork.Layers.Loss
         {
             Views = views;
             OutputShape = outputShape;
-            Truth = new Vector(maxBatchSize * outputShape.Volume);
+            Labels = new Vector(maxBatchSize * outputShape.Volume);
+            Classifications = new Vector(maxBatchSize);
         }
 
         /// <summary>
         /// Calculates the loss and accuracy of the <see cref="Network"/>, and then creates the gradients
         /// for back-propagating through the <see cref="Network"/>.
         /// </summary>
-        /// <param name="groundTruth">The ground truth for the input data set.</param>
+        /// <param name="labels"></param>
+        /// <param name="classifications"></param>
         /// <returns>Returns the loss and accuracy as a tuple of floats.</returns>
-        public abstract (float, float) GetLoss(Vector[] groundTruth);
+        public abstract (float, float) GetLoss(Vector[] labels, Vector classifications);
     }
 }

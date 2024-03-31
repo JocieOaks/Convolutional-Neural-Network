@@ -3,23 +3,25 @@
 namespace ConvolutionalNeuralNetwork.Layers
 {
     /// <summary>
-    /// The <see cref="Input"/> class is a <see cref="Layer"/> for copying the input to the <see cref="Network"/> into the GPU views.
+    /// The <see cref="Labels"/> class is a <see cref="Layer"/> for important an image's labels into the <see cref="Network"/>.
     /// </summary>
-    public class Input : Layer
+    public class Labels : Layer
     {
-        private Tensor[] _input;
+        private readonly int _numLabels;
+        private Vector[] _input;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Input"/> class.
         /// </summary>
-        /// <param name="inputShape">Shape of the <see cref="Network"/>'s input.</param>
-        public Input(TensorShape inputShape)
+        /// <param name="labelCount">Number of classifying labels.</param>
+        public Labels(int labelCount)
         {
-            InputShape = inputShape;
+            InputShape = new TensorShape(labelCount, 1, 1);
+            _numLabels = labelCount;
         }
 
         /// <inheritdoc />
-        public override string Name => "Input Layer";
+        public override string Name => "Labels Layer";
 
         /// <inheritdoc />
         public override bool Reflexive => true;
@@ -29,18 +31,10 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
         }
 
-        /// <summary>
-        /// Tests if a given <see cref="TensorShape"/> is correct for inputs.
-        /// </summary>
-        public bool CheckShape(TensorShape inputShape)
-        {
-            return InputShape == inputShape;
-        }
-
         /// <inheritdoc />
         public override void Forward(int batchSize)
         {
-            for(int i = 0; i < batchSize; i++)
+            for (int i = 0; i < batchSize; i++)
             {
                 _input[i].CopyToView(Views.Input.SubView(i * InputShape.Volume, InputShape.Volume));
             }
@@ -49,13 +43,13 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// <summary>
         /// Set the input to the <see cref="Network"/> to be copied to the GPU.
         /// </summary>
-        public void SetInput(Tensor[] input)
+        public void SetLabels(Vector[] labels)
         {
-            if (input[0].Shape != InputShape)
+            if (labels[0].Length != _numLabels)
             {
-                throw new ArgumentException("Tensor is incorrect shape.");
+                throw new ArgumentException("Incorrect number of labels.");
             }
-            _input = input;
+            _input = labels;
         }
 
         /// <inheritdoc />

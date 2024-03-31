@@ -15,6 +15,7 @@ namespace ConvolutionalNeuralNetwork
     public class Network : Loss
     {
         private readonly List<Input> _inputLayers = new();
+        private readonly List<Labels> _labelLayers = new();
         private readonly List<Layer> _layers = new();
         [JsonProperty] private AdamHyperParameters _adamHyperParameters;
         [JsonProperty] private bool _initialized;
@@ -59,13 +60,16 @@ namespace ConvolutionalNeuralNetwork
         /// Appends an activation <see cref="Layer"/> to the end of the <see cref="Network"/>.
         /// </summary>
         /// <param name="activationType">The type of activation <see cref="Layer"/> to add.</param>
+        /// <param name="activationValue">Additional float value used by some activations, such as
+        /// <see cref="Layers.Activations.Dropout"/> and <see cref="Layers.Activations.LeakyReLU"/>.</param>
         /// <returns>Returns the <see cref="SerialActivation"/> of the added <see cref="Layer"/>.</returns>
-        public SerialActivation AddActivation(Activation activationType)
+        public SerialActivation AddActivation(Activation activationType, float activationValue = 0)
         {
             SerialActivation activation = _serializedLayers.FirstOrDefault(x => x is SerialActivation act && act.Activation == activationType) as SerialActivation;
             activation ??= new SerialActivation()
             {
-                Activation = activationType
+                Activation = activationType,
+                ActivationValues = activationValue
             };
 
             AddSerialLayer(activation);
@@ -136,8 +140,10 @@ namespace ConvolutionalNeuralNetwork
         /// <param name="biasInitializer">The <see cref="IWeightInitializer"/> for the <see cref="Layer"/>'s bias <see cref="Weights"/>.
         /// Defaults to 0's if left unspecified.</param>
         /// <param name="activation">The activation layer to use after this <see cref="Layer"/>; can be <see cref="Activation.None"/>.</param>
+        /// /// <param name="activationValue">Additional float value used by some activations, such as
+        /// <see cref="Layers.Activations.Dropout"/> and <see cref="Layers.Activations.LeakyReLU"/>.</param>
         /// <returns>Returns the <see cref="SerialConv"/> of the added <see cref="Layer"/>.</returns>
-        public SerialConv AddConvolution(int outputDimensions, int filterSize, int stride = 1, IWeightInitializer initializer = null, bool useBias = true, IWeightInitializer biasInitializer = null, Activation activation = Activation.None)
+        public SerialConv AddConvolution(int outputDimensions, int filterSize, int stride = 1, IWeightInitializer initializer = null, bool useBias = true, IWeightInitializer biasInitializer = null, Activation activation = Activation.None, float activationValue = 0)
         {
             Weights weights = new(initializer);
             Weights bias = null;
@@ -151,7 +157,7 @@ namespace ConvolutionalNeuralNetwork
 
             if (activation != Activation.None)
             {
-                AddActivation(activation);
+                AddActivation(activation, activationValue);
             }
 
             return convolution;
@@ -166,8 +172,10 @@ namespace ConvolutionalNeuralNetwork
         /// <param name="biasInitializer">The <see cref="IWeightInitializer"/> for the <see cref="Layer"/>'s bias <see cref="Weights"/>.
         /// Defaults to 0's if left unspecified.</param>
         /// <param name="activation">The activation layer to use after this <see cref="Layer"/>; can be <see cref="Activation.None"/>.</param>
+        /// <param name="activationValue">Additional float value used by some activations, such as
+        /// <see cref="Layers.Activations.Dropout"/> and <see cref="Layers.Activations.LeakyReLU"/>.</param>
         /// <returns>Returns the <see cref="SerialDense"/> of the added <see cref="Layer"/>.</returns>
-        public SerialDense AddDense(int outputUnits, IWeightInitializer initializer = null, bool useBias = true, IWeightInitializer biasInitializer = null, Activation activation = Activation.None)
+        public SerialDense AddDense(int outputUnits, IWeightInitializer initializer = null, bool useBias = true, IWeightInitializer biasInitializer = null, Activation activation = Activation.None, float activationValue = 0)
         {
             Weights weights = new(initializer);
             Weights bias = null;
@@ -181,7 +189,7 @@ namespace ConvolutionalNeuralNetwork
 
             if (activation != Activation.None)
             {
-                AddActivation(activation);
+                AddActivation(activation, activationValue);
             }
 
             return dense;
@@ -208,6 +216,18 @@ namespace ConvolutionalNeuralNetwork
             SerialInput layer = new(input);
             AddSerialLayer(layer);
             return layer;
+        }
+
+        /// <summary>
+        /// Appends a <see cref="Labels"/> layer to the end of the <see cref="Network"/>.
+        /// </summary>
+        /// <param name="labelCount">The number of labels used to classify images in the <see cref="Network"/>.</param>
+        /// <returns>Returns the <see cref="SerialLabels"/> of the added <see cref="Layer"/>.</returns>
+        public SerialLabels AddLabels(int labelCount)
+        {
+            SerialLabels labels = new(labelCount);
+            AddSerialLayer(labels);
+            return labels;
         }
 
         /// <summary>
@@ -273,8 +293,10 @@ namespace ConvolutionalNeuralNetwork
         /// <param name="biasInitializer">The <see cref="IWeightInitializer"/> for the <see cref="Layer"/>'s bias <see cref="Weights"/>.
         /// Defaults to 0's if left unspecified.</param>
         /// <param name="activation">The activation layer to use after this <see cref="Layer"/>; can be <see cref="Activation.None"/>.</param>
+        /// <param name="activationValue">Additional float value used by some activations, such as
+        /// <see cref="Layers.Activations.Dropout"/> and <see cref="Layers.Activations.LeakyReLU"/>.</param>
         /// <returns>Returns the <see cref="SerialTransConv"/> of the added <see cref="Layer"/>.</returns>
-        public SerialTransConv AddTransConv(int outputDimensions, int filterSize, int stride = 1, IWeightInitializer initializer = null, bool useBias = true, IWeightInitializer biasInitializer = null, Activation activation = Activation.None)
+        public SerialTransConv AddTransConv(int outputDimensions, int filterSize, int stride = 1, IWeightInitializer initializer = null, bool useBias = true, IWeightInitializer biasInitializer = null, Activation activation = Activation.None, float activationValue = 0)
         {
             Weights weights = new(initializer);
             Weights bias = null;
@@ -288,7 +310,7 @@ namespace ConvolutionalNeuralNetwork
 
             if (activation != Activation.None)
             {
-                AddActivation(activation);
+                AddActivation(activation, activationValue);
             }
 
             return transConv;
@@ -311,14 +333,23 @@ namespace ConvolutionalNeuralNetwork
         /// Generates an output <see cref="Tensor"/> from the <see cref="Network"/> without calculating gradients or back-propagating.
         /// </summary>
         /// <param name="inputs">A list of <see cref="Tensor"/>s to generate from, typically a latent vector.</param>
+        /// <param name="labels">Labels for the created image.</param>
         /// <param name="saveOutput">Determines whether the generated <see cref="Tensor"/>s should be saved to the CPU.</param>
         /// <returns>Returns the generated <see cref="Tensor"/>s if they were saved to the CPU, null otherwise.</returns>
         /// <exception cref="ArgumentException">Thrown if <paramref name="inputs"/> is not the correct length for the number of <see cref="Network"/> inputs.</exception>
-        public Tensor[] Generate(List<Tensor[]> inputs, bool saveOutput)
+        public Tensor[] Generate(List<Tensor[]> inputs, Vector[] labels, bool saveOutput)
         {
             if (inputs.Count != _inputLayers.Count)
             {
                 throw new ArgumentException("Incorrect input count.");
+            }
+
+            if (labels != null)
+            {
+                foreach (Labels layer in _labelLayers)
+                {
+                    layer.SetLabels(labels);
+                }
             }
 
             int batchSize = inputs[0].Length;
@@ -327,6 +358,8 @@ namespace ConvolutionalNeuralNetwork
             {
                 _inputLayers[i].SetInput(inputs[i]);
             }
+
+
 
             //Forward pass
             for (int i = 0; i < Depth; i++)
@@ -337,21 +370,22 @@ namespace ConvolutionalNeuralNetwork
             //Copying generated output from the GPU.
             if (saveOutput)
             {
-                for (int i = 0; i < _outputs.GetLength(0); i++)
+                for (int i = 0; i < batchSize; i++)
                 {
                     _outputs[i].SyncCPU(_layers.Last().Output.SubView(i * _outputShape.Volume, _outputShape.Volume));
                 }
-
-                return _outputs;
+                if(batchSize == _outputs.Length)
+                    return _outputs;
+                return _outputs.Take(batchSize).ToArray();
             }
 
             return null;
         }
 
         /// <inheritdoc />
-        public override (float, float) GetLoss(Vector[] groundTruth)
+        public override (float, float) GetLoss(Vector[] labels, Vector classifications)
         {
-            return Train(groundTruth, true, false);
+            return Train(labels, classifications, true, false);
         }
 
         /// <summary>
@@ -446,6 +480,7 @@ namespace ConvolutionalNeuralNetwork
         public override void Startup(PairedGPUViews views, TensorShape outputShape, int maxBatchSize)
         {
             Views = views.Compliment;
+            OutputShape = outputShape;
         }
 
         /// <summary>
@@ -466,8 +501,6 @@ namespace ConvolutionalNeuralNetwork
             }
             TensorShape shape = new();
             InitializeLayers(ref shape, maxBatchSize);
-
-            
         }
 
         /// <summary>
@@ -475,11 +508,12 @@ namespace ConvolutionalNeuralNetwork
         /// </summary>
         /// <param name="inputs">A list of <see cref="Tensor"/> arrays used to train the <see cref="Network"/>.
         /// Each element of the list corresponds with an element of the training batch.</param>
-        /// <param name="expected">An array of <see cref="Vector"/>s that represent the expected outputs of the <see cref="Network"/>.</param>
+        /// <param name="labels">An array of <see cref="Vector"/>s that represent the labels of the <see cref="Network"/> images.</param>
+        /// <param name="classifications">Vector of values indicating whether the corresponding image is fake(0) or real(1), to be used when calculating gradients and loss.</param>
         /// <param name="update">Determines whether the <see cref="Network"/> should be updated on the backwards pass; defaults to true.</param>
         /// <returns>Returns a tuple containing the loss and accuracy of the training batch.</returns>
         /// <exception cref="ArgumentException">Thrown if <paramref name="inputs"/> is not the correct length for the number of <see cref="Network"/> inputs.</exception>
-        public (float, float) Train(List<Tensor[]> inputs, Vector[] expected, bool update = true)
+        public (float, float) Train(List<Tensor[]> inputs, Vector[] labels, Vector classifications, bool update = true)
         {
 
             if (inputs.Count != _inputLayers.Count)
@@ -492,7 +526,7 @@ namespace ConvolutionalNeuralNetwork
                 _inputLayers[i].SetInput(inputs[i]);
             }
 
-            return Train(expected, false, update);
+            return Train(labels, classifications, false, update);
         }
 
         /// <summary>
@@ -500,17 +534,23 @@ namespace ConvolutionalNeuralNetwork
         /// Typically used in a GAN, so that the discriminator <see cref="Network"/> is trained using
         /// the generated outputs of the generator <see cref="Network"/>.
         /// </summary>
-        /// <param name="expected">An array of <see cref="Vector"/>s that represent the expected outputs of the <see cref="Network"/>.</param>
+        /// <param name="labels">An array of <see cref="Vector"/>s that represent the labels of the <see cref="Network"/>.</param>
+        /// <param name="classifications">Vector of values indicating whether the corresponding image is fake(0) or real(1), to be used when calculating gradients and loss.</param>
         /// <param name="update">Determines whether the <see cref="Network"/> should be updated on the backwards pass; defaults to true.</param>
         /// <returns>Returns a tuple containing the loss and accuracy of the training batch.</returns>
-        public (float, float) Train(Vector[] expected, bool update = true)
+        public (float, float) Train(Vector[] labels, Vector classifications, bool update = true)
         {
-            return Train(expected, true, update);
+            return Train(labels, classifications, true, update);
         }
 
-        private (float, float) Train(Vector[] expected, bool skipInputLayers, bool update)
+        private (float, float) Train(Vector[] labels, Vector classifications, bool skipInputLayers, bool update)
         {
-            int batchSize = expected.Length;
+            int batchSize = classifications.Length;
+
+            foreach (Labels layer in _labelLayers)
+            {
+                layer.SetLabels(labels);
+            }
 
             //Forward pass
             for (int i = 0; i < Depth; i++)
@@ -520,7 +560,7 @@ namespace ConvolutionalNeuralNetwork
             }
 
             //Calculate loss and gradient
-            (float, float) loss = Loss.GetLoss(expected);
+            (float, float) loss = Loss.GetLoss(labels, classifications);
 
             //Backwards pass
             for (int j = Depth - 1; j >= 0; j--)
@@ -555,7 +595,17 @@ namespace ConvolutionalNeuralNetwork
                 if (layer is Input input)
                 {
                     _inputLayers.Add(input);
+                    if (OutputShape != default && !input.CheckShape(OutputShape))
+                    {
+                        throw new InvalidOperationException("Generator output is incorrect shape.");
+                    }
                 }
+
+                if (layer is Labels labels)
+                {
+                    _labelLayers.Add(labels);
+                }
+
                 _layers.Add(layer);
             }
         }

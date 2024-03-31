@@ -11,40 +11,48 @@ namespace ConvolutionalNeuralNetwork.Layers.Loss
     /// </summary>
     public class CrossEntropyLoss : Loss
     {
-        private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>, VariableView<float>, VariableView<float>, int> s_multiclassLossAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, VariableView<float>, VariableView<float>, int>(MulticlassLossKernel);
+        private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, VariableView<float>, VariableView<float>, int> s_multiclassLossAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, VariableView<float>, VariableView<float>, int>(MulticlassLossKernel);
 
         private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>, VariableView<float>, VariableView<float>> s_lossAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, VariableView<float>, VariableView<float>>(SingleClassLossKernel);
 
         /// <inheritdoc />
-        public override (float, float) GetLoss(Vector[] groundTruth)
+        public override (float, float) GetLoss(Vector[] labels, Vector classifications)
         {
-            ArrayView<float> truth = Truth.GetArrayViewEmpty();
-            for (int i = 0; i < groundTruth.Length; i++)
-            {
-                groundTruth[i].CopyToBuffer(truth.SubView(i * OutputShape.Volume, OutputShape.Volume));
-            }
+            ArrayView<float> labelView = Labels.GetArrayViewEmpty();
+            ArrayView<float> classificationView = Classifications.GetArrayViewEmpty();
+            int batchSize = classifications.Length;
 
-            Index1D index = new(groundTruth.Length);
+            
+            classifications.CopyToView(classificationView);
+
+            Index1D index = new(batchSize);
             if (OutputShape.Volume > 1)
             {
-                s_multiclassLossAction(index, Views.Output, truth, Losses.GetArrayViewZeroed().VariableView(0), 
+                for (int i = 0; i < batchSize; i++)
+                {
+
+                    labels[i].CopyToView(labelView.SubView(i * OutputShape.Volume, OutputShape.Volume));
+
+                }
+                s_multiclassLossAction(index, Views.Output, labelView, classificationView, Losses.GetArrayViewZeroed().VariableView(0), 
                     Accuracy.GetArrayViewZeroed().VariableView(0), OutputShape.Volume);
             }
             else
             {
-                s_lossAction(index, Views.Output, truth, Losses.GetArrayViewZeroed().VariableView(0),
+                s_lossAction(index, Views.Output, classificationView, Losses.GetArrayViewZeroed().VariableView(0),
                     Accuracy.GetArrayViewZeroed().VariableView(0));
             }
 
             GPUManager.Accelerator.Synchronize();
 
-            Truth.Release();
+            Labels.Release();
             Losses.Release();
             Accuracy.Release();
+            Classifications.Release();
 
             Losses.SyncCPU();
             Accuracy.SyncCPU();
-            return (Losses[0] / groundTruth.Length, Accuracy[0] / (groundTruth.Length * OutputShape.Volume));
+            return (Losses[0] / classifications.Length, Accuracy[0] / classifications.Length);
         }
 
         private static void SingleClassLossKernel(Index1D index, ArrayView<float> output, ArrayView<float> classification, VariableView<float> totalLoss, VariableView<float> accuracy)
@@ -62,19 +70,27 @@ namespace ConvolutionalNeuralNetwork.Layers.Loss
             Atomic.Add(ref totalLoss.Value, loss);
         }
 
-        private static void MulticlassLossKernel(Index1D index, ArrayView<float> output, ArrayView<float> classification, VariableView<float> totalLoss, VariableView<float> accuracy, int length)
+        private static void MulticlassLossKernel(Index1D index, ArrayView<float> output, ArrayView<float> labels, ArrayView<float> classification, VariableView<float> totalLoss, VariableView<float> accuracy, int length)
         {
             int offset = index * length;
             float loss = 0;
-            for (int i = 0; i < length; i++)
-            {
-                loss += -XMath.Log(output[offset + i] + Utility.ASYMPTOTE_ERROR_CORRECTION) * classification[offset + i];
-                Atomic.Add(ref accuracy.Value, XMath.Round(output[offset + i]));
-            }
+            float maxProbability = 0;
+            float maxLabel = 0;
 
             for (int i = 0; i < length; i++)
             {
-                output[offset + i] = loss * (-classification[offset + i] / (output[offset + i] + Utility.ASYMPTOTE_ERROR_CORRECTION));
+                loss += -XMath.Log(output[offset + i] + Utility.ASYMPTOTE_ERROR_CORRECTION) * labels[offset + i];
+                if (output[offset + i] > maxProbability)
+                {
+                    maxProbability = output[offset + i];
+                    maxLabel = labels[offset + i];
+                }
+            }
+            Atomic.Add(ref accuracy.Value, maxLabel);
+
+            for (int i = 0; i < length; i++)
+            {
+                output[offset + i] = (2 * classification[index] - 1) * loss * -labels[offset + i] / (output[offset + i] + Utility.ASYMPTOTE_ERROR_CORRECTION);
             }
 
             Atomic.Add(ref totalLoss.Value, loss);

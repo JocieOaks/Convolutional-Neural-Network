@@ -64,7 +64,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
 
         private static void HyperTanGradientKernel(Index1D index, ArrayView<float> output, ArrayView<float> gradient)
         {
-            gradient[index.X] = gradient[index.X] * (1 - XMath.Pow(output[index.X], 2));
+            gradient[index.X] *= (1 - XMath.Pow(output[index.X], 2));
         }
 
         private static void HyperTanKernel(Index1D index, ArrayView<float> input)
