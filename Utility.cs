@@ -12,7 +12,7 @@
         /// <value>A single <see cref="System.Random"/> for number generation throughout the project. For some functions it is inconvenient
         /// to pass a single <see cref="System.Random"/> but creating multiple in quick succession led to them sometimes being seeded with
         /// the same values, leading to stretches of the same value being generated.</value>
-        public static Random Random { get; } = new Random();
+        public static Random Random { get; } = new();
 
         /// <summary>
         /// Generates a random value from a gaussian distribution with the given parameters.

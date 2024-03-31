@@ -21,10 +21,13 @@ namespace ConvolutionalNeuralNetwork.Layers.Loss
         protected TensorShape OutputShape;
 
         /// <summary>
-        /// A <see cref="Vector"/> used to store the ground truth for determining loss calculations.
+        /// A <see cref="Vector"/> used to store the labels for determining loss calculations.
         /// </summary>
         protected Vector Labels;
 
+        /// <summary>
+        /// A <see cref="Vector"/> used to store the classification of an input, and whether it is fake or real.
+        /// </summary>
         protected Vector Classifications;
 
         /// <summary>

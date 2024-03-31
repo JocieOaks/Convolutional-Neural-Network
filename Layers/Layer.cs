@@ -47,8 +47,6 @@ namespace ConvolutionalNeuralNetwork.Layers
         {
         }
 
-        /// <value>The <see cref="ArrayView{T}"/> of the input of the <see cref="Layer"/>.</value>
-        public ArrayView<float> Input => Views.Input;
         /// <value>The name of the <see cref="Layer"/>, used for logging.</value>
         public abstract string Name { get; }
 

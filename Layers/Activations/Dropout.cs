@@ -11,7 +11,7 @@ using ILGPU.Runtime;
     /// </summary>
     public class Dropout : Layer
     {
-        private static readonly Action<Index2D, ArrayView<float>, ArrayView<byte>> s_forwardAction = GPU.GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<float>, ArrayView<byte>>(ForwardKernel);
+        private static readonly Action<Index2D, ArrayView<float>, ArrayView<byte>> s_forwardAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<float>, ArrayView<byte>>(ForwardKernel);
         private readonly float _dropoutRate;
         private ByteArray _dropoutValues;
 

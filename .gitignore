@@ -406,3 +406,5 @@ Form1.cs
 Form1.Designer.cs
 Form1.resx
 CNN-Testing/
+*.csproj
+*.sln

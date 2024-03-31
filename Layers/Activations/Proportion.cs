@@ -5,6 +5,12 @@ using ILGPU.Runtime;
 
 namespace ConvolutionalNeuralNetwork.Layers.Activations
 {
+    /// <summary>
+    /// The <see cref="Proportion"/> class is a <see cref="Layer"/> that scales the values of a batch so that they add up to 1.
+    /// Primarily this is useful as the final layer for a multiclass classification discriminator, as it calculates
+    /// the probability that each classification is the correct one (assuming classifications are mutually exclusive).
+    /// Values should be greater than or equal to 0, otherwise results may be unusual.
+    /// </summary>
     public class Proportion : Layer
     {
         private static readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int> s_backwardsAction = GPUManager.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int>(ProportionGradientKernel);
@@ -12,6 +18,9 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
         private Vector _inputCopy;
         private Vector _sum;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Proportion"/> class.
+        /// </summary>
         public Proportion() : base(1, 1) { }
 
         /// <inheritdoc />
@@ -39,7 +48,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
             GPUManager.Accelerator.Synchronize();
 
             Index1D index = new(batchSize);
-            s_forwardAction(index, Views.Input, _sum.GetArrayViewZeroed(), InputShape.Volume);
+            s_forwardAction(index, Views.Input, _sum.GetArrayView(), InputShape.Volume);
             GPUManager.Accelerator.Synchronize();
 
             _inputCopy.Release();
@@ -81,6 +90,7 @@ namespace ConvolutionalNeuralNetwork.Layers.Activations
         private static void ProportionKernel(Index1D index, ArrayView<float> input, ArrayView<float> sum, int length)
         {
             int offset = index * length;
+            sum[index] = Utility.ASYMPTOTE_ERROR_CORRECTION;
             for (int i = 0; i < length; i++)
             {
                 sum[index] += input[offset + i];

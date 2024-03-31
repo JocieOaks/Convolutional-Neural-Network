@@ -33,16 +33,25 @@
         /// <value>The width of a <see cref="Tensor"/>.</value>
         public int Width { get; }
 
+        /// <summary>
+        /// Not equal operator.
+        /// </summary>
         public static bool operator !=(TensorShape left, TensorShape right)
         {
             return !(left == right);
         }
 
+        /// <summary>
+        /// Equal operator.
+        /// </summary>
         public static bool operator ==(TensorShape left, TensorShape right)
         {
             return left.Equals(right);
         }
 
+        /// <summary>
+        /// Check equivalence with another <see cref="TensorShape"/>.
+        /// </summary>
         public bool Equals(TensorShape other)
         {
             return Dimensions == other.Dimensions && Length == other.Length && Width == other.Width;

@@ -32,6 +32,8 @@ namespace ConvolutionalNeuralNetwork.Layers.Serial
         /// <value>The activation <see cref="Layer"/> this <see cref="SerialActivation"/> is used for.</value>
         public Activation Activation { get; init; } = Activation.ReLU;
 
+        /// <value>Additional float value used by some activations, such as
+        /// <see cref="Dropout"/> and <see cref="LeakyReLU"/>.</value>
         public float ActivationValues { get; init; }
 
         /// <inheritdoc />

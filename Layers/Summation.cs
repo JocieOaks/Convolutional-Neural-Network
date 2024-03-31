@@ -24,7 +24,7 @@ namespace ConvolutionalNeuralNetwork.Layers
         /// Initializes a new instance of the <see cref="Summation"/> class.
         /// </summary>
         /// <param name="outputDimensions">The number of dimensions in the summed output.</param>
-        public Summation(int outputDimensions)
+        public Summation(int outputDimensions) : base(1, 1)
         {
             OutputShape = new TensorShape(0, 0, outputDimensions);
         }

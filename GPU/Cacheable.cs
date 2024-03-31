@@ -15,6 +15,7 @@ namespace ConvolutionalNeuralNetwork.GPU
 
         /// <value>The number of live processes currently using the cached data.</value>
         [JsonIgnore] public uint LiveCount { get; private set; }
+
         /// <value>The size in bytes of the cached memory taken up by this <see cref="Cacheable"/>.</value>
         public abstract long MemorySize { get; }
 
