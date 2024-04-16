@@ -5,7 +5,7 @@ This is a usable library for creating convolutional neural networks. However, th
 
 The library runs GPU kernals using ILGPU to perform layer calculations quickly.
 ## Requirements
-* [ILGPU](https://ilgpu.net/)
+* [ILGPU 1.4.0](https://ilgpu.net/)
 * ILGPU.Algorithms
 * [Newtonsoft.JSON](https://www.newtonsoft.com/json)
 * System.Drawing.Common (only needed for the example)
